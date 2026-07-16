@@ -79,7 +79,7 @@ The design contains some genuinely sound elements (see [What is done well](#what
 | [07 — Telegram bot](findings/07-telegram-bot.md) | Owner model, pairing PIN, token storage, command surface |
 | [08 — Community automations & config backup](findings/08-community-and-backup.md) | Restore merge, credential export, community trust, automation capability |
 | [09 — Secrets & cryptography](findings/09-secrets-and-crypto.md) | `Safe`/`Enc` key, world-readable config, credential cipher derivation |
-| [10 — Independent review & verification](10-review-and-verification.md) | Second-pass verification of F1–F20 against source, three additional unauthenticated loopback listeners (F21–F23), and a direct risk answer for the owner |
+| [10 — Independent review & verification](10-review-and-verification.md) | Second-pass verification of F1–F20 against source, four additional unauthenticated loopback listeners (F21–F24), an accuracy correction to the `BYDAUTO`-actuation impact framing, and a direct risk answer for the owner |
 
 ---
 

@@ -6,7 +6,7 @@
 This document answers two questions the owner asked:
 
 1. **Is the existing audit accurate?** — I re-derived the load-bearing findings from source rather than trusting the write-ups.
-2. **Did a second pass find anything the audit missed?** — Yes: three more unauthenticated loopback listeners, one of which (F21) is a High-severity footage-exfiltration surface. None of them overturns the audit; they *reinforce* its central root cause.
+2. **Did a second pass find anything the audit missed?** — Yes: four more unauthenticated loopback listeners (two of them High — F21 footage exfiltration and F24 a surveillance kill-switch), and one accuracy correction to the audit's *impact* framing (the signature-protected `BYDAUTO_*` **writes** are not actually granted; actuation is cloud-mediated, not local-HAL). None of it overturns the audit's structure; it *reinforces* the central root cause and tightens the calibration.
 
 ---
 
@@ -36,7 +36,7 @@ I also confirmed the audit's **PR-review corrections are sound**, not hand-wavin
 
 ## Part 2 — What the second pass adds
 
-The audit's binding table (doc 01) lists four listeners: HTTP `:8080`, TCP command `:19876`, video WS `:8887`, surveillance IPC `:19877`. A full sweep for `ServerSocket`/`bind(` finds **three more loopback listeners** the audit does not enumerate. Of these, **one is a live High-severity exfiltration surface (F21), one is a live listener with a lower-value payload (F23), and one is dead code in this build (F22)** — the last two refined after Codex correctly caught that F22's daemon is never started and that F21 allows an attacker-chosen recipient. They share the exact root cause the audit already names — *loopback binding treated as an authorization boundary* — so the live ones extend F1/F9/F16 rather than opening a new class.
+The audit's binding table (doc 01) lists four listeners: HTTP `:8080`, TCP command `:19876`, video WS `:8887`, surveillance IPC `:19877`. A full sweep for `ServerSocket`/`bind(` finds **four more loopback listeners** the audit does not enumerate. Of these, **F21 (Telegram IPC) and F24 (Sentry control socket) are live and High**, **F23 (AAC ingest) is live with a lower-value payload**, and **F22 (BYD event daemon) is dead code in this build** — F22/F23/F24 refined or added after Codex correctly caught that F22's daemon is never started, that F21 allows an attacker-chosen recipient, and that my "full sweep" had itself missed F24. They share the exact root cause the audit already names — *loopback binding treated as an authorization boundary* — so the live ones extend F1/F9/F16 rather than opening a new class.
 
 ### F21 — 🟠 High: Telegram daemon IPC (`127.0.0.1:19880`) exfiltrates footage to an *attacker-chosen* chat, unauth
 
@@ -66,22 +66,41 @@ The audit's Telegram doc (07) analyses only the *inbound* long-poll owner gate; 
 
 > **Correction (per Codex PR review — verified):** I originally called the shared port number a "probable runtime collision." That overstates it. `AacIngestServer.PORT` and `BydEventDaemon.TCP_PORT` are **both `19878`**, but because `BydEventDaemon` is not started (F22), `AacIngestServer` binds `19878` cleanly — there is **no live collision** in the audited build. (The codebase already recognised the clash and moved the *TelegramBot* IPC off `19878` to `19880` — see the comment at `TelegramBotDaemon.java`.) So this is a **latent config smell** — a duplicated port constant that would collide only if the dormant daemon is re-enabled — not a current reliability bug. The listener inventory would still benefit from a single documented port registry.
 
+### F24 — 🟠 High: unauthenticated Sentry control socket (`127.0.0.1:19879`) — local kill-switch for surveillance
+
+> **Added per Codex PR review — verified.** My "full sweep" write-up missed this live listener; Codex correctly flagged it.
+
+`SentryDaemon.startControlSocket()` binds `127.0.0.1:19879` (`CONTROL_PORT`) and is called on **both** startup paths — the with-context branch and the no-context shell fallback (`SentryDaemon.java:110,124`) — and `DaemonLauncher.launchSentryDaemon` actively launches this daemon, so it is **live on a normal install** (unlike F22). It reads one line and dispatches with **no authentication**:
+
+- `STOP` / `KILL` / `EXIT` → `shutdown()` — a co-resident app can **turn the Sentry/surveillance daemon off** at will.
+- `LOCATION_MONITOR_ON` / `LOCATION_MONITOR_OFF` / `LOCATION_RESTART` → toggle location monitoring.
+- `STATUS` → discloses PID + whether location monitoring is on.
+
+**Impact:** any co-resident process can **silently disable the car's surveillance/sentry protection** (a denial-of-surveillance primitive — disarm the dashcam/sentry before a physical break-in) and toggle location monitoring, with no credential. Same root cause as F1/F9 (loopback treated as authorization). Note also the in-source comment on this method says *"Listens on localhost:19876"* while the constant is `19879` — a stale comment worth fixing so the port inventory isn't misleading.
+
 ---
 
 ## Part 3 — Direct answer to the owner's concern
 
 > *"I'm concerned about handing over so much deep control of my vehicle."*
 
-That concern is **well-founded, and the audit quantifies it correctly.** The app does hold the full `BYDAUTO_*` HAL permission set (door locks, drivetrain, ADAS, charging — visible in the manifest), and it exposes that power through channels that, in several cases, trust *position* (on the head unit, on the LAN, on the broker) instead of *identity*.
+That concern is **well-founded** — but one premise the audit leans on needs an accuracy correction (see the box below): the app *requests* the full `BYDAUTO_*` HAL set in its manifest, but on a non-platform-signed APK the **write** half of that set is **not actually granted** — actuation happens through the **BYD cloud** with your own credentials, not through locally-held HAL privilege. The structural problem the audit identifies is real either way: the app exposes vehicle-affecting power through channels that, in several cases, trust *position* (on the head unit, on the LAN, on the broker) instead of *identity*.
+
+> **Accuracy correction to the audit's impact framing (per Codex PR review — verified in source).** The audit repeatedly states the daemon "holds the full `BYDAUTO_*` HAL permission set (door lock get/**set**, engine, gearbox, charging, ADAS)" as *local* privilege (doc 02 F16, README bottom-line). The code contradicts the **set/write** half of that:
+> - The manifest's own comment says signature-protected writes "(`BYDAUTO_BODYWORK_SET` et al) will be **denied** by DiCarServer since our APK isn't signed with the BYD platform key" (`AndroidManifest.xml`), and `PermissionGranter` documents that "signature permissions will fail silently and get skipped" by `pm grant` from shell.
+> - `CarPropertyBridge` confirms it end-to-end: local `setProperties()` "works mechanically — but the underlying property config gates writes on signature-protected permissions… those writes return `STATUS_FAILED`… best thought of as a **read-side + config-probe tool today**."
+> - Real actuation is therefore **not** local-HAL: `VehicleCommandRouter` routes control commands through the **BYD cloud REST API** (`/control/remoteControl`) authenticated with your stored BYD-cloud login, plus whatever non-signature property surface exists. `GET` permissions and shell-grantable ones (e.g. `WRITE_SECURE_SETTINGS`, which carries the development flag) *are* granted; the sig-protected `*_SET` HAL writes are not.
+>
+> **What this changes:** the "co-resident app → local HAL → unlock the doors" chain is weaker than the audit implies — a local attacker cannot actuate straight through the HAL. **What it does not change:** actuation is still reachable, just by a different route — driving the app's cloud path, or using the **BYD-cloud credentials stored in the config** (F11/doc 09), or the cloud-backed command paths behind the unauth surfaces. So "an unauthorised party can control the car" stays true where the cloud credentials/session are in play; it is the *mechanism* (cloud-mediated, credential-gated) that the audit mis-states as *local HAL privilege*. The audit's `BYDAUTO`-actuation impact lines should be scoped to "via the BYD-cloud leg with the owner's credentials," not "because the daemon holds HAL write permission."
 
 The single most important structural fact — mine and the audit's conclusion both land here — is:
 
 > **The app repeatedly treats "reached me over loopback / the LAN / a shared broker" as "authorized."**
 
-Every Critical/High in the audit, plus my three additions, is an instance of that one mistake. It is *fixable* (positive authentication on each channel, a non-world-readable secret store, TLS, signed updates/backups) and the audit's per-doc recommendations are the right fixes — but until they land, the honest summary for an owner deciding whether to run this is:
+Every Critical/High in the audit, plus my four additions, is an instance of that one mistake. It is *fixable* (positive authentication on each channel, a non-world-readable secret store, TLS, signed updates/backups) and the audit's per-doc recommendations are the right fixes — but until they land, the honest summary for an owner deciding whether to run this is:
 
 - **Lowest-exposure posture:** do **not** enable the sing-box proxy, MQTT control, or any tunnel (zrok/cloudflared); keep the head unit off untrusted Wi-Fi. That removes F2, F7, F14 (remote), and F19 from your threat model entirely — they are all opt-in.
-- **Irreducible residual risk** even with everything off: any *co-resident app or ADB-context process* on the head unit can reach the unauthenticated loopback surfaces (F1 shell-RCE, F9 surveillance IPC, F21 footage exfiltration to an attacker-chosen Telegram chat when the Telegram integration is on, plus F5/F6/F16 secret exposure). If you trust everything installed on the unit and don't sideload, this is contained; if the unit runs untrusted apps, it is not.
+- **Irreducible residual risk** even with everything off: any *co-resident app or ADB-context process* on the head unit can reach the unauthenticated loopback surfaces — F1 shell-RCE, F9 surveillance IPC, **F24 Sentry kill-switch (silently disable your surveillance/sentry protection)**, F21 footage exfiltration to an attacker-chosen Telegram chat when the Telegram integration is on, plus F5/F6/F16 secret exposure (including the stored BYD-cloud credentials that *do* enable cloud actuation). If you trust everything installed on the unit and don't sideload, this is contained; if the unit runs untrusted apps, it is not.
 - **Non-negotiable if any secret has ever shipped or been exported:** rotate them (doc 09 §recommendation 4). The committed `Safe`/`Enc` key is already public; treat anything it "protected" as public too.
 
 None of this requires trusting the maintainer to be *malicious* — the proxy-operator question (doc 03) is worth resolving with the OSINT commands there — but most of the risk is structural, independent of intent, and reachable by third parties the maintainer doesn't control either.
