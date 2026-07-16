@@ -36,7 +36,7 @@ I also confirmed the audit's **PR-review corrections are sound**, not hand-wavin
 
 ## Part 2 — What the second pass adds
 
-The audit's binding table (doc 01) lists four listeners: HTTP `:8080`, TCP command `:19876`, video WS `:8887`, surveillance IPC `:19877`. A full sweep for `ServerSocket`/`bind(` finds **three more loopback listeners** that the audit does not enumerate. All three share the exact root cause the audit already names — *loopback binding treated as an authorization boundary* — so they extend F1/F9/F16 rather than opening a new class.
+The audit's binding table (doc 01) lists four listeners: HTTP `:8080`, TCP command `:19876`, video WS `:8887`, surveillance IPC `:19877`. A full sweep for `ServerSocket`/`bind(` finds **three more loopback listeners** the audit does not enumerate. Of these, **one is a live unauth surface (F21), one is a live listener with a lower-value payload (F23), and one is dead code in this build (F22)** — the last flagged after Codex correctly pointed out its daemon is never started. They share the exact root cause the audit already names — *loopback binding treated as an authorization boundary* — so the live ones extend F1/F9/F16 rather than opening a new class.
 
 ### F21 — 🟡 Low/Medium: Telegram daemon IPC (`127.0.0.1:19880`) injects owner-facing alerts with no auth
 
@@ -47,13 +47,17 @@ The audit's binding table (doc 01) lists four listeners: HTTP `:8080`, TCP comma
 
 It is **not** direct exfiltration — the destination is fixed to `ownerChatId`, so the attacker cannot redirect footage to themselves this way — and it is **not** vehicle actuation. That bounds it below the Critical sockets. But it is a genuine unauthenticated cross-process capability the audit's Telegram doc (07) does not mention; doc 07 analyses only the *inbound* long-poll owner gate, not this *outbound* local IPC.
 
-### F22 — 🟡 Low: BYD event daemon telemetry (`127.0.0.1:19878`) readable unauth
+### F22 — 🟡 Low (dormant in the audited build): BYD event daemon telemetry (`127.0.0.1:19878`), unauth *if launched*
 
-`BydEventDaemon` listens on `127.0.0.1:19878` and answers `ping`/`status`/`getRadar`/`getBattery` with no auth. A co-resident app can poll vehicle radar/battery/status — minor local information disclosure, same loopback-trust pattern. Read-only; no setters in the command table.
+`BydEventDaemon` *contains* a loopback listener on `127.0.0.1:19878` that answers `ping`/`status`/`getRadar`/`getBattery` with no auth (read-only; no setters in the command table).
 
-### F23 — 🟡 Low: AAC audio-ingest listener (`127.0.0.1:19878`) — and a probable port collision
+> **Correction (per Codex PR review — verified):** in the audited runtime this daemon is **not started**, so the `:19878` listener is not actually exposed on a normal install. The only launch paths are stubbed out: `BydSystemManager.startEventSystem()` has the `startBydEventDaemon()` call **commented out** and logs *"BydEventDaemon start skipped (PrivilegedShellSetup disabled)"*, and `DaemonManager.startBydEventDaemon()` is a no-op that only records state. `SentryEventHandler`/`BydEventClient` are *clients* that would fail to connect. So this is **dead code in this build**, reachable only if some external/manual launcher starts the daemon. Recorded as a latent surface to fix if it is ever re-enabled — not a live exposure today. Thanks to the reviewer for catching this.
 
-`AacIngestServer` is loopback-bound with no caller auth (doc 02 acknowledges the "audio-ingest IPC" in passing but does not score it). Separately worth flagging to the maintainer: `AacIngestServer.PORT` and `BydEventDaemon.TCP_PORT` are **both `19878`** — two listeners configured on the same port. Whichever binds first wins and the other spins on `BindException`; `setReuseAddress(true)` does not make two live listeners coexist. This is a reliability bug (one daemon may be silently mute), not a vulnerability, but it suggests the listener inventory would benefit from a single documented registry.
+### F23 — 🟡 Low: AAC audio-ingest listener (`127.0.0.1`), unauth — plus a latent (not live) port-number clash
+
+`AacIngestServer` is loopback-bound with no caller auth (doc 02 acknowledges the "audio-ingest IPC" in passing but does not score it) — this one **is** launched, so it is a live unauth loopback surface, though its payload is an audio stream rather than a command set.
+
+> **Correction (per Codex PR review — verified):** I originally called the shared port number a "probable runtime collision." That overstates it. `AacIngestServer.PORT` and `BydEventDaemon.TCP_PORT` are **both `19878`**, but because `BydEventDaemon` is not started (F22), `AacIngestServer` binds `19878` cleanly — there is **no live collision** in the audited build. (The codebase already recognised the clash and moved the *TelegramBot* IPC off `19878` to `19880` — see the comment at `TelegramBotDaemon.java`.) So this is a **latent config smell** — a duplicated port constant that would collide only if the dormant daemon is re-enabled — not a current reliability bug. The listener inventory would still benefit from a single documented port registry.
 
 ---
 
