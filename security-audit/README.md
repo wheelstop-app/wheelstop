@@ -44,7 +44,7 @@ The design contains some genuinely sound elements (see [What is done well](#what
 | # | Finding | Sev | Attacker position | Doc |
 |---|---------|-----|-------------------|-----|
 | F1 | Unauthenticated localhost `shell` command → arbitrary code execution as the daemon | 🔴 Critical | Any app on the head unit | [02](findings/02-local-rce-and-ipc.md#f1) |
-| F2 | When the (opt-in) sing-box proxy is enabled, all app egress routes through one hard-coded, non-owner endpoint (metadata + selective-block + MITM of any non-validated channel) | 🟠 High (if enabled) | Proxy operator / whoever compromises it | [03](findings/03-proxy-mitm-and-infrastructure.md#f2) |
+| F2 | When the (opt-in) sing-box proxy is enabled, the app's `ProxyHelper` HTTP/MQTT clients (BYD-cloud, OTA, MQTT, geocoding… — not the Telegram bot) route through one hard-coded, non-owner endpoint (metadata + selective-block + MITM of any non-validated channel) | 🟠 High (if enabled) | Proxy operator / whoever compromises it | [03](findings/03-proxy-mitm-and-infrastructure.md#f2) |
 | F3 | OTA has no *app-side* integrity check or anti-rollback; `pm install -r -d` allows silent same-signer downgrade | 🟠 High | Local / owner-position actor picking an old build | [04](findings/04-ota-integrity.md#f3) |
 | F4 | Live H.264 camera stream on `0.0.0.0:8887` with zero authentication | 🔴 Critical | Same Wi-Fi / LAN, or any local app | [05](findings/05-surveillance-and-camera.md#f4) |
 | F5 | JWT signing secret is 8 chars (~41 bits) **and** stored in a shell-readable config file | 🔴 Critical | LAN sniff → offline crack; shell-domain process | [01](findings/01-network-exposure-and-auth.md#f5) |
