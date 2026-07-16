@@ -9,7 +9,7 @@ This is the single most important document for the question *"could this app be 
 <a name="f2"></a>
 ## F2 — 🟠 High: all app egress is funnelled through one hard-coded, non-owner VLESS proxy
 
-> **Severity note:** downgraded from Critical to High after PR review. The original Critical rating assumed the operator could read/rewrite all traffic including credentials and the OTA APK; that is only true for non-TLS-validated channels (see the correction below). The finding remains High because the proxy is a *mandatory, non-owner* trust point for a safety device.
+> **Severity note:** downgraded from Critical to High after PR review. The original Critical rating assumed the operator could read/rewrite all traffic including credentials and the OTA APK; that is only true for non-TLS-validated channels (see the correction below). The finding remains High because, *once the user enables the proxy*, it is a non-owner trust point carrying a safety device's traffic (it is opt-in, not mandatory — see the opt-in note below).
 
 The app bundles **sing-box** and, when the proxy is running, routes app HTTP/MQTT traffic through a local `127.0.0.1:8119` inbound that forwards to a remote **VLESS-Reality** server. The server endpoint is written into the sing-box config **in plaintext** and is **not user-configurable**:
 
@@ -43,7 +43,9 @@ The chain to a forged OTA APK ([doc 04](04-ota-integrity.md)) therefore requires
 
 > **Mitigating nuance (verified):** the device-**global** HTTP proxy path — which would have routed *all* head-unit traffic, not just OverDrive's — is **disabled** in this build; `setupSystemProxy()` now only clears stale proxies rather than setting one. So F2 is *app-scoped* MITM, not literally every packet on the unit. It still covers everything OverDrive itself sends, including your BYD-cloud login and the update download.
 
-**Impact:** a mandatory, non-owner routing point for all OverDrive off-board traffic — able to surveil metadata, selectively block updates/telemetry on a safety device, and fully MITM any non-validated channel (trust-all MQTT, plaintext). Not "reads everything," but a single point of trust you neither chose nor control.
+**Impact:** **when the sing-box proxy is enabled** (see the opt-in note below), a non-owner routing point for all OverDrive off-board traffic — able to surveil metadata, selectively block updates/telemetry on a safety device, and fully MITM any non-validated channel (trust-all MQTT, plaintext). Not "reads everything," and not on by default — but once enabled it is a single point of trust the owner does not control.
+
+> **Opt-in scope (per PR review):** the proxy is **not mandatory**. `ProxyHelper.getHttpProxy()` returns `Proxy.NO_PROXY` when sing-box is not running ([`ProxyHelper.java#L140`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/mqtt/ProxyHelper.java#L140)), and sing-box is an **optional daemon** started only when the user enables it. Installations that never enable it send this traffic directly and are unaffected by F2. The finding applies to users who turn the proxy on — at which point the hard-coded, non-owner endpoint (F2's core concern) is what their traffic flows through.
 
 ---
 

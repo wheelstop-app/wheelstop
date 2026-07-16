@@ -44,7 +44,7 @@ The design contains some genuinely sound elements (see [What is done well](#what
 | # | Finding | Sev | Attacker position | Doc |
 |---|---------|-----|-------------------|-----|
 | F1 | Unauthenticated localhost `shell` command → arbitrary code execution as the daemon | 🔴 Critical | Any app on the head unit | [02](findings/02-local-rce-and-ipc.md#f1) |
-| F2 | All app egress mandatorily routed through one hard-coded, non-owner proxy (metadata + selective-block + MITM of any non-validated channel) | 🟠 High | Proxy operator / whoever compromises it | [03](findings/03-proxy-mitm-and-infrastructure.md#f2) |
+| F2 | When the (opt-in) sing-box proxy is enabled, all app egress routes through one hard-coded, non-owner endpoint (metadata + selective-block + MITM of any non-validated channel) | 🟠 High (if enabled) | Proxy operator / whoever compromises it | [03](findings/03-proxy-mitm-and-infrastructure.md#f2) |
 | F3 | OTA has no *app-side* integrity check or anti-rollback; `pm install -r -d` allows silent same-signer downgrade | 🟠 High | Local / owner-position actor picking an old build | [04](findings/04-ota-integrity.md#f3) |
 | F4 | Live H.264 camera stream on `0.0.0.0:8887` with zero authentication | 🔴 Critical | Same Wi-Fi / LAN, or any local app | [05](findings/05-surveillance-and-camera.md#f4) |
 | F5 | JWT signing secret is 8 chars (~41 bits) **and** stored in a shell-readable config file | 🔴 Critical | LAN sniff → offline crack; shell-domain process | [01](findings/01-network-exposure-and-auth.md#f5) |
@@ -62,7 +62,7 @@ The design contains some genuinely sound elements (see [What is done well](#what
 | F17 | `deviceId` disclosed unauthenticated via `/auth/status` (pre-auth fingerprint) | 🟡 Medium | Anyone who can reach `:8080` | [01](findings/01-network-exposure-and-auth.md#f17) |
 | F18 | `trustAllCerts` / trust-all TLS socket factories disable certificate validation | 🟡 Medium | On-path attacker | [06](findings/06-mqtt.md#f18) |
 | F19 | Enabling a Zrok/Cloudflare tunnel publishes the control plane to the internet with no tunnel-layer auth | 🟠 High (situational) | Internet | [03](findings/03-proxy-mitm-and-infrastructure.md#f19) |
-| F20 | Shell commands built by string concatenation across launchers (latent injection) | 🟡 Medium | Chained with F2/F3 | [02](findings/02-local-rce-and-ipc.md#f20) |
+| F20 | Shell commands built by string concatenation across launchers (latent pattern — no reachable injection today) | 🟡 Low/Medium | Latent (future changes) | [02](findings/02-local-rce-and-ipc.md#f20) |
 
 ---
 

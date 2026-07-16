@@ -65,9 +65,9 @@ Across the launchers, shell command strings are assembled by direct interpolatio
 
 - The OTA download URL is placed straight into a shell one-liner: [`AppUpdater.java#L1304`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/updater/AppUpdater.java#L1304) and the `wget`/`curl` builder around it.
 
-Today most interpolated values are constrained upstream (allowlisted daemon names, `parseInt`-guarded numbers, `File.getName()`-sanitised filenames), so no *external* pre-auth injection was found through the Telegram or automation text paths. The concern is (a) the **OTA `browser_download_url`** which originates from a GitHub API response that transits the attacker-influenceable proxy (chained with F2/F3 this is a real injection into a shell as UID 2000), and (b) the brittleness of the pattern — any future command that forwards an unvalidated argument becomes an injection at daemon privilege.
+Today the interpolated values are constrained upstream (allowlisted daemon names, `parseInt`-guarded numbers, `File.getName()`-sanitised filenames), so **no reachable injection was found**. In particular, the **OTA `browser_download_url`** — the one value that originates off-device — comes from a GitHub API response over **validated HTTPS**, which (per the F2/F3 correction in [doc 03](03-proxy-mitm-and-infrastructure.md) / [doc 04](04-ota-integrity.md)) a forwarding proxy **cannot** modify. So there is **no** present proxy→shell injection chain; an earlier draft that framed this as an active F2/F3 exploit was wrong and is corrected here.
 
-**Impact:** command injection at daemon privilege when chained with proxy/MITM control of the update metadata.
+**Impact (latent, not active):** the string-concatenation-into-`sh -c` pattern is fragile — any *future* change that forwards an unvalidated argument (or a download endpoint that drops TLS validation) would become an injection at daemon privilege. Flagged as a pattern to fix, not a current exploit.
 
 ---
 
