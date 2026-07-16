@@ -7,7 +7,7 @@ This is the single most important document for the question *"could this app be 
 ---
 
 <a name="f2"></a>
-## F2 — 🟠 High: all app egress is funnelled through one hard-coded, non-owner VLESS proxy
+## F2 — 🟠 High: the app's proxy-routed HTTP/MQTT clients are funnelled through one hard-coded, non-owner VLESS proxy
 
 > **Severity note:** downgraded from Critical to High after PR review. The original Critical rating assumed the operator could read/rewrite all traffic including credentials and the OTA APK; that is only true for non-TLS-validated channels (see the correction below). The finding remains High because, *once the user enables the proxy*, it is a non-owner trust point carrying a safety device's traffic (it is opt-in, not mandatory — see the opt-in note below).
 
