@@ -6,7 +6,7 @@
 This document answers two questions the owner asked:
 
 1. **Is the existing audit accurate?** — I re-derived the load-bearing findings from source rather than trusting the write-ups.
-2. **Did a second pass find anything the audit missed?** — Yes: four more unauthenticated loopback listeners (two of them High — F21 footage exfiltration and F24 a surveillance kill-switch), and one accuracy correction to the audit's *impact* framing (the signature-protected `BYDAUTO_*` **writes** are not actually granted; actuation is cloud-mediated, not local-HAL). None of it overturns the audit's structure; it *reinforces* the central root cause and tightens the calibration.
+2. **Did a second pass find anything the audit missed?** — Yes: four more unauthenticated loopback listeners (F21 footage exfiltration is High; F24 Sentry keepalive-kill + location control is Medium), and one accuracy correction to the audit's *impact* framing (the signature-protected `BYDAUTO_*` **writes** are not actually granted; actuation is cloud-mediated, not local-HAL). None of it overturns the audit's structure; it *reinforces* the central root cause and tightens the calibration.
 
 ---
 
@@ -36,7 +36,7 @@ I also confirmed the audit's **PR-review corrections are sound**, not hand-wavin
 
 ## Part 2 — What the second pass adds
 
-The audit's binding table (doc 01) lists four listeners: HTTP `:8080`, TCP command `:19876`, video WS `:8887`, surveillance IPC `:19877`. A full sweep for `ServerSocket`/`bind(` finds **four more loopback listeners** the audit does not enumerate. Of these, **F21 (Telegram IPC) and F24 (Sentry control socket) are live and High**, **F23 (AAC ingest) is live with a lower-value payload**, and **F22 (BYD event daemon) is dead code in this build** — F22/F23/F24 refined or added after Codex correctly caught that F22's daemon is never started, that F21 allows an attacker-chosen recipient, and that my "full sweep" had itself missed F24. They share the exact root cause the audit already names — *loopback binding treated as an authorization boundary* — so the live ones extend F1/F9/F16 rather than opening a new class.
+The audit's binding table (doc 01) lists four listeners: HTTP `:8080`, TCP command `:19876`, video WS `:8887`, surveillance IPC `:19877`. A full sweep for `ServerSocket`/`bind(` finds **four more loopback listeners** the audit does not enumerate. Of these, **F21 (Telegram IPC) is live and High**, **F24 (Sentry control socket) is live and Medium**, **F23 (AAC ingest) is live with a lower-value payload**, and **F22 (BYD event daemon) is dead code in this build** — F22/F23/F24 refined or added after Codex correctly caught that F22's daemon is never started, that F21 allows an attacker-chosen recipient, that my "full sweep" had itself missed F24, and that F24's real impact is keepalive-denial + location control rather than a direct dashcam kill. They share the exact root cause the audit already names — *loopback binding treated as an authorization boundary* — so the live ones extend F1/F9/F16 rather than opening a new class.
 
 ### F21 — 🟠 High: Telegram daemon IPC (`127.0.0.1:19880`) exfiltrates footage to an *attacker-chosen* chat, unauth
 
@@ -66,17 +66,19 @@ The audit's Telegram doc (07) analyses only the *inbound* long-poll owner gate; 
 
 > **Correction (per Codex PR review — verified):** I originally called the shared port number a "probable runtime collision." That overstates it. `AacIngestServer.PORT` and `BydEventDaemon.TCP_PORT` are **both `19878`**, but because `BydEventDaemon` is not started (F22), `AacIngestServer` binds `19878` cleanly — there is **no live collision** in the audited build. (The codebase already recognised the clash and moved the *TelegramBot* IPC off `19878` to `19880` — see the comment at `TelegramBotDaemon.java`.) So this is a **latent config smell** — a duplicated port constant that would collide only if the dormant daemon is re-enabled — not a current reliability bug. The listener inventory would still benefit from a single documented port registry.
 
-### F24 — 🟠 High: unauthenticated Sentry control socket (`127.0.0.1:19879`) — local kill-switch for surveillance
+### F24 — 🟡 Medium: unauthenticated Sentry control socket (`127.0.0.1:19879`) — kill the keepalive daemon + control location monitoring
 
-> **Added per Codex PR review — verified.** My "full sweep" write-up missed this live listener; Codex correctly flagged it.
+> **Added per Codex PR review — verified.** My "full sweep" write-up missed this live listener; Codex flagged it, then correctly pushed back on my first impact wording (see the scope note below).
 
 `SentryDaemon.startControlSocket()` binds `127.0.0.1:19879` (`CONTROL_PORT`) and is called on **both** startup paths — the with-context branch and the no-context shell fallback (`SentryDaemon.java:110,124`) — and `DaemonLauncher.launchSentryDaemon` actively launches this daemon, so it is **live on a normal install** (unlike F22). It reads one line and dispatches with **no authentication**:
 
-- `STOP` / `KILL` / `EXIT` → `shutdown()` — a co-resident app can **turn the Sentry/surveillance daemon off** at will.
-- `LOCATION_MONITOR_ON` / `LOCATION_MONITOR_OFF` / `LOCATION_RESTART` → toggle location monitoring.
+- `STOP` / `KILL` / `EXIT` → `SentryDaemon.shutdown()`.
+- `LOCATION_MONITOR_ON` / `LOCATION_MONITOR_OFF` / `LOCATION_RESTART` → toggle the location-sidecar monitor.
 - `STATUS` → discloses PID + whether location monitoring is on.
 
-**Impact:** any co-resident process can **silently disable the car's surveillance/sentry protection** (a denial-of-surveillance primitive — disarm the dashcam/sentry before a physical break-in) and toggle location monitoring, with no credential. Same root cause as F1/F9 (loopback treated as authorization). Note also the in-source comment on this method says *"Listens on localhost:19876"* while the constant is `19879` — a stale comment worth fixing so the port inventory isn't misleading.
+> **Scope correction (per Codex PR review — verified):** my first draft called this a "kill-switch for surveillance / disarm the dashcam." That overstates the *direct* effect. `SentryDaemon` does **not** own the camera/surveillance pipeline — `CameraDaemon` does — and `shutdown()` only releases `SentryDaemon`'s own wake-lock, closes its control socket, and `System.exit(0)`s; it never signals `CameraDaemon`. So `STOP` kills the **power/keepalive daemon** (whose documented job is holding the ACC-lock + WakeLock that "prevent force_suspend," keeping WiFi up, and network-whitelisting the UIDs), and the other commands control **location monitoring**. To *directly* disable surveillance a co-resident attacker would instead use the `disableSurveillance` / camera-stop commands on the **F1 channel** (`:19876`), which is the more severe unauth surface anyway.
+
+**Impact:** any co-resident process can (a) **kill the sentry keepalive/power daemon** — a local **denial-of-availability** that drops the ACC-lock/WakeLock protecting the OverDrive stack from OS suspension, which can *indirectly* degrade persistence (including surveillance) when the head unit tries to suspend, though this is an availability cascade, not a direct "stop recording" command; and (b) **toggle/kill location monitoring**. No credential required. Same root cause as F1/F9 (loopback treated as authorization). Note also the in-source comment on this method says *"Listens on localhost:19876"* while the constant is `19879` — a stale comment worth fixing so the port inventory isn't misleading.
 
 ---
 
@@ -100,7 +102,7 @@ The single most important structural fact — mine and the audit's conclusion bo
 Every Critical/High in the audit, plus my four additions, is an instance of that one mistake. It is *fixable* (positive authentication on each channel, a non-world-readable secret store, TLS, signed updates/backups) and the audit's per-doc recommendations are the right fixes — but until they land, the honest summary for an owner deciding whether to run this is:
 
 - **Lowest-exposure posture:** do **not** enable the sing-box proxy, MQTT control, or any tunnel (zrok/cloudflared); keep the head unit off untrusted Wi-Fi. That removes F2, F7, F14 (remote), and F19 from your threat model entirely — they are all opt-in.
-- **Irreducible residual risk** even with everything off: any *co-resident app or ADB-context process* on the head unit can reach the unauthenticated loopback surfaces — F1 shell-RCE, F9 surveillance IPC, **F24 Sentry kill-switch (silently disable your surveillance/sentry protection)**, F21 footage exfiltration to an attacker-chosen Telegram chat when the Telegram integration is on, plus F5/F6/F16 secret exposure (including the stored BYD-cloud credentials that *do* enable cloud actuation). If you trust everything installed on the unit and don't sideload, this is contained; if the unit runs untrusted apps, it is not.
+- **Irreducible residual risk** even with everything off: any *co-resident app or ADB-context process* on the head unit can reach the unauthenticated loopback surfaces — F1 shell-RCE (which *also* carries a direct `disableSurveillance`/camera-stop command), F9 surveillance IPC, F24 (kill the keepalive daemon + control location monitoring), F21 footage exfiltration to an attacker-chosen Telegram chat when the Telegram integration is on, plus F5/F6/F16 secret exposure (including the stored BYD-cloud credentials that *do* enable cloud actuation). If you trust everything installed on the unit and don't sideload, this is contained; if the unit runs untrusted apps, it is not.
 - **Non-negotiable if any secret has ever shipped or been exported:** rotate them (doc 09 §recommendation 4). The committed `Safe`/`Enc` key is already public; treat anything it "protected" as public too.
 
 None of this requires trusting the maintainer to be *malicious* — the proxy-operator question (doc 03) is worth resolving with the OSINT commands there — but most of the risk is structural, independent of intent, and reachable by third parties the maintainer doesn't control either.

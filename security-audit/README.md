@@ -63,6 +63,12 @@ The design contains some genuinely sound elements (see [What is done well](#what
 | F18 | `trustAllCerts` / trust-all TLS socket factories disable certificate validation | 🟡 Medium | On-path attacker | [06](findings/06-mqtt.md#f18) |
 | F19 | Enabling a Zrok/Cloudflare tunnel publishes the control plane to the internet with no tunnel-layer auth | 🟠 High (situational) | Internet | [03](findings/03-proxy-mitm-and-infrastructure.md#f19) |
 | F20 | Shell commands built by string concatenation across launchers (latent pattern — no reachable injection today) | 🟡 Low/Medium | Latent (future changes) | [02](findings/02-local-rce-and-ipc.md#f20) |
+| F21 | Telegram daemon IPC (`:19880`) uploads any daemon-readable file to an **attacker-chosen** chat (unauth); precondition: Telegram + video uploads enabled | 🟠 High | Any local app (Telegram integration on) | [10](10-review-and-verification.md#part-2--what-the-second-pass-adds) |
+| F22 | BYD event daemon telemetry listener (`:19878`) — **dead code in this build** (daemon not launched) | ⚪ Dormant | Latent (only if re-enabled) | [10](10-review-and-verification.md#part-2--what-the-second-pass-adds) |
+| F23 | AAC audio-ingest listener (`127.0.0.1`) unauth; latent duplicated-port constant | 🟡 Low | Any local app | [10](10-review-and-verification.md#part-2--what-the-second-pass-adds) |
+| F24 | Sentry control socket (`:19879`) unauth — kill the keepalive/power daemon (availability) + control location monitoring | 🟡 Medium | Any local app | [10](10-review-and-verification.md#part-2--what-the-second-pass-adds) |
+
+> Rows F21–F24 and an accuracy correction to the `BYDAUTO`-actuation impact framing come from the **independent review pass** — see [doc 10](10-review-and-verification.md). F1–F20 above are the original audit.
 
 ---
 

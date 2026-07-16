@@ -30,7 +30,7 @@ On Android, **any installed app can open a TCP socket to `127.0.0.1` with only t
 {"cmd":"shell","command":"id; cat /data/local/tmp/overdrive_config.json"}
 ```
 
-…and receives command output back, executing as the **daemon UID (2000 / shell-class)** which holds the full vehicle HAL permission set (see F16). The same unauthenticated channel also exposes `shutdown`, `disableSurveillance`, `setStreamMode public`, `auth_invalidate`, and camera start/stop.
+…and receives command output back, executing as the **daemon UID (2000 / shell-class)** with the daemon's granted-permission subset and read access to the stored secrets/BYD-cloud credentials (see F16 — note the signature-protected `BYDAUTO_*_SET` HAL *writes* are **not** in that subset; actuation is cloud-mediated, not direct-HAL). The same unauthenticated channel also exposes `shutdown`, `disableSurveillance`, `setStreamMode public`, `auth_invalidate`, and camera start/stop — so surveillance *can* be turned off directly here, on the `:19876` command channel itself.
 
 There is **no caller authentication of any kind** — no command allowlist and no token. (It is a `java.net.ServerSocket` loopback TCP server, so a kernel `SO_PEERCRED` peer-UID check isn't even available on it; that's *why* remediation needs either a Unix-domain/`LocalServerSocket` endpoint with peer-credential enforcement, or an application-layer auth token on the TCP channel.) Binding to loopback stops *remote* callers but not *co-resident* ones — which is precisely the untrusted party on a shared head unit.
 
