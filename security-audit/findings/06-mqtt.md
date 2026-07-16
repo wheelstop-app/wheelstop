@@ -32,9 +32,11 @@ The command surface reachable by publishing a single retained string includes ph
 PUBLISH overdrive/vehicle/telemetry/tailgate/set  OPEN
 PUBLISH overdrive/vehicle/telemetry/esp_control/set  0
 ```
-On an open or weakly-ACL'd broker (F7-broker) that is fully anonymous remote actuation.
+On an open or weakly-ACL'd broker (F7-broker) that is fully anonymous inbound command injection.
 
-**Impact:** remote physical access (tailgate/windows/sunroof open), disabling a stability safety system, and arbitrary comfort/drive-mode manipulation on a physical vehicle.
+> **Actuation-scope correction (added in review, per Codex PR review — verified):** whether those publishes produce *physical* actuation depends on the target unit, and on a stock **unsigned** OverDrive install they largely do **not**. `MqttCommandRouter` dispatches every inbound command through `VehicleCommandRouter.executeSdkOnly` — its class doc states it is *"SDK-only … the BYD cloud [path is not used]"* — so unlike the HTTP `/api/vehicle/*` path, MQTT commands **cannot** use the BYD-cloud credential leg that actually works. They hit the local SDK/HAL setters, which are gated on the signature-protected `BYDAUTO_*_SET` permissions that this APK is **not** granted (return `STATUS_FAILED` — see [doc 10, Part 3](../10-review-and-verification.md#part-3--direct-answer-to-the-owners-concern) and the F16 caveat in [doc 02](02-local-rce-and-ipc.md#f16)). So the anonymous-command *surface* is real and unconditional, but the **physical-actuation** outcome is conditional on the unit permitting local HAL writes (platform-signed / rooted / non-sigperm properties) — not proven on a stock install. The **telemetry/location exposure** below (F7-topic) is the concrete, unconditional impact, since reads work regardless of signing.
+
+**Impact:** unauthenticated inbound command injection into the vehicle-control handler. On units that permit local HAL writes this is remote physical access (tailgate/windows/sunroof open), stability-system disable, and drive-mode manipulation; on a stock unsigned install the HAL writes are rejected, so the realized impact narrows to the attempted-command surface plus the (unconditional) telemetry/location exposure in F7-topic. Scope the physical-control claim to the write capability actually present on the target unit.
 
 ---
 
