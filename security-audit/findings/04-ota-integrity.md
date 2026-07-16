@@ -7,11 +7,13 @@ The updater downloads an APK and installs it with elevated privilege. On a devic
 ---
 
 <a name="f3"></a>
-## F3 — 🔴 Critical: no cryptographic verification of the update package
+## F3 — 🟠 High: no *app-side* integrity verification or anti-rollback on the update package
 
-### The download path is attacker-influenceable
+> **Scope correction (per PR review):** an earlier draft implied this permits "arbitrary APK replacement / RCE via the proxy." That is inaccurate and has been corrected. `pm install -r -d` still requires the replacement APK to be **signed by the same certificate** as the installed app — Android enforces that independently of this app. So this finding is *not* arbitrary code execution on its own. The real, still-valid gaps are: (a) **no app-side SHA-256/signature/pinning** on the download, and (b) **no anti-rollback**, which together allow a **silent downgrade to a validly-signed older (vulnerable) build**, and would allow worse only if the developer signing key is leaked or the download endpoint is unvalidated. Severity adjusted Critical → High accordingly.
 
-The APK URL comes from the GitHub releases API (`browser_download_url`) and is fetched over HTTP(S) — but that fetch **transits the hard-coded proxy** from [doc 03](03-proxy-mitm-and-infrastructure.md) (`ProxyHelper.getHttpProxy()`), and the shell download builder uses `wget`/`curl` with **no certificate pinning**:
+### The download path
+
+The APK URL comes from the GitHub releases API (`browser_download_url`) and is fetched over HTTPS — but that fetch **transits the hard-coded proxy** from [doc 03](03-proxy-mitm-and-infrastructure.md) (`ProxyHelper.getHttpProxy()`), and the shell download builder uses `wget -q` / `curl -sL` (both validate certificates by default) with **no certificate *pinning*** on top. TLS validation means the forwarding proxy cannot silently swap the APK for a differently-signed one; the gap is the absence of an *app-level* integrity check layered on top, which pinning or a signed digest would provide:
 
 - Shell install/download one-liner (URL interpolated): [`AppUpdater.java#L1304`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/updater/AppUpdater.java#L1304)
 
@@ -40,10 +42,10 @@ There is **no SHA-256 comparison, no signature verification, no pinned certifica
 
 Android's `PackageManager` enforces that a `-r` replacement APK is **signed by the same certificate** as the installed app. That signer check is the *only* remaining barrier — the app contributes nothing. Two consequences:
 
-1. **Rollback attack is fully viable today.** Because `-d` permits downgrades and there is no anti-rollback version floor, an attacker who controls the download (via the proxy in F2, or any MITM on the un-pinned fetch) can push an **older, validly-signed OverDrive build with known vulnerabilities**, then exploit those.
-2. **If the developer signing key is ever weak, leaked, or the build is unsigned/debuggable, there is no second line of defence** — the malicious APK installs silently at elevated privilege and gains the full BYD HAL permission set on next launch.
+1. **Rollback / downgrade is possible without breaking any signature.** Because `-d` permits downgrades and there is no anti-rollback version floor, an *older, validly-signed* build with known vulnerabilities can be installed. The realistic vectors are **not** a network MITM (the GitHub download is HTTPS-validated — see the F2 correction in [doc 03](03-proxy-mitm-and-infrastructure.md)), but rather: a **local actor who stages an APK** into the shell-writable `/data/local/tmp` staging path ([doc 02](02-local-rce-and-ipc.md) F16), the Telegram **`/update install [tag]`** command letting an owner-position attacker pick an older tag ([doc 07](07-telegram-bot.md)), or any download endpoint that is ever plaintext/unvalidated.
+2. **If the developer signing key is ever weak, leaked, or the build is unsigned/debuggable, there is no second line of defence** — a malicious APK installs silently at elevated privilege and gains the full BYD HAL permission set on next launch. This is the only path to *arbitrary* (non-same-signer) code, and it depends on the signing key, not on this app's (absent) checks.
 
-**Impact:** a MITM on the update path (which the bundled proxy operator inherently has) can silently downgrade the app, and — absent the OS signer check — could achieve arbitrary code execution on a device that actuates a car.
+**Impact:** silent downgrade to a validly-signed vulnerable build via a local or owner-position actor; arbitrary code execution only if the signing key is compromised. The app itself adds no integrity defence-in-depth beyond Android's same-signer enforcement.
 
 ---
 

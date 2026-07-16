@@ -15,7 +15,15 @@ A backup bundle has **no signature, no HMAC, and no origin binding** — validat
 - Excluded sections are only housekeeping keys: [`ConfigBackupService.kt#L64`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/config/ConfigBackupService.kt#L64) (`updates/lastModified/version/configSeq`)
 - Credential sections are only `bydCloud/navMap/telegram`: [`ConfigBackupService.kt#L71`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/config/ConfigBackupService.kt#L71)
 
-The **MQTT section is neither excluded nor credential-protected**, so an attacker-crafted bundle sets `brokerUrl`, `port`, `topic`, `username`, `password` wholesale. Because MQTT is an inbound control channel (see [doc 06](06-mqtt.md)), redirecting the broker points the car at an **attacker-controlled broker** that can publish lock/climate/window/ESP commands the car obeys. The same merge can repoint the **community worker URL** (F-community below) and, via the credential-skip bypass, the **Telegram owner** (F10b).
+> **Correction (per PR review):** an earlier draft named the **MQTT broker** as a restore-merge target. That is wrong and has been removed. The bundle only carries `settings.unified` (the `overdrive_config.json` sections); **MQTT connections are stored in a *separate* file** `/data/local/tmp/mqtt_connections.json` by `MqttConnectionStore` ([`MqttConnectionStore.java#L28`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/mqtt/MqttConnectionStore.java#L28)), which `UnifiedConfigManager` never touches — the `buildBundle` docstring's "what it contains" list confirms MQTT is not included. So a crafted backup **cannot** set the MQTT broker/credentials. Thanks to the reviewer for catching this.
+
+The still-valid restore-merge targets are the **unified-config sections that are neither excluded nor credential-guarded**, which an attacker bundle can set wholesale:
+
+- **`telegram`** — via the credential-skip bypass (F10b below): points the car's command bot at the attacker (this *is* a vehicle-command channel, per [doc 07](07-telegram-bot.md)'s command surface).
+- **`community.workerUrl`** — repoints the automation catalog origin to an attacker server (F-community below).
+- **`cloudflared`** — the tunnel token (a unified section).
+
+The proxy endpoint is **not** a target (it is hard-coded in `SingboxLauncher`, not config-driven), so restore cannot repoint it.
 
 ### F10b — the Telegram "credential-skip" guard is bypassable with plaintext
 
@@ -23,7 +31,7 @@ The **MQTT section is neither excluded nor credential-protected**, so an attacke
 
 **Exploit path:** craft a bundle with a valid `manifest.format`, socially-engineer the owner into "Restore settings" (restore is presented as a normal feature and needs only JWT + `confirm=true`). No integrity check rejects the foreign file.
 
-**Impact:** full remote takeover of the car's command channel (MQTT broker and/or Telegram owner) from a single restored file.
+**Impact:** takeover of the car's Telegram command channel (and repointing of the community/tunnel config) — **but only after** the attacker both obtains a valid session (JWT) *and* induces the owner to perform the restore with `confirm=true`. The backup file alone is not sufficient; it is the payload, not the whole exploit. Given those prerequisites, the consequence is an attacker-controlled Telegram bot able to issue vehicle commands.
 
 ---
 
@@ -64,13 +72,13 @@ Import guards exist but are thin: shell actions are refused on **both** the shar
 
 ---
 
-## F-community — 🟡 Medium: single hard-coded personal backend, no content signing, no pinning
+## F-community — 🟡 Medium: single hard-coded shared backend, no content signing, no pinning
 
 All installs pool into one Cloudflare Worker; content is not signed, and the client uses a plain OkHttp client with **no certificate pinning**:
 
 - [`CommunityConfig.kt#L47`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/community/config/CommunityConfig.kt#L47) → `DEFAULT_WORKER_URL = "https://community-edge.yash321sri.workers.dev"`
 
-The worker URL is also restore-overridable (F10), so the same restore vector can repoint the catalog origin to an attacker server. Compromise/takeover of that single Cloudflare account (or its DNS) would let an attacker serve the whole fleet's catalog. See [doc 03](03-proxy-mitm-and-infrastructure.md) for the infrastructure note (it resolves to Cloudflare anycast — a free personal `workers.dev` namespace).
+The worker URL is also restore-overridable (F10), so the same restore vector can repoint the catalog origin to an attacker server. Because the endpoint is a `*.workers.dev` subdomain, the relevant control-plane risk is **compromise of that single Cloudflare account** — not independent DNS takeover (DNS is Cloudflare's; there is no separate delegated zone to hijack). Either way, whoever controls that account can serve the whole fleet's catalog. See [doc 03](03-proxy-mitm-and-infrastructure.md) for the infrastructure note (DNS resolves it to Cloudflare anycast on the `workers.dev` namespace).
 
 ---
 

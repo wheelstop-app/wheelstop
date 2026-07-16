@@ -21,11 +21,13 @@ A defensive security review of the **OverDrive** vehicle-control / surveillance 
 |---|---|
 | Repository | `shauneccles/Overdrive-release` |
 | Commit (pinned) | [`a6ecca5324a4c5d9b7676b4a9a120b03baceab19`](https://github.com/shauneccles/Overdrive-release/commit/a6ecca5324a4c5d9b7676b4a9a120b03baceab19) |
-| Default branch | `main` (HEAD == audited commit) |
+| Default branch | `main` (this commit was `main`'s HEAD **at audit time** — later commits will advance `main`, but the pinned commit above stays the durable reference) |
 | Scope | `app/src/main` — ~192 Kotlin + ~413 Java source files |
 
 All permalinks in these documents use the form:
 `https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/<path>#L<line>`
+
+> **Revision note:** several findings were refined after automated PR review (CodeRabbit + Codex) flagged over-broad claims. Corrections applied in-place and marked with *"(per PR review)"*: F2/F3 (a forwarding proxy cannot MITM validated HTTPS — the OTA-forgery chain was overstated; both downgraded Critical→High), F7 (scoped to *application-level* auth with an anonymous-broker precondition; HiveMQ is a UI placeholder, not a default), F10 (MQTT is **not** in the backup bundle — corrected to the Telegram/community/tunnel sections that are), plus wording fixes (`/data/local/tmp` is shell-writable not world-writable; storage exposure scoped to external-storage access; F17 is a fingerprint, not a cracking input).
 
 ---
 
@@ -42,24 +44,24 @@ The design contains some genuinely sound elements (see [What is done well](#what
 | # | Finding | Sev | Attacker position | Doc |
 |---|---------|-----|-------------------|-----|
 | F1 | Unauthenticated localhost `shell` command → arbitrary code execution as the daemon | 🔴 Critical | Any app on the head unit | [02](findings/02-local-rce-and-ipc.md#f1) |
-| F2 | All app egress (incl. OTA download, BYD-cloud creds) funnelled through one hard-coded, non-owner proxy | 🔴 Critical | Proxy operator / whoever compromises it | [03](findings/03-proxy-mitm-and-infrastructure.md#f2) |
-| F3 | OTA update has no signature/hash verification; `pm install -r -d` allows silent downgrade | 🔴 Critical | Proxy/MITM on the download | [04](findings/04-ota-integrity.md#f3) |
+| F2 | All app egress mandatorily routed through one hard-coded, non-owner proxy (metadata + selective-block + MITM of any non-validated channel) | 🟠 High | Proxy operator / whoever compromises it | [03](findings/03-proxy-mitm-and-infrastructure.md#f2) |
+| F3 | OTA has no *app-side* integrity check or anti-rollback; `pm install -r -d` allows silent same-signer downgrade | 🟠 High | Local / owner-position actor picking an old build | [04](findings/04-ota-integrity.md#f3) |
 | F4 | Live H.264 camera stream on `0.0.0.0:8887` with zero authentication | 🔴 Critical | Same Wi-Fi / LAN, or any local app | [05](findings/05-surveillance-and-camera.md#f4) |
-| F5 | JWT signing secret is 8 chars (~41 bits) **and** stored in a world-read/write file | 🔴 Critical | LAN sniff → offline crack; any local process | [01](findings/01-network-exposure-and-auth.md#f5) |
+| F5 | JWT signing secret is 8 chars (~41 bits) **and** stored in a shell-readable config file | 🔴 Critical | LAN sniff → offline crack; shell-domain process | [01](findings/01-network-exposure-and-auth.md#f5) |
 | F6 | "Encryption" (`Safe`/`Enc`) uses an AES key committed to the repo | 🔴 Critical | Anyone with the public repo | [09](findings/09-secrets-and-crypto.md#f6) |
-| F7 | MQTT accepts vehicle commands from any publisher on a guessable topic; plaintext/public broker default | 🔴 Critical | Anyone on the broker | [06](findings/06-mqtt.md#f7) |
-| F8 | Loopback "safety-net" auth bypass for tunnels without proxy headers | 🟠 High | Generic tunnel / SSRF-to-localhost | [01](findings/01-network-exposure-and-auth.md#f8) |
+| F7 | MQTT adds no app-level sender auth on command topics (critical **iff** broker is anonymous/weak-ACL + control enabled); UI nudges toward a public plaintext broker | 🔴 Critical (conditional) | Anyone on an anonymous/weak-ACL broker | [06](findings/06-mqtt.md#f7) |
+| F8 | Loopback "safety-net" auth bypass for locally-terminating forwarders without proxy headers | 🟠 High | Local-terminating forwarder / on-device SSRF | [01](findings/01-network-exposure-and-auth.md#f8) |
 | F9 | Unauthenticated surveillance IPC socket exposes GPS, config, control | 🟠 High | Any local app | [05](findings/05-surveillance-and-camera.md#f9) |
-| F10 | Config restore deep-merges unsigned attacker JSON into control sections (MQTT broker, Telegram owner) | 🟠 High | Phished restore file | [08](findings/08-community-and-backup.md#f10) |
+| F10 | Unsigned config restore deep-merges attacker sections (Telegram owner, community/tunnel) into live config | 🟠 High | Valid session + phished restore | [08](findings/08-community-and-backup.md#f10) |
 | F11 | Config backup ships credential ciphertext **and** the key that decrypts it | 🟠 High | Any leaked/exfiltrated backup | [08](findings/08-community-and-backup.md#f11) |
-| F12 | Recordings/snapshots/GPS tracks written world-readable to shared storage | 🟠 High | Any app with storage access | [05](findings/05-surveillance-and-camera.md#f12) |
+| F12 | Recordings/snapshots/GPS tracks written world-readable to external storage | 🟠 High | App with external-storage/all-files access | [05](findings/05-surveillance-and-camera.md#f12) |
 | F13 | Telegram pairing PIN (6 digits) has no rate-limit/lockout; bot token locally recoverable | 🟠 High | Attacker online during pairing / local | [07](findings/07-telegram-bot.md#f13) |
 | F14 | Control plane binds `0.0.0.0:8080` in cleartext (no TLS); 1-year non-revocable JWTs | 🟠 High | Same Wi-Fi / LAN | [01](findings/01-network-exposure-and-auth.md#f14) |
 | F15 | Imported/tested community automations reach the full vehicle-control catalog; no sandbox | 🟠 High | Malicious published automation + 1 tap | [08](findings/08-community-and-backup.md#f15) |
-| F16 | Daemons run from world-writable `/data/local/tmp`; binaries/scripts are plantable | 🟠 High | Local shell / second app | [02](findings/02-local-rce-and-ipc.md#f16) |
-| F17 | `deviceId` disclosed unauthenticated via `/auth/status` (enables F5 offline crack) | 🟡 Medium | Anyone who can reach `:8080` | [01](findings/01-network-exposure-and-auth.md#f17) |
+| F16 | Daemons run from shell-writable `/data/local/tmp`; binaries/scripts are plantable | 🟠 High | Shell-domain code / ADB | [02](findings/02-local-rce-and-ipc.md#f16) |
+| F17 | `deviceId` disclosed unauthenticated via `/auth/status` (pre-auth fingerprint) | 🟡 Medium | Anyone who can reach `:8080` | [01](findings/01-network-exposure-and-auth.md#f17) |
 | F18 | `trustAllCerts` / trust-all TLS socket factories disable certificate validation | 🟡 Medium | On-path attacker | [06](findings/06-mqtt.md#f18) |
-| F19 | Enabling a Zrok/Cloudflare tunnel publishes the control plane to the internet with no tunnel-layer auth | 🟡 Medium→High | Internet | [03](findings/03-proxy-mitm-and-infrastructure.md#f19) |
+| F19 | Enabling a Zrok/Cloudflare tunnel publishes the control plane to the internet with no tunnel-layer auth | 🟠 High (situational) | Internet | [03](findings/03-proxy-mitm-and-infrastructure.md#f19) |
 | F20 | Shell commands built by string concatenation across launchers (latent injection) | 🟡 Medium | Chained with F2/F3 | [02](findings/02-local-rce-and-ipc.md#f20) |
 
 ---

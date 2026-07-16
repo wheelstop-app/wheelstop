@@ -44,16 +44,16 @@ A co-resident app connects and sends `{"command":"GET_SAFE_LOCATIONS"}` for the 
 ---
 
 <a name="f12"></a>
-## F12 — 🟠 High: recordings, snapshots and GPS tracks written world-readable to shared storage
+## F12 — 🟠 High: recordings, snapshots and GPS tracks written world-readable to external storage
 
-Footage is written to `/sdcard/DCIM/BYDCam` (MediaStore-indexed shared storage) and explicitly marked world-readable so a different-UID daemon can decode it:
+Footage is written to `/sdcard/DCIM/BYDCam` (MediaStore-indexed **external/shared storage**) and explicitly marked world-readable so a different-UID daemon can decode it:
 
 - Output dir constant: [`CameraDaemon.java`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/daemon/CameraDaemon.java) (`PATH_CAMERA_OUTPUT_DIR = /sdcard/DCIM/BYDCam`)
 - World-readable event dirs / thumbnails / SRT GPS sidecars via `setReadable(true, /*ownerOnly=*/false)` across the surveillance engine and recorder (e.g. `SurveillanceEngineGpu`, `ThumbnailBuffer`, `SrtWriter`, `SafeLocationManager`).
 
-Because the files carry world-read bits on shared storage, any app with media/storage access reads the raw recordings, event thumbnails, and **GPS subtitle tracks** directly off disk — bypassing the HTTP server and its auth entirely.
+Because the files carry world-read bits on **external storage**, and this build targets a low SDK (25) while requesting broad storage permissions (`READ/WRITE_EXTERNAL_STORAGE`, `MANAGE_EXTERNAL_STORAGE`), any app **granted external-storage / all-files access** reads the raw recordings, event thumbnails, and **GPS subtitle tracks** directly off disk — bypassing the HTTP server and its auth entirely. (Scoped per PR review: the exposure is to apps with external-storage access, not literally every installed app.)
 
-**Impact:** all recorded footage, snapshots, and embedded GPS tracks are readable by other apps on the device.
+**Impact:** all recorded footage, snapshots, and embedded GPS tracks are readable by any app on the device that holds external-storage / all-files access.
 
 ---
 
@@ -61,7 +61,7 @@ Because the files carry world-read bits on shared storage, any app with media/st
 
 Even the routes that *do* go through `AuthMiddleware` — `/snapshot/{id}`, `/api/surveillance/snapshot/*`, `/video/{file}`, `/thumb/{file}`, `/api/recordings`, `/api/surveillance/safe-locations` — are reachable **without a session** by any local app, via the loopback safety-net (F8 in [doc 01](01-network-exposure-and-auth.md#f8)). A local app can also call `/api/stream/enable` to *turn on* the 8887 stream that F4 then serves unauthenticated.
 
-The signed-thumb-token path ([`AuthMiddleware.java#L107`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/server/AuthMiddleware.java#L107)) is more narrowly scoped (bound to a filename + device secret, traversal-blocked) but still grants auth-free fetch of an individual event thumbnail to anyone who obtains the notification URL, which is placed in OS notification banners / FCM image fetches.
+The signed-thumb-token path ([`AuthMiddleware.java#L107`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/server/AuthMiddleware.java#L107)) is more narrowly scoped: the URL still carries a **bearer token** (an HS256 JWS bound to the filename + device secret, traversal-blocked), so it is **session-free rather than auth-free** — it grants that one event's thumbnail to *anyone holding the token*, without needing a login session. The exposure is token *leakage*: the token is placed in OS notification banners / FCM image-fetch URLs, so it reaches whatever handles those.
 
 ---
 

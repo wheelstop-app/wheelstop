@@ -32,21 +32,23 @@ On Android, **any installed app can open a TCP socket to `127.0.0.1` with only t
 
 …and receives command output back, executing as the **daemon UID (2000 / shell-class)** which holds the full vehicle HAL permission set (see F16). The same unauthenticated channel also exposes `shutdown`, `disableSurveillance`, `setStreamMode public`, `auth_invalidate`, and camera start/stop.
 
-There is no command allowlist, no `SO_PEERCRED` peer-UID check, and no token. Binding to loopback stops *remote* callers but not *co-resident* ones — which is precisely the untrusted party on a shared head unit.
+There is **no caller authentication of any kind** — no command allowlist and no token. (It is a `java.net.ServerSocket` loopback TCP server, so a kernel `SO_PEERCRED` peer-UID check isn't even available on it; that's *why* remediation needs either a Unix-domain/`LocalServerSocket` endpoint with peer-credential enforcement, or an application-layer auth token on the TCP channel.) Binding to loopback stops *remote* callers but not *co-resident* ones — which is precisely the untrusted party on a shared head unit.
 
-**Impact:** local privilege of the daemon is fully owned by any app on the device; through it, the entire vehicle-control surface and all secrets in the world-readable config.
+**Impact:** local privilege of the daemon is fully owned by any co-resident process that can open the socket; through it, the entire vehicle-control surface and the secrets in the shell-readable config.
 
 ---
 
 <a name="f16"></a>
-## F16 — 🟠 High: system-privileged daemons launched from world-writable `/data/local/tmp`
+## F16 — 🟠 High: system-privileged daemons launched from shell-writable `/data/local/tmp`
+
+> **Wording correction (per PR review):** `/data/local/tmp` is `0771` owned by `shell` (not world-writable); the write boundary is **shell-domain code / ADB**, governed additionally by SELinux. The exploit chain below is unchanged — the daemons run *as* shell — but the accurate boundary is "shell-writable," not "world-writable."
 
 The daemons are launched as UID 2000 (shell), and the sentry daemon optionally through a UID 1000 (system) path, via `app_process`:
 
 - `app_process` launch line: [`DaemonLauncher.kt#L251`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/launcher/DaemonLauncher.kt#L251)
 - It **disables Android's phantom-process cap** — a deliberate removal of an OS guardrail: [`DaemonLauncher.kt#L218`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/launcher/DaemonLauncher.kt#L218) (`device_config put activity_manager max_phantom_processes 2147483647`)
 
-The privilege these daemons hold is very large. `PermissionGranter` force-grants ~140 permissions with `pm grant`, including `WRITE_SECURE_SETTINGS` and the full `BYDAUTO_*` HAL set (door lock get/set, engine, gearbox, charging, ADAS, speed):
+The privilege these daemons hold is extensive. `PermissionGranter` force-grants ~140 permissions with `pm grant`, including `WRITE_SECURE_SETTINGS` and the full `BYDAUTO_*` HAL set (door lock get/set, engine, gearbox, charging, ADAS, speed):
 
 - [`PermissionGranter.java#L40`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/daemon/PermissionGranter.java#L40) (`WRITE_SECURE_SETTINGS` and the grant list)
 
@@ -81,6 +83,6 @@ The common root cause across all of these: **loopback binding is treated as an a
 
 ## Recommendations (this document)
 
-1. Remove the `shell` command entirely, or gate the whole TCP server with a peer-UID (`SO_PEERCRED`) check and a per-boot token that only the app process knows (F1).
-2. Do not launch privileged daemons or their binaries from a world-writable directory; stage them somewhere only the owning UID can write, and verify a hash before (re)exec (F16).
+1. Remove the `shell` command entirely, or move the IPC to a Unix-domain/`LocalServerSocket` endpoint with a peer-credential (UID) check — or, if it stays a TCP socket, require a per-boot application-layer token that only the app process knows (F1).
+2. Do not launch privileged daemons or their binaries from a shell-writable directory; stage them somewhere only the owning UID can write, and verify a hash before (re)exec (F16).
 3. Never build shell strings from values that can originate off-device; pass arguments as an `argv` array and avoid `sh -c` for interpolated input (F20).

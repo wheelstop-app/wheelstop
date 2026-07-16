@@ -39,17 +39,19 @@ Nearly every other finding routes back to one file:
 
 - `/data/local/tmp/overdrive_config.json`, created **mode 0666 (world read + write)**: [`UnifiedConfigManager.kt#L41`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/config/UnifiedConfigManager.kt#L41), 0666 intent at [`#L1233`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/config/UnifiedConfigManager.kt#L1233)
 
-It holds, in one place readable by any shell-context process:
+It holds, in one place readable by any **shell-domain** process (the DAC mode is 0666, but SELinux `shell_data_file` context still applies — see the scoping note in [doc 01](01-network-exposure-and-auth.md#f5)):
 
 | Material | Consequence if read | Consequence if written |
 |---|---|---|
 | Device secret (JWT signing key) | Forge any session → full API/vehicle control (F5) | Rotate/lock out the owner |
 | PIN PBKDF2 hash + salt | Offline-crack a 4-digit PIN despite strong KDF | — |
-| Telegram bot token (ENC:) | Bot hijack (F13) | Repoint owner |
-| MQTT broker URL + creds | Learn/So control channel | **Redirect car to attacker broker (F7/F10)** |
-| Community worker URL | — | **Repoint catalog origin (F-community)** |
+| Telegram bot token (ENC:) | Bot hijack (F13) | Repoint owner (F10) |
+| Community worker URL | Learn catalog origin | Repoint catalog origin (F-community) |
+| cloudflared tunnel token | Learn tunnel identity | Repoint/hijack tunnel |
 
-The reason it is 0666 is architectural: the daemon (UID 2000) and the app (UID 10xxx) are different UIDs that need to share state, and `/data/local/tmp` is the cross-UID-accessible location. That is a real engineering constraint — but solving it with world-RW permissions means the app's entire security state is exposed to anything in the shell domain (and, subject to the unit's SELinux policy, potentially other apps), and *writable* by them.
+> **Correction (per PR review):** the MQTT broker URL + credentials are **not** in this file. They live in a *sibling* file, `/data/local/tmp/mqtt_connections.json` ([`MqttConnectionStore.java#L28`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/mqtt/MqttConnectionStore.java#L28)), also under `/data/local/tmp` and therefore under the same shell-domain exposure — but they are **not** reachable via the config-restore merge ([doc 08](08-community-and-backup.md) F10). A shell-domain reader can still **observe or redirect** the MQTT control channel by reading/overwriting that separate file directly.
+
+The reason `overdrive_config.json` is 0666 is architectural: the daemon (UID 2000) and the app (UID 10xxx) are different UIDs that need to share state, and `/data/local/tmp` is the cross-UID-accessible location. That is a real engineering constraint — but solving it with world-RW DAC permissions means the app's entire security state is exposed to anything in the shell domain (and, subject to the unit's SELinux policy, potentially other apps), and *writable* by them.
 
 ---
 
@@ -69,3 +71,4 @@ Both inputs are available to any shell-context actor (the DID from a world-reada
 1. Delete the committed key / obfuscation approach; do not rely on `Safe`/`Enc` for confidentiality (F6).
 2. Replace the 0666 shared-file model with an authenticated IPC broker between the app and daemon UIDs, or use the Android Keystore for key material, so secrets are never world-readable/writable.
 3. Derive credential-cipher keys from something not world-readable (e.g. Keystore-backed key), and stop exporting the DID in backups.
+4. **Revoke and rotate every already-exposed secret** — the fixes above change *storage*, but material that has already shipped or been exported is permanently compromised and must be re-issued: the committed `Safe`/`Enc` AES key, every device JWT signing secret, the Telegram bot token (reissue via BotFather), MQTT broker credentials, any proxy credentials, and any previously exported backup bundles (which carry the DID + `ENC:` blobs). Treat all of them as burned and generate replacements.

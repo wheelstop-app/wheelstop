@@ -2,14 +2,18 @@
 
 *Permalink base:* `https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/`
 
-OverDrive is a pure MQTT **client** — it has no broker of its own — so every security property here rests on the broker the user points it at, and the app does very little to harden that choice. The default steers users toward a public, plaintext, anonymous broker.
+OverDrive is a pure MQTT **client** — it has no broker of its own — so every security property here rests on the broker the user points it at, and the app does very little to harden that choice. This whole surface is **opt-in**: MQTT is disabled by default (`enabled=false`, `brokerUrl=""`) and control requires the user to actively enable it. The concern is that when a user *does* enable it, the app nudges toward a public, plaintext, anonymous broker and adds no application-level command authentication of its own.
+
+> **Scope corrections (per PR review), applied throughout this doc:**
+> - The critical exposure is **"no application-level sender authentication,"** not "universally unauthenticated." A broker with credentials + ACLs *can* authenticate and authorise publishers; the app just doesn't add its own layer. The critical impact therefore has an explicit **precondition: an anonymous or weakly-ACL'd broker.**
+> - `broker.hivemq.com` is a **UI placeholder hint**, *not* a configured default. A fresh install has `brokerUrl=""` and `enabled=false` and connects to nothing until the owner supplies and enables a broker (and separately enables HA control).
 
 ---
 
 <a name="f7"></a>
-## F7 — 🔴 Critical: unauthenticated remote vehicle control via guessable command topics
+## F7 — 🔴 Critical (precondition: anonymous / weak-ACL broker + control enabled): no application-level authentication on command topics
 
-When control is enabled, the client subscribes with wildcards to a command topic and executes inbound messages against the vehicle **with no authentication of the sender**:
+When control is enabled, the client subscribes with wildcards to a command topic and executes inbound messages against the vehicle **with no *application-level* authentication of the sender**:
 
 - Subscriptions: [`MqttPublisherService.java#L235`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/mqtt/MqttPublisherService.java#L235):
   ```java
@@ -17,27 +21,27 @@ When control is enabled, the client subscribes with wildcards to a command topic
   client.subscribe(config.topic + "/+/+/set", config.qos);
   ```
 
-MQTT carries no per-message sender identity, and the app adds none — no HMAC, nonce, shared-secret topic segment, or publisher allowlist. The "allow control" switch is a **local owner** toggle deciding whether the client listens at all, **not who may command it**. Authorisation therefore collapses entirely to broker ACLs.
+MQTT carries no per-message sender identity, and the app adds none — no HMAC, nonce, shared-secret topic segment, or publisher allowlist. The "allow control" switch is a **local owner** toggle deciding whether the client listens at all, **not who may command it**. Authorisation therefore collapses entirely to **broker ACLs** — which is fine *if* the broker authenticates and restricts publishers, and a full anonymous-actuation exposure *only if* the broker is anonymous or weakly ACL'd (as the promoted public broker is).
 
 The command surface reachable by publishing a single retained string includes physically- and safety-significant actions — tailgate/windows/sunroof **open**, seat controls, drive/regen/steering modes, charge cap, and disabling **ESP (electronic stability control)**, lane assist, and child-presence detection (registered in the vehicle-control catalog under `mqtt/`).
 
-**Exploit path:** learn the base topic (default is a non-secret string — see F7-topic below, or just read it live off the broker), then:
-```
+**Exploit path (given the precondition):** learn the base topic (default is a non-secret string — see F7-topic below, or just read it live off the broker), then:
+```text
 PUBLISH overdrive/vehicle/telemetry/tailgate/set  OPEN
 PUBLISH overdrive/vehicle/telemetry/esp_control/set  0
 ```
-On any open or weakly-ACL'd broker (F7-broker) that is fully anonymous remote actuation.
+On an open or weakly-ACL'd broker (F7-broker) that is fully anonymous remote actuation.
 
 **Impact:** remote physical access (tailgate/windows/sunroof open), disabling a stability safety system, and arbitrary comfort/drive-mode manipulation on a physical vehicle.
 
 ---
 
-## F7-broker — 🔴 the promoted default is a public, plaintext, anonymous broker
+## F7-broker — 🟠 the UI nudges toward a public, plaintext, anonymous broker (not an out-of-box default)
 
 - Default port is plaintext MQTT: [`MqttConnectionConfig.java#L69`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/mqtt/MqttConnectionConfig.java#L69) (`DEFAULT_PORT = 1883`), and a bare hostname is coerced to `tcp://` (plaintext).
-- The setup UI's own placeholder points at the **public shared broker**: [`mqtt.html#L236`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/assets/web/local/mqtt.html#L236) → `placeholder="tcp://broker.hivemq.com"`.
+- The setup UI's placeholder **suggests** the public shared broker: [`mqtt.html#L236`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/assets/web/local/mqtt.html#L236) → `placeholder="tcp://broker.hivemq.com"`. This is an HTML placeholder hint, **not** a configured value: a new `MqttConnectionConfig` has `brokerUrl=""` and `enabled=false` ([`MqttConnectionConfig.java#L92`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/mqtt/MqttConnectionConfig.java#L92)), so a fresh install connects to nothing until the owner types in and enables a broker.
 
-`broker.hivemq.com` has no ACLs and no auth — every subscriber sees every publisher's topics. A user who follows the placeholder publishes their car's live location and exposes its command topics to the entire internet, in cleartext. Nothing requires `ssl://`/`8883`, requires credentials, or warns when a plaintext/public broker is chosen.
+`broker.hivemq.com` has no ACLs and no auth — every subscriber sees every publisher's topics. A user who *follows the suggestion and enables control* publishes their car's live location and exposes its command topics to the entire internet, in cleartext. Nothing requires `ssl://`/`8883`, requires credentials, or warns when a plaintext/public broker is chosen — so the finding is about a **dangerous nudge the app doesn't guard against**, not an out-of-box exposure.
 
 ---
 

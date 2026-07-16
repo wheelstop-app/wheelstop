@@ -23,7 +23,7 @@ This is fundamentally sound. No pre-auth command injection and no auth-bypass ra
 
 - [`PairingManager.java#L36`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/telegram/impl/PairingManager.java#L36) → `random.nextInt(900000) + 100000`
 
-`handlePairCommand` validates it with **no attempt counter, no rate limit, no lockout, and no alert** to the owner on failed attempts. An attacker who knows the bot and is online during the user's ~5-minute pairing window can fire unlimited `/pair NNNNNN` guesses; whoever pairs first becomes the sole owner and inherits the full command surface below.
+`handlePairCommand` validates it with **no attempt counter, no rate limit, no lockout, and no alert** to the owner on failed attempts. An attacker who knows the bot and is online during the user's ~5-minute pairing window can make `/pair NNNNNN` guesses **without any application-enforced attempt limit**; whoever pairs first becomes the sole owner and inherits the full command surface below.
 
 *Mitigating factor:* the window is narrow (the PIN only exists while the user is actively pairing) and Telegram's inbound delivery rate makes exhausting 900 000 in 5 minutes impractical online. But there is no defence-in-depth and the owner is never told a brute-force is underway.
 

@@ -7,7 +7,9 @@ This is the single most important document for the question *"could this app be 
 ---
 
 <a name="f2"></a>
-## F2 — 🔴 Critical: all app egress is funnelled through one hard-coded, non-owner VLESS proxy
+## F2 — 🟠 High: all app egress is funnelled through one hard-coded, non-owner VLESS proxy
+
+> **Severity note:** downgraded from Critical to High after PR review. The original Critical rating assumed the operator could read/rewrite all traffic including credentials and the OTA APK; that is only true for non-TLS-validated channels (see the correction below). The finding remains High because the proxy is a *mandatory, non-owner* trust point for a safety device.
 
 The app bundles **sing-box** and, when the proxy is running, routes app HTTP/MQTT traffic through a local `127.0.0.1:8119` inbound that forwards to a remote **VLESS-Reality** server. The server endpoint is written into the sing-box config **in plaintext** and is **not user-configurable**:
 
@@ -26,13 +28,22 @@ Every OkHttp / MQTT / Paho consumer auto-routes through the proxy whenever sing-
 
 - Proxy accessor consulted by all clients: [`ProxyHelper.java#L125`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/mqtt/ProxyHelper.java#L125) (`getHttpProxy()`), host constant [`ProxyHelper.java#L39`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/mqtt/ProxyHelper.java#L39)
 
-Because a VLESS-Reality server **terminates the tunnel**, its operator sits as a full man-in-the-middle on everything OverDrive sends off-board. For any consumer that does not independently pin certificates (none here do), the operator can read and rewrite traffic — harvest BYD-cloud credentials, manipulate telemetry, and (critically, chained with [doc 04](04-ota-integrity.md)) serve a forged GitHub API response and a malicious update APK.
+The proxy is a **forwarding proxy** (local HTTP/SOCKS inbound → VLESS tunnel → the operator's exit node), not a TLS terminator for the sessions it carries. **Correction (per PR review):** an earlier draft claimed the operator could "read and rewrite all traffic including BYD-cloud credentials and the OTA APK." That overstates it. For an HTTPS endpoint that the client validates normally (GitHub, `api.telegram.org`, the BYD-cloud API), the tunnel carries **end-to-end TLS** — the operator sees ciphertext plus metadata (destination, SNI, sizes, timing) and cannot decrypt or forge content without a certificate the client already trusts. Lack of certificate *pinning* is not the same as disabling validation.
+
+What a malicious/compromised proxy operator **can** still do — which is why this remains serious:
+
+1. **Content MITM on any channel that does *not* validate TLS.** Concretely, the trust-all MQTT path ([doc 06](06-mqtt.md) F18) and any plaintext-HTTP endpoint are fully readable/rewritable through the tunnel.
+2. **Metadata surveillance** — which off-board services the car talks to, when, and how much, is visible even when content is not.
+3. **Selective disruption / denial of service** — the operator can drop or stall specific connections. For a *safety* device this includes blocking OTA security updates or suppressing telemetry, silently.
+4. **Redirection** — connections can be steered to attacker infrastructure; TLS validation stops a *silent* content swap for a correctly-named HTTPS host, but any endpoint that is plaintext or trust-all is exposed.
+
+The chain to a forged OTA APK ([doc 04](04-ota-integrity.md)) therefore requires the download to be plaintext or unvalidated — it is not; see doc 04 for the corrected OTA analysis.
 
 **Protocol note.** VLESS-Reality with `"server_name"` fronting (the config uses SNI `google.com`) and a `short_id`/`public_key` is a **censorship-circumvention transport** designed to make the proxy connection indistinguishable from a normal TLS handshake to a big site. That is not inherently malicious — but it means the car's off-board traffic is deliberately routed through, and obfuscated toward, a single operator-controlled node, in a way that is hard to detect on the wire.
 
 > **Mitigating nuance (verified):** the device-**global** HTTP proxy path — which would have routed *all* head-unit traffic, not just OverDrive's — is **disabled** in this build; `setupSystemProxy()` now only clears stale proxies rather than setting one. So F2 is *app-scoped* MITM, not literally every packet on the unit. It still covers everything OverDrive itself sends, including your BYD-cloud login and the update download.
 
-**Impact:** a single point of total compromise for the vehicle's off-board communications, owned by a party that is not you.
+**Impact:** a mandatory, non-owner routing point for all OverDrive off-board traffic — able to surveil metadata, selectively block updates/telemetry on a safety device, and fully MITM any non-validated channel (trust-all MQTT, plaintext). Not "reads everything," but a single point of trust you neither chose nor control.
 
 ---
 
@@ -96,12 +107,12 @@ These are hard-coded destinations the app talks to. Recorded here as a reference
 | Telegram Bot API | `https://api.telegram.org/bot…` | [`Enc.java#L149`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/daemon/proxy/Enc.java#L149) |
 | Proxy DNS | `tcp://8.8.8.8` | [`Enc.java#L165`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/daemon/proxy/Enc.java#L165) |
 
-The **community backend** was confirmed (via DNS) to resolve to Cloudflare anycast addresses (`2606:4700::/32`) — i.e. it is a **free personal `*.workers.dev` Cloudflare Worker**, not a dedicated/branded domain. All OverDrive installs pool into that one operator-run backend. Community content is **not signed** (see [doc 08](08-community-and-backup.md)), so trust rests entirely on TLS-to-that-origin and on whoever controls that Cloudflare account and its subdomain.
+The **community backend** was confirmed (via DNS) to resolve to Cloudflare anycast addresses (`2606:4700::/32`) — i.e. it is a **Cloudflare-hosted `*.workers.dev` subdomain**. (What DNS proves is Cloudflare hosting on the free `workers.dev` namespace; it does *not* by itself establish the account tier or who operates it — stated per the no-fabrication rule.) All OverDrive installs pool into that one backend. Community content is **not signed** (see [doc 08](08-community-and-backup.md)), so trust rests on TLS-to-that-origin and on whoever controls that Cloudflare account. Because it is a `workers.dev` subdomain, the relevant control-plane risk is **compromise of that Cloudflare account**, not independent DNS takeover.
 
 ---
 
 <a name="f19"></a>
-## F19 — 🟡→🟠 High (situational): enabling a tunnel publishes the control plane to the internet
+## F19 — 🟠 High (situational — only when a tunnel is enabled): enabling a tunnel publishes the control plane to the internet
 
 `zrok share public http://localhost:8080` (and the cloudflared equivalent) publishes the local `HttpServer` — the entire vehicle-control API — at a public URL:
 
