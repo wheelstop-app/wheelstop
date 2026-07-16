@@ -11,7 +11,7 @@ OverDrive is a pure MQTT **client** — it has no broker of its own — so every
 ---
 
 <a name="f7"></a>
-## F7 — 🔴 Critical (precondition: anonymous / weak-ACL broker + control enabled): no application-level authentication on command topics
+## F7 — 🔴 Critical (precondition: anonymous / weak-ACL broker + control **and Home Assistant discovery** enabled): no application-level authentication on command topics
 
 When control is enabled, the client subscribes with wildcards to a command topic and executes inbound messages against the vehicle **with no *application-level* authentication of the sender**:
 
@@ -20,6 +20,8 @@ When control is enabled, the client subscribes with wildcards to a command topic
   client.subscribe(config.topic + "/+/set", config.qos);
   client.subscribe(config.topic + "/+/+/set", config.qos);
   ```
+
+> **Precondition correction (added in review, per Codex PR review — verified):** the command subscriptions require **both** `allowControl` **and** `homeAssistantDiscovery` to be on — not `allowControl` alone. `MqttConnectionConfig.isControlEnabled()` returns `allowControl && homeAssistantDiscovery`, and the `/+/set` subscribes sit inside the `if (config.isHomeAssistant())` → `if (config.isControlEnabled())` branch ([`MqttPublisherService.java`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/mqtt/MqttPublisherService.java#L224)). An owner who enables control against an anonymous broker but leaves Home Assistant discovery **off** subscribes to no command topics, so the actuation surface does not exist. The full precondition is therefore: **anonymous/weak-ACL broker + `allowControl` + `homeAssistantDiscovery`** (and HA discovery *also* retains-advertises the whole command vocabulary — see F7-topic — so the two are usually enabled together, but both are required).
 
 MQTT carries no per-message sender identity, and the app adds none — no HMAC, nonce, shared-secret topic segment, or publisher allowlist. The "allow control" switch is a **local owner** toggle deciding whether the client listens at all, **not who may command it**. Authorisation therefore collapses entirely to **broker ACLs** — which is fine *if* the broker authenticates and restricts publishers, and a full anonymous-actuation exposure *only if* the broker is anonymous or weakly ACL'd (as the promoted public broker is).
 

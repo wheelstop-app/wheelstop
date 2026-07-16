@@ -39,11 +39,13 @@ There is **no caller authentication of any kind** — no command allowlist and n
 ---
 
 <a name="f16"></a>
-## F16 — 🟠 High: system-privileged daemons launched from shell-writable `/data/local/tmp`
+## F16 — 🟠 High: shell-privileged daemons launched from shell-writable `/data/local/tmp`
 
 > **Wording correction (per PR review):** `/data/local/tmp` is `0771` owned by `shell` (not world-writable); the write boundary is **shell-domain code / ADB**, governed additionally by SELinux. The exploit chain below is unchanged — the daemons run *as* shell — but the accurate boundary is "shell-writable," not "world-writable."
 
-The daemons are launched as UID 2000 (shell), and the sentry daemon optionally through a UID 1000 (system) path, via `app_process`:
+The daemons are launched as UID 2000 (shell) via `app_process`:
+
+> **Correction (added in review, per Codex PR review — verified):** an earlier version of this finding said the sentry daemon runs "optionally through a UID 1000 (system) path." In the audited build that path is **disabled**: `DaemonLauncher` sets `USE_PRIVILEGED_SHELL_FOR_SENTRY = false`, and `OverdriveApplication` comments out `PrivilegedShellSetup.init/setup` with the note *"Privileged shell (UID 1000) DISABLED … All daemons now run via ADB shell (UID 2000)."* So **all daemons run as UID 2000 (shell), not system/UID 1000**. The file-plant → respawn RCE chain is unchanged, but the code it gains executes as **shell**, not system.
 
 - `app_process` launch line: [`DaemonLauncher.kt#L251`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/launcher/DaemonLauncher.kt#L251)
 - It **disables Android's phantom-process cap** — a deliberate removal of an OS guardrail: [`DaemonLauncher.kt#L218`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/launcher/DaemonLauncher.kt#L218) (`device_config put activity_manager max_phantom_processes 2147483647`)
@@ -54,9 +56,9 @@ The privilege these daemons hold is extensive. `PermissionGranter` *attempts* to
 
 > **Accuracy caveat (added in review — see [doc 10, Part 3](../10-review-and-verification.md#part-3--direct-answer-to-the-owners-concern)):** the signature-protected `BYDAUTO_*_SET` (write) permissions are **not actually granted** on a non-platform-signed APK — `pm grant` skips them and `CarPropertyBridge`/the manifest both note that local `setProperties()` writes return `STATUS_FAILED`. The `GET` and shell-grantable permissions (e.g. `WRITE_SECURE_SETTINGS`) *are* granted. Real vehicle actuation runs through the **BYD-cloud leg** (`VehicleCommandRouter`) with the owner's stored credentials, not through a locally-held HAL write capability. The RCE/privilege-escalation chain in this finding stands; only the "holds the full HAL *write* set locally" framing is corrected.
 
-The watchdog scripts, the `sing-box` binary, the `zrok` binary, the sing-box config, and the staged update APK all live under `/data/local/tmp/` (a directory writable in the shell domain). A process that can write there can **replace** a binary or script; on the next watchdog respawn, attacker code runs as UID 2000/1000 with that full permission set. This is also the mechanism that turns the OTA APK swap (F3) and the proxy-binary swap (F2) into code execution.
+The watchdog scripts, the `sing-box` binary, the `zrok` binary, the sing-box config, and the staged update APK all live under `/data/local/tmp/` (a directory writable in the shell domain). A process that can write there can **replace** a binary or script; on the next watchdog respawn, attacker code runs as **UID 2000 (shell)** with the shell-grantable permission subset (see the accuracy caveat above — the signature-protected `BYDAUTO_*_SET` HAL writes are *not* in that subset). This is also the mechanism that turns the OTA APK swap (F3) and the proxy-binary swap (F2) into code execution.
 
-**Impact:** local privilege escalation to system-level vehicle control (door locks, lights, climate, drivetrain signalling).
+**Impact:** local code execution as **shell (UID 2000)** with the daemon's granted-permission subset, persistence across respawns, and control over the daemon's behaviour — plus the surveillance/config surfaces (F1/F9/F24) and the stored BYD-cloud credentials (which *do* enable cloud-mediated vehicle actuation). Not, in this build, system (UID 1000) privilege or direct local-HAL drivetrain control.
 
 ---
 
