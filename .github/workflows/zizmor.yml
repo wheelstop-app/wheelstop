@@ -20,8 +20,13 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: zizmor-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   zizmor:
+    name: zizmor
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -36,3 +41,12 @@ jobs:
           # Advanced Security, which is not available on this repo. Keep the job's
           # permissions minimal and let a finding fail the step instead.
           advanced-security: false
+          # `pedantic` rather than the default `regular`. The default suppresses a set of
+          # findings that includes real least-privilege issues — it was hiding a High
+          # (workflow-level `issues: write` in issue-welcome.yml) behind "no findings".
+          # All of them are fixed, so the stricter setting costs nothing and keeps it that way.
+          persona: pedantic
+          # Fail on medium and above. `pedantic` also emits informational/low style notes
+          # (job naming, concurrency groups, "you could use `gh issue comment` instead"),
+          # which are useful to read but a poor reason to block a merge.
+          min-severity: medium

@@ -4,12 +4,18 @@ on:
   issues:
     types: [opened]
 
-permissions:
-  issues: write
+# Default to nothing at the workflow level; the one job that needs a write scope
+# requests it for itself. Workflow-level `issues: write` grants it to every job that
+# might later be added to this file, which is the least-privilege problem zizmor flags.
+permissions: {}
 
 jobs:
   welcome:
+    name: Comment on new issue
     runs-on: ubuntu-latest
+    permissions:
+      # Needed only to post the welcome comment below.
+      issues: write
     steps:
       - name: Comment on new issue
         # Pinned to a commit rather than the mutable v4 tag: this job holds
