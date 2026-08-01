@@ -781,7 +781,7 @@ public class GpuStreamScaler {
 
     /**
      * View 7/8 live tuning. Opaque scalar inputs forwarded to the native module
-     * (see com.overdrive.app.od.Od) which resolves them into the sampler
+     * (see com.overdrive.app.blindspot.BsCoefficients) which resolves them into the sampler
      * coefficient set; this class never computes the mapping. Accepted ranges:
      *   p0 [1.0,2.2]  p1 [1.0,2.2]  p2 [0.0,1.4]  p3 [-0.4,0.4]  p4 [-0.4,0.4]
      *   p5 [0.4,1.6]  p6 [0.7,1.3]  p7 [0.0,1.0]  p8 [-0.4,0.4]  p9 [-0.4,0.4]
@@ -830,7 +830,7 @@ public class GpuStreamScaler {
     private void resolveCoef() {
         System.arraycopy(odParam, 0, odIn, 0, 10);
         odIn[10] = odSign;
-        com.overdrive.app.od.Od.resolve(odIn, odCoef);
+        com.overdrive.app.blindspot.BsCoefficients.resolve(odIn, odCoef);
     }
 
     public void setRedMaskEnabled(boolean enabled) {
@@ -948,7 +948,7 @@ public class GpuStreamScaler {
             "uniform vec2 uFlipForLeft;\n" +
             "uniform float uRedMaskStrength;\n" +
             "uniform float uApaCenterInset;\n" +
-            // Resolved coefficient set (host-supplied; see com.overdrive.app.od.Od).
+            // Resolved coefficient set (host-supplied; see com.overdrive.app.blindspot.BsCoefficients).
             "uniform vec4 uOd0;\n" +
             "uniform vec4 uOd1;\n" +
             "uniform vec4 uOd2;\n" +

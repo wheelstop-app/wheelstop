@@ -8,3 +8,4 @@
 /app/.cxx
 /app/src/main/cpp/opencv
 /app/src/main/cpp/openh264
+/app/src/main/jniLibs/arm64-v8a/libod.so

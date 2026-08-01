@@ -5220,10 +5220,10 @@ public class CameraDaemon {
 
         // Load libod.so via explicit path too — System.loadLibrary("od") can't
         // resolve by name in the app_process daemon (same reason as surveillance).
-        // Without this, Od.resolve() returns zeros in the daemon and the view-7/8
+        // Without this, BsCoefficients.resolve() returns zeros in the daemon and the view-7/8
         // stitch shader gets all-zero coefficients → black blind-spot stream.
         if (nativeLibDir != null) {
-            boolean odLoaded = com.overdrive.app.od.Od.tryLoadLibrary(nativeLibDir);
+            boolean odLoaded = com.overdrive.app.blindspot.BsCoefficients.tryLoadLibrary(nativeLibDir);
             log("od native lib loaded (daemon): " + odLoaded);
         }
     }
