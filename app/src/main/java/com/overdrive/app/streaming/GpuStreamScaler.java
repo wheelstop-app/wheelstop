@@ -40,6 +40,11 @@ public class GpuStreamScaler {
     private int uBsRadiusLocation;
     private int uBsAspectLocation;
     private int uBsFeatherLocation;
+    // Blind-spot card clarity (views 7/8 only): contrast pivot + guarded unsharp
+    // amount, applied inside odBlend before the card framing. See bsContrast/
+    // bsSharpen below and setBlindSpotClarity.
+    private int uBsContrastLocation = -1;
+    private int uBsSharpenLocation = -1;
     // Blind-spot merge mode (views 7/8): 0 = both (rear+side stitch), 1 = side
     // camera only, 2 = rear camera only. Single-camera modes fill the whole card
     // from one tap's full FOV (see buildFragmentShader view 7/8 branch).
@@ -103,6 +108,11 @@ public class GpuStreamScaler {
     private int uOd4Location = -1;
     private final float[] odCoef = new float[20];
     private final float[] odIn = new float[11];
+    // Blind-spot card clarity (views 7/8 only): stored here, uploaded by the
+    // uBsContrast/uBsSharpen uniforms above. Neutral defaults are a shader
+    // no-op (see odBlend); the pipeline wires config values in a later task.
+    private volatile float bsContrast = 1.0f;   // neutral
+    private volatile float bsSharpen  = 0.0f;   // off
     // Opaque tuning scalars + per-side sign, forwarded to com.overdrive.app.od.
     // Indices 5/8/9 default to their identity values (no change until dialed).
     private final float[] odParam = { 1.66f, 1.98f, 1.23f, 0.25f, -0.275f, 1.0f, 1.0f, 0.38f, 0.0f, 0.0f };
@@ -289,6 +299,8 @@ public class GpuStreamScaler {
         uBsRadiusLocation = GLES20.glGetUniformLocation(programId, "uBsRadius");
         uBsAspectLocation = GLES20.glGetUniformLocation(programId, "uBsAspect");
         uBsFeatherLocation = GLES20.glGetUniformLocation(programId, "uBsFeather");
+        uBsContrastLocation = GLES20.glGetUniformLocation(programId, "uBsContrast");
+        uBsSharpenLocation  = GLES20.glGetUniformLocation(programId, "uBsSharpen");
         uBsMergeModeLocation = GLES20.glGetUniformLocation(programId, "uBsMergeMode");
         uBsMarginLocation     = GLES20.glGetUniformLocation(programId, "uBsMargin");
         uBsBevelWLocation     = GLES20.glGetUniformLocation(programId, "uBsBevelW");
@@ -413,6 +425,15 @@ public class GpuStreamScaler {
             }
             if (uBsMergeModeLocation >= 0) {
                 GLES20.glUniform1i(uBsMergeModeLocation, bsMergeMode);
+            }
+            // Blind-spot card clarity (views 7/8 only). Passing neutral values
+            // (contrast=1.0, sharpen=0.0) on non-BS views keeps odBlend's
+            // contrast/sharpen block inert everywhere else. Local "bs" mirrors
+            // the uBsRadius guard above (block-scoped there, so re-derived here).
+            {
+                boolean bs = (currentViewMode == 7 || currentViewMode == 8);
+                if (uBsContrastLocation >= 0) GLES20.glUniform1f(uBsContrastLocation, bs ? bsContrast : 1.0f);
+                if (uBsSharpenLocation  >= 0) GLES20.glUniform1f(uBsSharpenLocation,  bs ? bsSharpen  : 0.0f);
             }
             // 3D curved-glass-card framing params. Gate margin to 0 on non-BS views
             // so the framing branch (only reached on 7/8 anyway) is fully inert
@@ -804,6 +825,14 @@ public class GpuStreamScaler {
         this.uniformsDirty.set(true);
     }
 
+    /** Blind-spot card clarity (views 7/8): contrast pivot (1.0 = neutral) and unsharp
+     *  amount (0.0 = off). Applied to the stitched colour before the card framing. */
+    public void setBlindSpotClarity(float contrast, float sharpen) {
+        this.bsContrast = Math.max(0.5f, Math.min(2.0f, contrast));
+        this.bsSharpen  = Math.max(0.0f, Math.min(1.0f, sharpen));
+        this.uniformsDirty.set(true);
+    }
+
     /** Blind-spot merge mode (views 7/8): 0 = both (rear+side stitch, default),
      *  1 = side camera only, 2 = rear camera only. Out-of-range values clamp to
      *  "both" so a corrupt config can't blank the view. Idempotent. */
@@ -929,6 +958,14 @@ public class GpuStreamScaler {
         // The legacy 4-strip math stays for uApaMode <= 2.5 paths.
         return String.format(Locale.US,
             "#extension GL_OES_EGL_image_external : require\n" +
+            // Guarded unsharp in odBlend (view 7/8 only) needs fwidth() to size its
+            // tap offsets from the screen-space UV derivative. #extension directives
+            // must precede any non-preprocessor token (GLSL ES 1.00 spec) — kept
+            // grouped with the other #extension line, above `precision`. Adreno 610
+            // supports GL_OES_standard_derivatives; if a device lacks it this fails
+            // to link and the fwidth() call below should fall back to a fixed
+            // vec2 duv = vec2(0.0015, 0.0015) offset (see odBlend sharpen block).
+            "#extension GL_OES_standard_derivatives : enable\n" +
             // highp: the view 7/8 sampler needs the extra precision (mediump, the
             // Adreno 610 fragment default, shimmers the seam). Other paths insensitive.
             "precision highp float;\n" +
@@ -1021,20 +1058,50 @@ public class GpuStreamScaler {
             "    float cov = max(c0, c1);\n" +
             "    vec4 a = vec4(0.0);\n" +
             "    vec4 b = vec4(0.0);\n" +
+            // uvA/uvB capture each tap's sampled UV for the sharpen pass below.
+            // Declared here (not inside the if-blocks) because GLSL if-bodies are
+            // their own scope — a var declared inside wouldn't be visible at the
+            // return. Defaults are unused whenever their guard is false: wB's
+            // step()/smoothstep() weighting always routes mix(uvA, uvB, wB) to
+            // pick the tap that actually assigned its uv (see wB derivation
+            // above), and any pixel where NEITHER guard fires has cov == 0.0,
+            // so the sharpen sample is discarded by full transparency downstream.
+            "    vec2 uvA = vec2(0.0);\n" +
+            "    vec2 uvB = vec2(0.0);\n" +
             "    if (c0 > 0.5) {\n" +
             // tap A uses uOd4.xyz; defaults are the identity transform.
-            "        a = texture2D(uCameraTex, odMap(cA, rectSize, fA, pixAspect, th, uOd2.x, yOut, 1.0, uOd4.z, uOd4.x, uOd4.y));\n" +
+            "        uvA = odMap(cA, rectSize, fA, pixAspect, th, uOd2.x, yOut, 1.0, uOd4.z, uOd4.x, uOd4.y);\n" +
+            "        a = texture2D(uCameraTex, uvA);\n" +
             "    }\n" +
             "    if (c1 > 0.5) {\n" +
             // tap B uses uOd3.xyz.
-            "        b = texture2D(uCameraTex, odMap(cB, rectSize, fB, pixAspect, th - ctr, uOd2.y, yOut, 1.0, uOd3.z, uOd3.x, uOd3.y));\n" +
+            "        uvB = odMap(cB, rectSize, fB, pixAspect, th - ctr, uOd2.y, yOut, 1.0, uOd3.z, uOd3.x, uOd3.y);\n" +
+            "        b = texture2D(uCameraTex, uvB);\n" +
             "    }\n" +
             // STRAIGHT (non-premultiplied) blended color in .rgb, coverage in .a.
             // The BS card path does lighting on straight color then premultiplies
             // ONCE by the final alpha, so no-coverage regions are TRANSPARENT (map
             // shows through) — not opaque black, and no specular leaks at alpha 0.
             // cov is binary (max of two step()s).
-            "    return vec4(mix(a, b, wB).rgb, cov);\n" +
+            "    vec3 col = mix(a, b, wB).rgb;\n" +
+            // Guarded unsharp (views 7/8 clarity): uBsSharpen == 0.0 (default)
+            // skips this block entirely — bit-identical to the pre-clarity shader.
+            // duv sizes the 4-tap cross sample from the screen-space UV derivative
+            // (fwidth) so the blur radius tracks zoom/aspect instead of a fixed
+            // texel count; see the #extension GL_OES_standard_derivatives note above.
+            "    if (uBsSharpen > 0.0) {\n" +
+            "        vec2 uvP = mix(uvA, uvB, wB);\n" +
+            "        vec2 duv = fwidth(uvP) * 1.5;\n" +
+            "        vec3 blur = 0.25 * (\n" +
+            "            texture2D(uCameraTex, uvP + vec2(duv.x, 0.0)).rgb +\n" +
+            "            texture2D(uCameraTex, uvP - vec2(duv.x, 0.0)).rgb +\n" +
+            "            texture2D(uCameraTex, uvP + vec2(0.0, duv.y)).rgb +\n" +
+            "            texture2D(uCameraTex, uvP - vec2(0.0, duv.y)).rgb);\n" +
+            "        col += uBsSharpen * (col - blur);\n" +
+            "    }\n" +
+            // uBsContrast == 1.0 (default) is an identity pivot around mid-grey.
+            "    col = clamp((col - 0.5) * uBsContrast + 0.5, 0.0, 1.0);\n" +
+            "    return vec4(col, cov);\n" +
             "}\n" +
             // Blind-spot card mask params (views 7/8 only). aspect = outputWidth/
             // outputHeight so the rounded corners are circular, not stretched.
@@ -1046,6 +1113,11 @@ public class GpuStreamScaler {
             "uniform float uBsRadius;\n" +
             "uniform float uBsAspect;\n" +
             "uniform float uBsFeather;\n" +
+            // Blind-spot card clarity (views 7/8 only), applied inside odBlend.
+            // uBsContrast: 1.0 = neutral identity. uBsSharpen: 0.0 = fully skipped
+            // (guarded), so both default to bit-identical output. See odBlend.
+            "uniform float uBsContrast;\n" +
+            "uniform float uBsSharpen;\n" +
             // Blind-spot merge mode (views 7/8): 0 = both (rear+side stitch, default),
             // 1 = side camera only, 2 = rear camera only. Single-camera modes bypass
             // odBlend's two-tap blend and fill the whole card from one tap's full FOV.
