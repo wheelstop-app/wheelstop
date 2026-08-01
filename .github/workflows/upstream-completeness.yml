@@ -1,0 +1,101 @@
+name: Upstream completeness
+
+# Weekly (and on demand) check that the LATEST upstream release APK is fully
+# represented in its published source: it flags any com/overdrive class shipped in
+# the binary that has no counterpart in the tag's source tree — the "feature
+# shipped, source withheld" pattern (see docs/fork-maintenance.md). Issues are
+# disabled on this fork, so a gap surfaces as a FAILED run (which emails the owner)
+# plus a job summary + artifact.
+on:
+  schedule:
+    - cron: "0 7 * * 1" # Mondays 07:00 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: upstream-completeness
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  UPSTREAM: yash-srivastava/Overdrive-release
+
+jobs:
+  check:
+    name: Class-level source completeness of the latest upstream release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07 # v4
+        with:
+          java-version: "17"
+          distribution: temurin
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+
+      - name: Install build-tools (for dexdump)
+        run: sdkmanager --install "build-tools;34.0.0"
+
+      - name: Fetch the latest upstream release APK + its tagged source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG=$(gh api "repos/${UPSTREAM}/releases/latest" --jq .tag_name)
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "Latest upstream release: $TAG"
+          gh release download "$TAG" --repo "$UPSTREAM" -p '*.apk' -O rel.apk
+          gh api "repos/${UPSTREAM}/tarball/$TAG" > src.tgz
+          mkdir -p srctree && tar -xzf src.tgz -C srctree
+          echo "SRCROOT=$(ls -d srctree/*/ | head -1)" >> "$GITHUB_ENV"
+
+      - name: Run completeness check
+        run: |
+          set -uo pipefail
+          export PATH="$PATH:$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort | tail -1)"
+          bash .github/scripts/upstream-completeness.sh rel.apk "$SRCROOT" | tee result.txt
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## Upstream completeness — ${TAG:-unknown}"
+            echo
+            grep -E "classes shipped|NO source match" result.txt || true
+            if [ -s upstream-missing.txt ]; then
+              echo
+              echo "### ⚠️ Shipped in the binary but NOT in the published source"
+              echo '```'
+              cat upstream-missing.txt
+              echo '```'
+              echo "These are candidates — R8 obfuscation means this only sees kept classes."
+            else
+              echo
+              echo "✅ Every kept com/overdrive class resolves to source."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload gap list
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: completeness-result
+          path: |
+            upstream-missing.txt
+            result.txt
+          if-no-files-found: ignore
+
+      - name: Fail the run if the release ships code not in its source
+        run: |
+          if [ -s upstream-missing.txt ]; then
+            echo "::error::upstream ${TAG} ships $(wc -l < upstream-missing.txt) class(es) absent from its published source — see the job summary"
+            exit 1
+          fi
+          echo "OK: ${TAG} source is complete for kept classes"
