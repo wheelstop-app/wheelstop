@@ -1115,11 +1115,15 @@ BYD.roadSense = {
      * (checked by id) so a re-init — e.g. visibilitychange 'visible' calling
      * reload() — never double-inserts. Browser-parsed inline event-handler
      * attributes on HTML set via insertAdjacentHTML wire up the same as static
-     * markup, so oninput fires normally. Runs BYD.i18n.hydrate() on the new
-     * rows afterward so a future translation catalog entry for
-     * road_sense.bs_contrast/bs_sharpen picks up automatically; until then the
-     * hardcoded fallback text renders (hydrate leaves text alone when a key
-     * isn't in the catalog).
+     * markup, so oninput fires normally.
+     *
+     * Label text is STATIC ("Contrast"/"Sharpen"), deliberately with no
+     * data-i18n attribute: road_sense.bs_contrast/bs_sharpen do not exist in
+     * any locale catalog (adding catalog entries is out of scope for this
+     * task), and BYD.i18n's t()/hydrate() render an unresolvable key as the
+     * raw key string rather than silently keeping existing text — so wiring
+     * these labels to data-i18n today would show literal
+     * "road_sense.bs_contrast" on screen in every locale, including English.
      */
     _bsInjectClaritySliders() {
         if (document.getElementById('bsContrast')) return;
@@ -1127,19 +1131,18 @@ BYD.roadSense = {
         var anchorRow = (anchorInput && anchorInput.closest) ? anchorInput.closest('.setting-row') : null;
         if (!anchorRow || !anchorRow.parentNode) return;
         anchorRow.insertAdjacentHTML('afterend',
-            '<div class="setting-row"><div class="setting-info"><div class="setting-name" data-i18n="road_sense.bs_contrast">Contrast</div></div>' +
+            '<div class="setting-row"><div class="setting-info"><div class="setting-name">Contrast</div></div>' +
                 '<div class="setting-control"><div class="slider-control">' +
                     '<span class="slider-value" id="bsContrastVal">1.00</span>' +
                     '<input type="range" class="slider" id="bsContrast" min="0.5" max="2.0" step="0.05" value="1.0" oninput="RoadSenseSettings.bsTune()">' +
                 '</div></div>' +
             '</div>' +
-            '<div class="setting-row"><div class="setting-info"><div class="setting-name" data-i18n="road_sense.bs_sharpen">Sharpen</div></div>' +
+            '<div class="setting-row"><div class="setting-info"><div class="setting-name">Sharpen</div></div>' +
                 '<div class="setting-control"><div class="slider-control">' +
                     '<span class="slider-value" id="bsSharpenVal">0.00</span>' +
                     '<input type="range" class="slider" id="bsSharpen" min="0" max="1.0" step="0.05" value="0.0" oninput="RoadSenseSettings.bsTune()">' +
                 '</div></div>' +
             '</div>');
-        if (BYD.i18n && typeof BYD.i18n.hydrate === 'function') BYD.i18n.hydrate(anchorRow.parentNode);
     },
 
     /** Kick the native overlay service to react to the just-saved enabled/preview
