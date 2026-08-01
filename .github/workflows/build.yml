@@ -85,7 +85,11 @@ jobs:
           echo "Inspecting $APK"
           libs=$(unzip -l "$APK" | awk '/lib\/arm64-v8a\/.*\.so$/ {print $4}')
           echo "$libs"
-          for required in libsurveillance.so libopenh264.so; do
+          # The tunnel binaries are no longer committed — they are fetched by
+          # downloadTunnelBinaries. If that task ever silently no-ops, the APK would build
+          # fine and ship without them, so assert they made it in.
+          for required in libsurveillance.so libopenh264.so \
+                          libtailscale.so libcloudflared.so libzrok.so libsingbox.so libod.so; do
             echo "$libs" | grep -q "$required" \
               || { echo "::error::$required missing from the APK"; exit 1; }
           done

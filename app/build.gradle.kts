@@ -110,6 +110,71 @@ tasks.matching { it.name.contains("CMake") || it.name.contains("ExternalNative")
     dependsOn("downloadOpenH264", "downloadOpenCV")
 }
 
+// ==================== Tunnel binaries ====================
+// tailscaled / cloudflared / zrok / sing-box. These are CLI executables, not libraries:
+// Android extracts lib/<abi>/*.so from the APK to nativeLibraryDir with the execute bit
+// set, so shipping them under .so names is how the app gets runnable binaries onto the
+// device. That part of the design is sound and unchanged.
+//
+// What changed is where they come from. They used to be ~40 MB of prebuilt blobs
+// committed to this repository, and an audit could not verify them: all four UPX-packed,
+// three with the PackHeader stripped so `upx -d` refuses them outright, and the versions
+// they self-reported were developer builds that matched no upstream release. They are now
+// produced by .github/workflows/tunnel-binaries.yml — official upstream release artifacts
+// where they exist, built from source where they don't — and fetched here by digest.
+//
+// The digests below are the contract. If upstream re-publishes, or the release assets are
+// tampered with, the build fails rather than silently shipping something else.
+val tunnelBinariesRelease = "tunnel-binaries-2026.08.01"
+val tunnelBinariesBaseUrl =
+    "https://github.com/shauneccles/Overdrive-release/releases/download/$tunnelBinariesRelease"
+
+// filename to SHA-256 of the packed artifact published by that release.
+val tunnelBinaries = mapOf(
+    "libtailscale.so" to "b52b3e5715cafc135fe032bd4672e1f6a01992502206c98c4324359356d3d95d",
+    "libcloudflared.so" to "458c61bc15d33d5d79e3acc4e4bac9efecc934435f1504a55b7f6971ee2cc7dd",
+    "libzrok.so" to "199629a6395d1b78850c555e2971bd76ed598ac094e101190e50581628c0ff1e",
+    "libsingbox.so" to "5642eaf957aebaba6061d2ace38e929b3fc1dad690834aedcad316a29cdf203b"
+)
+
+tasks.register("downloadTunnelBinaries") {
+    description = "Fetches the tunnel executables published by the tunnel-binaries workflow."
+    val outDir = file("src/main/jniLibs/arm64-v8a")
+
+    doLast {
+        outDir.mkdirs()
+        tunnelBinaries.forEach { (name, sha) ->
+            val dest = file("$outDir/$name")
+            // Re-verify on every build, not just on download. A cached or hand-edited file
+            // is exactly the case this exists to catch, and a stat is free next to an
+            // 18 MB fetch.
+            if (dest.exists()) {
+                val actual = MessageDigest.getInstance("SHA-256")
+                    .digest(dest.readBytes())
+                    .joinToString("") { b -> "%02x".format(b) }
+                if (actual.equals(sha, ignoreCase = true)) return@forEach
+                logger.lifecycle("$name: digest mismatch on the cached copy — refetching")
+                dest.delete()
+            }
+            val url = "$tunnelBinariesBaseUrl/$name"
+            logger.lifecycle("Downloading $name from $url")
+            try {
+                ant.invokeMethod("get", mapOf("src" to url, "dest" to dest.absolutePath))
+            } catch (e: Exception) {
+                throw GradleException("Tunnel binary download failed for $name from $url: ${e.message}", e)
+            }
+            verifyDigest(dest, sha, "tunnel binary $name")
+        }
+    }
+}
+
+// Bind to preBuild rather than the CMake tasks: these are packaged, not compiled, so they
+// must exist before the merge/package steps, and they are needed even for a build with no
+// native compilation to do.
+tasks.matching { it.name == "preBuild" }.configureEach {
+    dependsOn("downloadTunnelBinaries")
+}
+
 // OpenCV-mobile version for surveillance module (minimal build, ~3MB vs ~20MB)
 // https://github.com/nihui/opencv-mobile
 val opencvMobileTag = "v31"
@@ -375,6 +440,27 @@ android {
         jniLibs {
             // CRITICAL: Compresses .so files in the APK (saves ~20MB+)
             useLegacyPackaging = true
+
+            // Do NOT run `strip` over the tunnel executables. They are not libraries with
+            // debug symbols to shed — they are UPX-packed self-extracting binaries, and AGP's
+            // strip step rewrites them wholesale: a verified 14,412,212-byte libcloudflared.so
+            // came out of packaging at 5,938,540 bytes. Two problems with letting that happen:
+            //
+            //   1. The digest pinned in downloadTunnelBinaries would then describe a file that
+            //      is NOT what ships, which makes the pin decorative.
+            //   2. Whether a stripped UPX image still self-extracts is not something to
+            //      discover on a car.
+            //
+            // This is also, almost certainly, why three of the four previously-vendored blobs
+            // had no UPX PackHeader and could not be unpacked for audit: they had been through
+            // this packaging step. Keeping them intact preserves the property that anyone can
+            // unpack and inspect exactly what the APK ships.
+            keepDebugSymbols += listOf(
+                "**/libtailscale.so",
+                "**/libcloudflared.so",
+                "**/libzrok.so",
+                "**/libsingbox.so"
+            )
 
             // Keep only arm64-v8a (You already have this, but good to keep)
             excludes += listOf(

@@ -8,3 +8,13 @@
 /app/.cxx
 /app/src/main/cpp/opencv
 /app/src/main/cpp/openh264
+
+# Tunnel executables, fetched by the downloadTunnelBinaries Gradle task from the release
+# produced by .github/workflows/tunnel-binaries.yml. NOT committed: they were ~40 MB of
+# unverifiable prebuilt blobs (UPX-packed, three with the PackHeader stripped so they
+# could not even be unpacked for inspection). They are digest-pinned in app/build.gradle.kts.
+# libod.so is deliberately NOT listed — it has no upstream and no source, so it stays.
+/app/src/main/jniLibs/arm64-v8a/libtailscale.so
+/app/src/main/jniLibs/arm64-v8a/libcloudflared.so
+/app/src/main/jniLibs/arm64-v8a/libzrok.so
+/app/src/main/jniLibs/arm64-v8a/libsingbox.so
