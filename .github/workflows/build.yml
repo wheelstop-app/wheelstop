@@ -1,0 +1,106 @@
+name: Build
+
+# Unit tests + a debug APK on every push and PR. There was no build CI before this, so
+# nothing checked that the tree compiles, that the tests pass, or that a clean checkout
+# can even resolve its native dependencies (opencv-mobile and OpenH264 are gitignored and
+# fetched at build time — see app/build.gradle.kts).
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+# A new push to the same branch makes the in-flight run obsolete. Cancel it rather than
+# paying for two full NDK builds.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Unit tests + debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # Don't leave the job's credentials in .git/config — this job only reads
+          # the tree and never pushes, and a persisted token can ride along into
+          # anything built from the workspace.
+          persist-credentials: false
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07 # v4
+        with:
+          java-version: "17"
+          distribution: temurin
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+
+      - name: Install NDK + CMake
+        # Pinned to the versions app/build.gradle.kts asks for (ndkVersion) and the CMake
+        # the project's CMakeLists requires. Installing explicitly keeps the failure at
+        # this step, with a clear message, instead of surfacing as a confusing Gradle error.
+        run: |
+          sdkmanager --install "ndk;26.1.10909125" "cmake;3.22.1"
+
+      - name: Cache Gradle
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', 'gradle/libs.versions.toml') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Cache native dependencies
+        # opencv-mobile is an 18 MB download and OpenH264 another 0.5 MB, on every build.
+        # Both are digest-pinned in app/build.gradle.kts, so caching them cannot smuggle in
+        # a different artifact — a cache hit that did would fail verification on restore.
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            app/src/main/cpp/opencv
+            app/src/main/cpp/openh264
+          key: native-deps-${{ runner.os }}-${{ hashFiles('app/build.gradle.kts') }}
+
+      - name: Unit tests
+        run: ./gradlew :app:testDebugUnitTest --no-daemon --console=plain
+
+      - name: Assemble debug APK
+        run: ./gradlew :app:assembleDebug --no-daemon --console=plain
+
+      - name: Verify the APK actually contains the native libs
+        # Guards the failure mode this CI exists for: the native dependency fetch used to
+        # fail soft, and CMake would then build a libsurveillance.so with motion detection
+        # compiled out. That produced a green build and a broken APK. Assert the payload.
+        run: |
+          set -euo pipefail
+          APK=$(find app/build/outputs/apk/debug -name "*.apk" | head -1)
+          echo "Inspecting $APK"
+          libs=$(unzip -l "$APK" | awk '/lib\/arm64-v8a\/.*\.so$/ {print $4}')
+          echo "$libs"
+          for required in libsurveillance.so libopenh264.so; do
+            echo "$libs" | grep -q "$required" \
+              || { echo "::error::$required missing from the APK"; exit 1; }
+          done
+
+      - name: Upload APK
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: app-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: unit-test-results
+          path: app/build/reports/tests/testDebugUnitTest/
+          if-no-files-found: ignore
