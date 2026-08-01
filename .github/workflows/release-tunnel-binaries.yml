@@ -1,0 +1,85 @@
+name: Release tunnel binaries
+
+# Produces the tunnel binaries at maximum compression and attaches them, with their
+# checksums and provenance, to a GitHub release.
+#
+# Why this is separate from the ordinary `Tunnel binaries` run:
+#
+#   The packing trade-off is real and it points in opposite directions depending on why
+#   you are building. `upx --best --lzma` over ~100 MB of input costs the better part of
+#   an hour of CI; on every workflow edit that is a bad deal, and the ordinary run
+#   therefore uses default compression. But these binaries ship inside an APK to a head
+#   unit with finite storage, so at release time the minutes are worth it and the ordinary
+#   run's output is the wrong artifact to publish.
+#
+# The build itself is NOT duplicated here — this calls the same reusable workflow with
+# compression=max, so the release artifact is produced by exactly the code that CI has
+# been exercising all along.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tailscale_ref:
+        description: "tailscale git tag, or 'latest'"
+        default: "v1.98.10"
+      cloudflared_ref:
+        description: "cloudflared git tag, or 'latest'"
+        default: "2026.7.3"
+      zrok_ref:
+        description: "zrok git tag (stay on v1.x — v2 breaks ZrokLauncher)"
+        default: "v1.1.11"
+      singbox_ref:
+        description: "sing-box git tag"
+        default: "v1.12.14"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-tunnel-binaries-${{ github.ref }}
+  cancel-in-progress: false # never cancel a release build half-way
+
+jobs:
+  build:
+    name: Build at maximum compression
+    uses: ./.github/workflows/tunnel-binaries.yml
+    with:
+      tailscale_ref: ${{ inputs.tailscale_ref || 'v1.98.10' }}
+      cloudflared_ref: ${{ inputs.cloudflared_ref || '2026.7.3' }}
+      zrok_ref: ${{ inputs.zrok_ref || 'v1.1.11' }}
+      singbox_ref: ${{ inputs.singbox_ref || 'v1.12.14' }}
+      compression: max
+
+  attach:
+    name: Attach to release
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      # write, not read: uploading the built binaries as assets onto the release that
+      # triggered this run. Scoped to this job, so the build job keeps the read-only default.
+      contents: write # upload release assets
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: tunnel-binaries-arm64
+          path: artifact
+
+      - name: Upload assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          ls -laR artifact
+          # SHA256SUMS and PROVENANCE.txt go up alongside the binaries: an artifact whose
+          # provenance is not published with it is back to being a blob you have to trust.
+          gh release upload "$TAG" \
+            artifact/dist/*.so \
+            artifact/dist/SHA256SUMS \
+            artifact/out/PROVENANCE.txt \
+            artifact/out/VERSIONS.txt \
+            --clobber

@@ -24,6 +24,18 @@ name: Tunnel binaries
 # result and read it. That is the property the vendored copies lacked.
 
 on:
+  # Reusable: the release pipeline calls this with compression=max rather than
+  # duplicating the whole build.
+  workflow_call:
+    inputs:
+      tailscale_ref:   { type: string, default: "v1.98.10" }
+      cloudflared_ref: { type: string, default: "2026.7.3" }
+      zrok_ref:        { type: string, default: "v1.1.11" }
+      singbox_ref:     { type: string, default: "v1.12.14" }
+      compression:
+        description: "fast (default UPX) or max (--best --lzma)"
+        type: string
+        default: "fast"
   workflow_dispatch:
     inputs:
       tailscale_ref:
@@ -43,6 +55,11 @@ on:
         # tag by the audit. Keeping it means the app gets the sing-box it was tested with.
         description: "sing-box git tag"
         default: "v1.12.14"
+      compression:
+        description: "fast (default UPX) or max (--best --lzma, much slower)"
+        type: choice
+        options: ["fast", "max"]
+        default: "fast"
   push:
     paths:
       - ".github/workflows/tunnel-binaries.yml"
@@ -58,7 +75,7 @@ jobs:
   build:
     name: Build tunnel binaries (arm64)
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -207,25 +224,48 @@ jobs:
         # Android extracts lib/<abi>/*.so from the APK to nativeLibraryDir with the execute
         # bit set, which is why CLI executables are shipped under .so names. That part of
         # the original design is sound and is preserved.
+        env:
+          COMPRESSION: ${{ inputs.compression }}
         run: |
           set -euo pipefail
           mkdir -p dist
+
+          # Two modes, because the trade-off is real. On ~100 MB of input, --best ran for
+          # >15 min in CI for a few percent — a bad deal on every workflow edit, a good one
+          # for something that ships to a car with finite storage.
+          #   fast (default, and what push/PR runs) : plain upx
+          #   max  (what the release pipeline uses) : --best --lzma
+          case "${COMPRESSION:-fast}" in
+            max)  UPX_ARGS=(-q --best --lzma) ;;
+            fast) UPX_ARGS=(-q) ;;
+            *)    echo "::error::unknown compression: $COMPRESSION"; exit 1 ;;
+          esac
+          echo "compression mode: ${COMPRESSION:-fast}  (upx ${UPX_ARGS[*]})"
+
           pack() {
             local src="$1" dst="$2"
             cp "out/$src" "dist/$dst"
             # NO --no-mark: the PackHeader must survive so `upx -d` works. That is the
             # whole point — the vendored blobs had it stripped and were unanalysable.
-            # Default compression rather than --best: on ~100 MB of binaries --best ran
-            # for >15 min in CI for roughly a percent of size, which is a bad trade for
-            # something that runs on every workflow change.
-            upx -q "dist/$dst" >/dev/null
+            if ! upx "${UPX_ARGS[@]}" "dist/$dst" >/dev/null; then
+              # --lzma is not supported for every ELF variant; fall back rather than fail.
+              echo "::warning::upx ${UPX_ARGS[*]} failed on $dst — retrying with --best"
+              cp "out/$src" "dist/$dst"
+              upx -q --best "dist/$dst" >/dev/null
+            fi
             upx -t "dist/$dst"     # refuses if the packed image is not decompressible
           }
           pack tailscaled  libtailscale.so
           pack cloudflared libcloudflared.so
           pack zrok        libzrok.so
           pack sing-box    libsingbox.so
-          ls -la dist/
+
+          echo "### packed sizes (mode: ${COMPRESSION:-fast})"
+          for f in dist/*.so; do
+            printf "  %-22s %10d bytes (from %d)\n" "$(basename "$f")" \
+              "$(stat -c%s "$f")" "$(stat -c%s "out/$(basename "$f" | sed -e s/^lib// -e s/\.so$// -e s/^tailscale$/tailscaled/ -e s/^singbox$/sing-box/)")"
+          done
+          echo "  TOTAL packed: $(cat dist/*.so | wc -c) bytes"
 
       - name: Verify each artifact is arm64 and round-trips through upx -d
         run: |
