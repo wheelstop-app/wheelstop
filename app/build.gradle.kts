@@ -125,29 +125,39 @@ tasks.matching { it.name.contains("CMake") || it.name.contains("ExternalNative")
 //
 // The digests below are the contract. If upstream re-publishes, or the release assets are
 // tampered with, the build fails rather than silently shipping something else.
-val tunnelBinariesRelease = "tunnel-binaries-2026.08.01"
-val tunnelBinariesBaseUrl =
-    "https://github.com/shauneccles/Overdrive-release/releases/download/$tunnelBinariesRelease"
+// Provenance lives in app/tunnel-binaries.lock, not here: a digest in a build script tells
+// you what to expect but not where it came from or how to re-derive it. That file records
+// the upstream ref/commit per binary, both digests (shipped and auditable), and the exact
+// strip invocation that maps one to the other — so the shipped bytes can be reproduced from
+// upstream sources by anyone with the repo.
+val tunnelLockFile = file("tunnel-binaries.lock")
+val tunnelLock: Map<String, String> = tunnelLockFile.readLines()
+    .map { it.substringBefore('#').trim() }
+    .filter { it.contains('=') }
+    .associate { it.substringBefore('=').trim() to it.substringAfter('=').trim() }
 
-// filename to SHA-256 of the packed artifact published by that release.
-val tunnelBinaries = mapOf(
-    "libtailscale.so" to "b52b3e5715cafc135fe032bd4672e1f6a01992502206c98c4324359356d3d95d",
-    "libcloudflared.so" to "458c61bc15d33d5d79e3acc4e4bac9efecc934435f1504a55b7f6971ee2cc7dd",
-    "libzrok.so" to "199629a6395d1b78850c555e2971bd76ed598ac094e101190e50581628c0ff1e",
-    "libsingbox.so" to "5642eaf957aebaba6061d2ace38e929b3fc1dad690834aedcad316a29cdf203b"
-)
+val tunnelBinaryNames = listOf("libtailscale", "libcloudflared", "libzrok", "libsingbox")
 
 tasks.register("downloadTunnelBinaries") {
-    description = "Fetches the tunnel executables published by the tunnel-binaries workflow."
+    description = "Fetches the tunnel executables recorded in tunnel-binaries.lock."
     val outDir = file("src/main/jniLibs/arm64-v8a")
+    inputs.file(tunnelLockFile)
 
     doLast {
+        val baseUrl = tunnelLock["base_url"]
+            ?: throw GradleException("tunnel-binaries.lock: missing base_url")
         outDir.mkdirs()
-        tunnelBinaries.forEach { (name, sha) ->
+        tunnelBinaryNames.forEach { stem ->
+            // The SHIPPED digest, not the intact one. AGP strips native libs during
+            // packaging, so the already-stripped artifact is the one whose bytes survive
+            // into the APK unchanged — which is what makes pinning it meaningful.
+            val sha = tunnelLock["$stem.sha256_shipped"]
+                ?: throw GradleException("tunnel-binaries.lock: missing $stem.sha256_shipped")
+            val name = "$stem.so"
             val dest = file("$outDir/$name")
-            // Re-verify on every build, not just on download. A cached or hand-edited file
-            // is exactly the case this exists to catch, and a stat is free next to an
-            // 18 MB fetch.
+            // Re-verify what is already on disk, not just fresh downloads: a stale or
+            // hand-edited copy is exactly what this exists to catch, and hashing is free
+            // next to the download it avoids.
             if (dest.exists()) {
                 val actual = MessageDigest.getInstance("SHA-256")
                     .digest(dest.readBytes())
@@ -156,7 +166,7 @@ tasks.register("downloadTunnelBinaries") {
                 logger.lifecycle("$name: digest mismatch on the cached copy — refetching")
                 dest.delete()
             }
-            val url = "$tunnelBinariesBaseUrl/$name"
+            val url = "$baseUrl/$name"
             logger.lifecycle("Downloading $name from $url")
             try {
                 ant.invokeMethod("get", mapOf("src" to url, "dest" to dest.absolutePath))
@@ -441,26 +451,11 @@ android {
             // CRITICAL: Compresses .so files in the APK (saves ~20MB+)
             useLegacyPackaging = true
 
-            // Do NOT run `strip` over the tunnel executables. They are not libraries with
-            // debug symbols to shed — they are UPX-packed self-extracting binaries, and AGP's
-            // strip step rewrites them wholesale: a verified 14,412,212-byte libcloudflared.so
-            // came out of packaging at 5,938,540 bytes. Two problems with letting that happen:
-            //
-            //   1. The digest pinned in downloadTunnelBinaries would then describe a file that
-            //      is NOT what ships, which makes the pin decorative.
-            //   2. Whether a stripped UPX image still self-extracts is not something to
-            //      discover on a car.
-            //
-            // This is also, almost certainly, why three of the four previously-vendored blobs
-            // had no UPX PackHeader and could not be unpacked for audit: they had been through
-            // this packaging step. Keeping them intact preserves the property that anyone can
-            // unpack and inspect exactly what the APK ships.
-            keepDebugSymbols += listOf(
-                "**/libtailscale.so",
-                "**/libcloudflared.so",
-                "**/libzrok.so",
-                "**/libsingbox.so"
-            )
+            // NOTE: the tunnel binaries are published already-stripped (see
+            // app/tunnel-binaries.lock), so AGP's strip step is a no-op on them and the
+            // digests pinned in that file describe exactly what ships. Do not add them to
+            // keepDebugSymbols: that would ship the unstripped images and grow the APK by
+            // ~30 MB for no verification benefit.
 
             // Keep only arm64-v8a (You already have this, but good to keep)
             excludes += listOf(

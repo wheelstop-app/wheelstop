@@ -1,0 +1,76 @@
+# Tunnel binaries — provenance lock
+#
+# The four tunnel executables the app ships (tailscaled, cloudflared, zrok, sing-box) are
+# NOT committed to this repository. They are fetched at build time by the
+# `downloadTunnelBinaries` Gradle task, which reads this file and verifies every download
+# against the digests below.
+#
+# This file is the answer to "where did that binary come from?". Everything needed to
+# re-derive and check the shipped bytes is here, in the source tree, rather than in a
+# commit message or a CI log that expires.
+#
+# ---------------------------------------------------------------------------------------
+# HOW TO VERIFY, from nothing but this file
+# ---------------------------------------------------------------------------------------
+#
+#   1. Each binary is published in two forms at the release below:
+#
+#        libX.so          the SHIPPED artifact — UPX-packed and then stripped
+#        libX.intact.so   the AUDIT artifact   — the same image before stripping
+#
+#   2. The audit copy still has its UPX PackHeader, so you can unpack and read it:
+#
+#        upx -d -o unpacked libX.intact.so
+#        go version -m unpacked        # module table, upstream deps, build tags
+#
+#   3. The two are linked by one deterministic step. Strip the audit copy with the same
+#      tool AGP uses when packaging (NDK 26.1.10909125's llvm-strip) and you must get the
+#      shipped artifact, byte for byte:
+#
+#        $ANDROID_HOME/ndk/26.1.10909125/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip \
+#            --strip-all libX.intact.so
+#        sha256sum libX.intact.so     # == sha256_shipped below
+#
+#      That is what makes the shipped (unreadable, stripped) artifact trustworthy: it is a
+#      reproducible function of the readable one.
+#
+#   4. `upstream` says where the pre-packed binary came from. Where it is a release asset,
+#      the digest is of upstream's own published file. Where it is built from source, the
+#      commit is pinned.
+#
+# WHY STRIPPED AT ALL: AGP strips native libs during packaging regardless. Publishing the
+# already-stripped form makes that step a no-op, so the digests here describe exactly what
+# lands in the APK. Publishing only the intact form would mean the pin described a file
+# that AGP then rewrote — a pin that verifies nothing. (This is also why three of the four
+# previously-vendored blobs had no PackHeader and could not be audited: they had been
+# through packaging.)
+#
+# Regenerate with: .github/workflows/tunnel-binaries.yml (compression=max for releases).
+# Update this file and app/build.gradle.kts's release tag in the same commit.
+
+release = tunnel-binaries-2026.08.01
+base_url = https://github.com/shauneccles/Overdrive-release/releases/download/tunnel-binaries-2026.08.01
+strip_tool = ndk/26.1.10909125 llvm-strip --strip-all
+
+# libtailscale.so — tailscaled, built from source. No official artifact matches: the ~60
+# ts_omit_* tags are what keep it near 4 MB instead of ~30 MB, and were recovered from the
+# previously-shipped binary's own build info.
+libtailscale.upstream       = source github.com/tailscale/tailscale v1.98.10 36550d57f4a4055246ef7412f4e650a012a465f1
+libtailscale.sha256_shipped = @TS_S@
+libtailscale.sha256_intact  = @TS_I@
+
+# libcloudflared.so — upstream's own linux-arm64 release asset.
+libcloudflared.upstream       = release github.com/cloudflare/cloudflared 2026.7.3 cloudflared-linux-arm64 sha256=65259e652a7bea08bf5df603233ab22b8bf3116af8df9f9206209af6a1b955c0
+libcloudflared.sha256_shipped = @CF_S@
+libcloudflared.sha256_intact  = @CF_I@
+
+# libzrok.so — upstream's own linux-arm64 release asset. PINNED TO v1.x ON PURPOSE: zrok v2
+# renames the command to cmd/zrok2 and is a breaking change for ZrokLauncher.
+libzrok.upstream       = release github.com/openziti/zrok v1.1.11 zrok_1.1.11_linux_arm64.tar.gz sha256=2c38069ee27c3c96f8d35cbe23e3a51457651229049edcd017bdbb485c9f1920
+libzrok.sha256_shipped = @ZR_S@
+libzrok.sha256_intact  = @ZR_I@
+
+# libsingbox.so — upstream's own ANDROID-arm64 release asset (sing-box publishes one).
+libsingbox.upstream       = release github.com/sagernet/sing-box v1.12.14 sing-box-1.12.14-android-arm64.tar.gz sha256=b46d945f563834a508db34f3ed433fbcf9f622c4ba7278890d28d610661960d6
+libsingbox.sha256_shipped = @SB_S@
+libsingbox.sha256_intact  = @SB_I@
