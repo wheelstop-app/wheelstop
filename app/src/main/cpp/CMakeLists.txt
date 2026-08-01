@@ -41,10 +41,24 @@ elseif(EXISTS "${OPENCV_LIB_DIR}/libopencv_java4.so")
     set(OPENCV_USE_SHARED TRUE)
     add_library(opencv SHARED IMPORTED)
     set_target_properties(opencv PROPERTIES IMPORTED_LOCATION "${OPENCV_LIB_DIR}/libopencv_java4.so")
-else()
-    message(WARNING "OpenCV not found or incomplete. Libs: ${OPENCV_LIB_DIR}, Headers: ${OPENCV_INCLUDE_DIR}/opencv2")
-    message(WARNING "Run: ./gradlew :app:downloadOpenCV")
+elseif(ALLOW_NO_OPENCV)
+    # Explicit opt-in to the degraded build. Nothing in the normal build path sets this;
+    # it exists so someone can still compile the native layer on a machine without the
+    # OpenCV artifacts, knowing motion detection will be absent.
+    message(WARNING "OpenCV missing and ALLOW_NO_OPENCV=ON — building WITHOUT motion detection")
     set(OPENCV_AVAILABLE FALSE)
+else()
+    # Hard failure, deliberately. Falling through to HAVE_OPENCV=0 produced a *successful*
+    # build with motion detection silently compiled out — indistinguishable from a good
+    # build until the car fails to detect anything. downloadOpenCV now guarantees these
+    # files exist (and fails loudly if it cannot), so reaching here means something is
+    # genuinely wrong rather than merely un-downloaded.
+    message(FATAL_ERROR
+        "OpenCV not found or incomplete.\n"
+        "  libs:    ${OPENCV_LIB_DIR}\n"
+        "  headers: ${OPENCV_INCLUDE_DIR}/opencv2\n"
+        "Run: ./gradlew :app:downloadOpenCV\n"
+        "To build deliberately without motion detection, configure with -DALLOW_NO_OPENCV=ON.")
 endif()
 
 # ==================== Surveillance Library ====================
