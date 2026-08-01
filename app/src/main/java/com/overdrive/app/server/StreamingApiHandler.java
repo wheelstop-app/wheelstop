@@ -1087,6 +1087,12 @@ public class StreamingApiHandler {
                     String mm = bs.optString("mergeMode", "both");
                     pipeline.setBlindSpotMergeMode(
                         "side".equals(mm) ? 1 : ("rear".equals(mm) ? 2 : 0));
+                    // Clarity (contrast/sharpen) — apply alongside the stitch calib and
+                    // merge mode so a browser switching the live stream to 7/8 matches
+                    // the persisted selection, not the scaler's neutral default.
+                    pipeline.setBlindSpotClarity(
+                        com.overdrive.app.config.UnifiedConfigManager.getBlindSpotContrast(),
+                        com.overdrive.app.config.UnifiedConfigManager.getBlindSpotSharpen());
                 }
             } catch (Throwable t) {
                 CameraDaemon.log("blindspot calib apply failed: " + t.getMessage());

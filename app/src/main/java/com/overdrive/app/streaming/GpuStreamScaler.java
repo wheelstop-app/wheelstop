@@ -958,14 +958,13 @@ public class GpuStreamScaler {
         // The legacy 4-strip math stays for uApaMode <= 2.5 paths.
         return String.format(Locale.US,
             "#extension GL_OES_EGL_image_external : require\n" +
-            // Guarded unsharp in odBlend (view 7/8 only) needs fwidth() to size its
-            // tap offsets from the screen-space UV derivative. #extension directives
-            // must precede any non-preprocessor token (GLSL ES 1.00 spec) — kept
-            // grouped with the other #extension line, above `precision`. Adreno 610
-            // supports GL_OES_standard_derivatives; if a device lacks it this fails
-            // to link and the fwidth() call below should fall back to a fixed
-            // vec2 duv = vec2(0.0015, 0.0015) offset (see odBlend sharpen block).
-            "#extension GL_OES_standard_derivatives : enable\n" +
+            // Guarded unsharp in odBlend (view 7/8 only) previously needed fwidth()
+            // to size its tap offsets, which required
+            // #extension GL_OES_standard_derivatives : enable. This is ONE shared
+            // fragment program — if that extension failed to link on a device, ALL
+            // camera views would break (not just blind-spot), with no runtime
+            // fallback. Removed: duv is now a fixed source-space offset (see the
+            // odBlend sharpen block), so the program compiles on any GLES2 device.
             // highp: the view 7/8 sampler needs the extra precision (mediump, the
             // Adreno 610 fragment default, shimmers the seam). Other paths insensitive.
             "precision highp float;\n" +
@@ -1086,12 +1085,13 @@ public class GpuStreamScaler {
             "    vec3 col = mix(a, b, wB).rgb;\n" +
             // Guarded unsharp (views 7/8 clarity): uBsSharpen == 0.0 (default)
             // skips this block entirely — bit-identical to the pre-clarity shader.
-            // duv sizes the 4-tap cross sample from the screen-space UV derivative
-            // (fwidth) so the blur radius tracks zoom/aspect instead of a fixed
-            // texel count; see the #extension GL_OES_standard_derivatives note above.
+            // duv is a fixed source-space offset (no derivatives dependency — see
+            // the removed #extension GL_OES_standard_derivatives note above), so
+            // the program compiles on any GLES2 device with no runtime fallback
+            // needed.
             "    if (uBsSharpen > 0.0) {\n" +
             "        vec2 uvP = mix(uvA, uvB, wB);\n" +
-            "        vec2 duv = fwidth(uvP) * 1.5;\n" +
+            "        vec2 duv = vec2(0.0015, 0.0015);\n" +
             "        vec3 blur = 0.25 * (\n" +
             "            texture2D(uCameraTex, uvP + vec2(duv.x, 0.0)).rgb +\n" +
             "            texture2D(uCameraTex, uvP - vec2(duv.x, 0.0)).rgb +\n" +
@@ -1099,8 +1099,12 @@ public class GpuStreamScaler {
             "            texture2D(uCameraTex, uvP - vec2(0.0, duv.y)).rgb);\n" +
             "        col += uBsSharpen * (col - blur);\n" +
             "    }\n" +
-            // uBsContrast == 1.0 (default) is an identity pivot around mid-grey.
-            "    col = clamp((col - 0.5) * uBsContrast + 0.5, 0.0, 1.0);\n" +
+            // Clarity (contrast + sharpen) applies only in merge mode "both": the
+            // single-camera merge modes sample uCameraTex directly and bypass
+            // odBlend, so they are unaffected by design.
+            // uBsContrast == 1.0 (default): skip the branch entirely so no clamp
+            // is introduced — provably bit-identical to the pre-branch shader.
+            "    if (uBsContrast != 1.0) col = clamp((col - 0.5) * uBsContrast + 0.5, 0.0, 1.0);\n" +
             "    return vec4(col, cov);\n" +
             "}\n" +
             // Blind-spot card mask params (views 7/8 only). aspect = outputWidth/
