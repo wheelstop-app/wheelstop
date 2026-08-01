@@ -1,3 +1,7 @@
+// Explicit import: inside a .gradle.kts script `java` resolves to Gradle's JavaPluginExtension
+// accessor, not the java.* package, so `java.security.MessageDigest` fails to compile.
+import java.security.MessageDigest
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -5,51 +9,98 @@ plugins {
 
 val openh264Version = "2.6.0"
 
+// SHA-256 of the exact upstream artifacts these tasks fetch. Pinned so a build cannot
+// silently consume a substituted or truncated download. Update deliberately, together
+// with the version above, and record where the new digest came from.
+//   openh264: https://ciscobinary.openh264.org/libopenh264-2.6.0-android-arm64.8.so.bz2
+//   opencv  : https://github.com/nihui/opencv-mobile/releases/download/v31/opencv-mobile-4.10.0-android.zip
+val openh264Sha256 = "c702d68c9c8db492a43c1d73a497cea5f31ae5d23e330dcb13bd28cab1dbbf2a"
+val opencvMobileSha256 = "1fd97600f3ed7a0ea17fbd6d009bb9902eec9d968e7b74d5141285b6d7ce3412"
+
+/**
+ * Verify a downloaded artifact against its pinned digest, or fail the build.
+ *
+ * Deliberately a hard failure. The previous behaviour — catch, print a warning, carry on
+ * — is worse than useless for OpenCV in particular: CMake then takes its `HAVE_OPENCV=0`
+ * branch and the build SUCCEEDS with motion detection compiled out. A green build that
+ * silently dropped a feature is the one outcome CI must never produce.
+ */
+fun verifyDigest(f: File, expected: String, what: String) {
+    if (!f.exists()) throw GradleException("$what: download produced no file at ${f.absolutePath}")
+    val actual = MessageDigest.getInstance("SHA-256")
+        .digest(f.readBytes())
+        .joinToString("") { b -> "%02x".format(b) }
+    if (!actual.equals(expected, ignoreCase = true)) {
+        f.delete()  // never leave a file that failed verification lying around
+        throw GradleException(
+            "$what: SHA-256 mismatch — refusing to use this artifact.\n" +
+            "  expected $expected\n  actual   $actual\n" +
+            "If the upstream release was legitimately re-published, update the pin in " +
+            "app/build.gradle.kts in the same commit as the version bump."
+        )
+    }
+    logger.lifecycle("✓ $what: digest verified")
+}
+
 // Auto-download OpenH264 from Cisco's official binary releases
 tasks.register("downloadOpenH264") {
     val openh264Dir = file("src/main/cpp/openh264")
-    
+
     doLast {
-        // Cisco's official binary URLs - only arm64-v8a for BYD cars
+        // HTTPS, not HTTP. Cisco serves the identical artifact over TLS; the previous
+        // cleartext URL made the digest pin the only thing standing between a build and
+        // an on-path substitution, and also fails outright in CI images that block
+        // cleartext egress.
         val abiMap = mapOf(
-            "arm64-v8a" to "http://ciscobinary.openh264.org/libopenh264-${openh264Version}-android-arm64.8.so.bz2"
+            "arm64-v8a" to "https://ciscobinary.openh264.org/libopenh264-${openh264Version}-android-arm64.8.so.bz2"
             // Removed armeabi-v7a to reduce APK size
         )
-        
+
         abiMap.forEach { (abi, url) ->
             val libDir = file("${openh264Dir}/lib/${abi}")
             libDir.mkdirs()
-            
+
             val soFile = file("${libDir}/libopenh264.so")
             if (!soFile.exists()) {
-                println("Downloading OpenH264 ${openh264Version} for ${abi}...")
+                logger.lifecycle("Downloading OpenH264 ${openh264Version} for ${abi}...")
                 val bzFile = file("${libDir}/temp.bz2")
-                
+
                 try {
                     ant.invokeMethod("get", mapOf("src" to url, "dest" to bzFile.absolutePath))
-                    if (bzFile.exists() && bzFile.length() > 1000) {
-                        ant.invokeMethod("bunzip2", mapOf("src" to bzFile.absolutePath))
-                        file("${libDir}/temp").renameTo(soFile)
-                        println("✓ OpenH264 downloaded for ${abi}")
-                    }
                 } catch (e: Exception) {
-                    println("⚠ Download failed: ${e.message}")
+                    throw GradleException("OpenH264 download failed from $url: ${e.message}", e)
                 }
+                verifyDigest(bzFile, openh264Sha256, "OpenH264 ${openh264Version} ($abi)")
+
+                ant.invokeMethod("bunzip2", mapOf("src" to bzFile.absolutePath))
+                val unpacked = file("${libDir}/temp")
+                if (!unpacked.renameTo(soFile)) {
+                    throw GradleException("OpenH264: could not move ${unpacked} to ${soFile}")
+                }
+                // The old code left temp.bz2 behind on every fresh build.
+                bzFile.delete()
+                logger.lifecycle("✓ OpenH264 installed for ${abi}")
             }
         }
-        
-        // Download headers from Cisco's GitHub
+
+        // Download headers from Cisco's GitHub. Not digest-pinned individually — they are
+        // fetched from an immutable tag ref and are compile-time only — but a failure here
+        // still has to stop the build, because a missing header surfaces as a confusing
+        // C++ error hundreds of lines later.
         val includeDir = file("${openh264Dir}/include/wels")
         includeDir.mkdirs()
         listOf("codec_api.h", "codec_app_def.h", "codec_def.h", "codec_ver.h").forEach { h ->
             val f = file("${includeDir}/${h}")
             if (!f.exists()) {
+                val url = "https://raw.githubusercontent.com/cisco/openh264/v${openh264Version}/codec/api/wels/${h}"
                 try {
-                    ant.invokeMethod("get", mapOf(
-                        "src" to "https://raw.githubusercontent.com/cisco/openh264/v${openh264Version}/codec/api/wels/${h}",
-                        "dest" to f.absolutePath
-                    ))
-                } catch (e: Exception) { }
+                    ant.invokeMethod("get", mapOf("src" to url, "dest" to f.absolutePath))
+                } catch (e: Exception) {
+                    throw GradleException("OpenH264 header download failed ($h) from $url: ${e.message}", e)
+                }
+                if (!f.exists() || f.length() == 0L) {
+                    throw GradleException("OpenH264 header $h downloaded empty from $url")
+                }
             }
         }
     }
@@ -81,69 +132,64 @@ tasks.register("downloadOpenCV") {
             val zipUrl = "https://github.com/nihui/opencv-mobile/releases/download/${opencvMobileTag}/opencv-mobile-${opencvMobileVersion}-android.zip"
             val zipFile = file("${opencvDir}/opencv-mobile-android.zip")
             
+            logger.lifecycle("Downloading from: $zipUrl")
             try {
-                // Download opencv-mobile
-                println("Downloading from: $zipUrl")
                 ant.invokeMethod("get", mapOf(
                     "src" to zipUrl,
                     "dest" to zipFile.absolutePath
                 ))
-                
-                if (zipFile.exists() && zipFile.length() > 100000) {
-                    println("Extracting opencv-mobile (${zipFile.length() / 1024 / 1024}MB)...")
-                    
-                    ant.invokeMethod("unzip", mapOf(
-                        "src" to zipFile.absolutePath,
-                        "dest" to opencvDir.absolutePath
-                    ))
-                    
-                    // List extracted contents for debugging
-                    opencvDir.listFiles()?.forEach { println("  Found: ${it.name}") }
-                    
-                    // opencv-mobile extracts to opencv-mobile-VERSION-android/
-                    val extractedDir = file("${opencvDir}/opencv-mobile-${opencvMobileVersion}-android")
-                    
-                    if (extractedDir.exists()) {
-                        // Copy arm64-v8a static libs
-                        val extractedLibDir = file("${extractedDir}/sdk/native/staticlibs/arm64-v8a")
-                        if (extractedLibDir.exists()) {
-                            extractedLibDir.listFiles()?.forEach { f ->
-                                println("  Copying lib: ${f.name}")
-                                f.copyTo(file("${libDir}/${f.name}"), overwrite = true)
-                            }
-                            println("✓ opencv-mobile libraries copied")
-                        } else {
-                            println("⚠ Lib dir not found: ${extractedLibDir}")
-                        }
-                        
-                        // Copy headers
-                        val extractedInclude = file("${extractedDir}/sdk/native/jni/include")
-                        if (extractedInclude.exists()) {
-                            if (includeDir.exists()) includeDir.deleteRecursively()
-                            extractedInclude.copyRecursively(includeDir, overwrite = true)
-                            println("✓ opencv-mobile headers copied")
-                        } else {
-                            println("⚠ Include dir not found: ${extractedInclude}")
-                        }
-                        
-                        // Cleanup
-                        zipFile.delete()
-                        extractedDir.deleteRecursively()
-                        
-                        println("✓ opencv-mobile ${opencvMobileVersion} installed (~3MB vs ~20MB)")
-                    } else {
-                        println("⚠ Extracted dir not found: ${extractedDir}")
-                        println("  Available: ${opencvDir.listFiles()?.map { it.name }}")
-                    }
-                } else {
-                    println("⚠ Download failed or file too small: ${zipFile.length()} bytes")
-                }
             } catch (e: Exception) {
-                println("⚠ opencv-mobile download failed: ${e.message}")
-                e.printStackTrace()
+                throw GradleException("opencv-mobile download failed from $zipUrl: ${e.message}", e)
             }
+            verifyDigest(zipFile, opencvMobileSha256, "opencv-mobile $opencvMobileVersion")
+
+            logger.lifecycle("Extracting opencv-mobile (${zipFile.length() / 1024 / 1024}MB)...")
+            ant.invokeMethod("unzip", mapOf(
+                "src" to zipFile.absolutePath,
+                "dest" to opencvDir.absolutePath
+            ))
+
+            // opencv-mobile extracts to opencv-mobile-VERSION-android/
+            val extractedDir = file("${opencvDir}/opencv-mobile-${opencvMobileVersion}-android")
+            if (!extractedDir.exists()) {
+                throw GradleException(
+                    "opencv-mobile: expected $extractedDir after extraction, found " +
+                    "${opencvDir.listFiles()?.map { it.name }}. The release layout may have changed."
+                )
+            }
+
+            // Copy arm64-v8a static libs
+            val extractedLibDir = file("${extractedDir}/sdk/native/staticlibs/arm64-v8a")
+            if (!extractedLibDir.exists()) {
+                throw GradleException("opencv-mobile: static lib dir not found at $extractedLibDir")
+            }
+            extractedLibDir.listFiles()?.forEach { f ->
+                f.copyTo(file("${libDir}/${f.name}"), overwrite = true)
+            }
+
+            // Copy headers
+            val extractedInclude = file("${extractedDir}/sdk/native/jni/include")
+            if (!extractedInclude.exists()) {
+                throw GradleException("opencv-mobile: include dir not found at $extractedInclude")
+            }
+            if (includeDir.exists()) includeDir.deleteRecursively()
+            extractedInclude.copyRecursively(includeDir, overwrite = true)
+
+            // Post-condition: this is what CMakeLists actually probes for. Assert it rather
+            // than trusting that the copies above did the right thing.
+            val coreLib = file("${libDir}/libopencv_core.a")
+            if (!coreLib.exists() || !file("${includeDir}/opencv2").exists()) {
+                throw GradleException(
+                    "opencv-mobile: install incomplete — CMake requires both $coreLib and " +
+                    "${includeDir}/opencv2"
+                )
+            }
+
+            zipFile.delete()
+            extractedDir.deleteRecursively()
+            logger.lifecycle("✓ opencv-mobile ${opencvMobileVersion} installed")
         } else {
-            println("✓ opencv-mobile found at ${libDir}")
+            logger.lifecycle("✓ opencv-mobile found at ${libDir}")
         }
     }
 }
