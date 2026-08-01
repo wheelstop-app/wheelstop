@@ -12,7 +12,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Comment on new issue
-        uses: peter-evans/create-or-update-comment@v4
+        # Pinned to a commit rather than the mutable v4 tag: this job holds
+        # `issues: write`, so whoever controls that tag controls that permission.
+        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043 # v4
         with:
           issue-number: ${{ github.event.issue.number }}
           body: |
