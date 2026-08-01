@@ -68,6 +68,12 @@ BYD.roadSense = {
         bsProjExp: 1.0,
         bsRearRoll: 0.0,
         bsRearPitch: 0.0,
+        // Blind-spot card clarity (views 7/8 stitched output, applied inside
+        // odBlend): contrast pivot around mid-grey (1.0 = neutral/identity) and
+        // unsharp-mask amount (0.0 = off). Safety-clamped 0.5..2.0 / 0.0..1.0,
+        // same range enforced server-side by UnifiedConfigManager.
+        bsContrast: 1.0,
+        bsSharpen: 0.0,
         // On-screen card size (% of panel width) + corner. Persisted as a preset
         // (not absolute px) so it stays correct across portrait/landscape rotation.
         // PER-TARGET: the head-unit set (bsSizePct/bsCorner) and the cluster set
@@ -95,6 +101,10 @@ BYD.roadSense = {
     },
 
     async init() {
+        // Inject the Contrast/Sharpen sliders into the BS calibration card before
+        // the first updateUI() reflects their values (see _bsInjectClaritySliders
+        // for why this is done from JS rather than the static HTML template).
+        this._bsInjectClaritySliders();
         await this.loadConfig();
         this.updateUI();
 
@@ -183,6 +193,8 @@ BYD.roadSense = {
                 if (typeof bs.projExp === 'number') c.bsProjExp = this._clamp(bs.projExp, 0.4, 1.6);
                 if (typeof bs.rearRoll === 'number') c.bsRearRoll = this._clamp(bs.rearRoll, -0.4, 0.4);
                 if (typeof bs.rearPitch === 'number') c.bsRearPitch = this._clamp(bs.rearPitch, -0.4, 0.4);
+                if (typeof bs.contrast === 'number') c.bsContrast = this._clamp(bs.contrast, 0.5, 2.0);
+                if (typeof bs.sharpen === 'number')  c.bsSharpen  = this._clamp(bs.sharpen, 0.0, 1.0);
                 // Display target ('head_unit' default | 'cluster').
                 if (bs.target === 'cluster' || bs.target === 'head_unit') c.bsTarget = bs.target;
                 // Cluster layout (size profile opcode 29/30/31).
@@ -354,6 +366,8 @@ BYD.roadSense = {
         this._bsSetSlider('bsProjExp', 'bsProjExpVal', c.bsProjExp);
         this._bsSetSlider('bsRearRoll', 'bsRearRollVal', c.bsRearRoll);
         this._bsSetSlider('bsRearPitch', 'bsRearPitchVal', c.bsRearPitch);
+        this._bsSetSlider('bsContrast', 'bsContrastVal', c.bsContrast);
+        this._bsSetSlider('bsSharpen', 'bsSharpenVal', c.bsSharpen);
         // Reflect the ACTIVE target's saved size%/corner + layout dropdown, and
         // highlight the selected display target. Normalise first so a missing/empty
         // value still shows a definite selection (defaults head_unit).
@@ -1088,6 +1102,46 @@ BYD.roadSense = {
 
     // ==================== Blind Spot ====================
 
+    /**
+     * The Contrast/Sharpen calibration sliders aren't in the static
+     * road-sense.html template (this task is scoped to road-sense.js only), so
+     * inject them next to the geometry sliders on init, matching the exact
+     * DOM/markup convention of the existing rows (copy of the bsRearPitch
+     * setting-row: same .setting-row/.setting-info/.setting-control/
+     * .slider-control structure, id="bsContrast"/"bsContrastVal" +
+     * id="bsSharpen"/"bsSharpenVal", same inline oninput="RoadSenseSettings.
+     * bsTune()" wiring as every other BS slider). Inserted right after the
+     * bsRearPitch row and before the Apply/Reset button row. Idempotent
+     * (checked by id) so a re-init — e.g. visibilitychange 'visible' calling
+     * reload() — never double-inserts. Browser-parsed inline event-handler
+     * attributes on HTML set via insertAdjacentHTML wire up the same as static
+     * markup, so oninput fires normally. Runs BYD.i18n.hydrate() on the new
+     * rows afterward so a future translation catalog entry for
+     * road_sense.bs_contrast/bs_sharpen picks up automatically; until then the
+     * hardcoded fallback text renders (hydrate leaves text alone when a key
+     * isn't in the catalog).
+     */
+    _bsInjectClaritySliders() {
+        if (document.getElementById('bsContrast')) return;
+        var anchorInput = document.getElementById('bsRearPitch');
+        var anchorRow = (anchorInput && anchorInput.closest) ? anchorInput.closest('.setting-row') : null;
+        if (!anchorRow || !anchorRow.parentNode) return;
+        anchorRow.insertAdjacentHTML('afterend',
+            '<div class="setting-row"><div class="setting-info"><div class="setting-name" data-i18n="road_sense.bs_contrast">Contrast</div></div>' +
+                '<div class="setting-control"><div class="slider-control">' +
+                    '<span class="slider-value" id="bsContrastVal">1.00</span>' +
+                    '<input type="range" class="slider" id="bsContrast" min="0.5" max="2.0" step="0.05" value="1.0" oninput="RoadSenseSettings.bsTune()">' +
+                '</div></div>' +
+            '</div>' +
+            '<div class="setting-row"><div class="setting-info"><div class="setting-name" data-i18n="road_sense.bs_sharpen">Sharpen</div></div>' +
+                '<div class="setting-control"><div class="slider-control">' +
+                    '<span class="slider-value" id="bsSharpenVal">0.00</span>' +
+                    '<input type="range" class="slider" id="bsSharpen" min="0" max="1.0" step="0.05" value="0.0" oninput="RoadSenseSettings.bsTune()">' +
+                '</div></div>' +
+            '</div>');
+        if (BYD.i18n && typeof BYD.i18n.hydrate === 'function') BYD.i18n.hydrate(anchorRow.parentNode);
+    },
+
     /** Kick the native overlay service to react to the just-saved enabled/preview
      *  flag immediately. AndroidBridge is only present inside the in-app WebView;
      *  on a tunnel/browser there's no native overlay so this is a harmless no-op. */
@@ -1246,6 +1300,10 @@ BYD.roadSense = {
         if (rr) c.bsRearRoll = parseFloat(rr.value);
         var rp = document.getElementById('bsRearPitch');
         if (rp) c.bsRearPitch = parseFloat(rp.value);
+        var ct = document.getElementById('bsContrast');
+        if (ct) c.bsContrast = parseFloat(ct.value);
+        var sh = document.getElementById('bsSharpen');
+        if (sh) c.bsSharpen = parseFloat(sh.value);
         document.getElementById('bsRearFovVal').textContent = String(c.bsRearFov);
         document.getElementById('bsSideFovVal').textContent = String(c.bsSideFov);
         document.getElementById('bsYawVal').textContent = String(c.bsYaw);
@@ -1258,10 +1316,17 @@ BYD.roadSense = {
         if (rrv) rrv.textContent = String(c.bsRearRoll);
         var rpv = document.getElementById('bsRearPitchVal');
         if (rpv) rpv.textContent = String(c.bsRearPitch);
+        var ctv = document.getElementById('bsContrastVal');
+        if (ctv) ctv.textContent = String(c.bsContrast);
+        var shv = document.getElementById('bsSharpenVal');
+        if (shv) shv.textContent = String(c.bsSharpen);
     },
 
     /** Live-tune the in-car stitch via /api/stream/bs (in-memory, debounced).
-     *  Order: hfov/sideHFov/yaw/roll/feather/projExp/vscale/pitch/rearRoll/rearPitch. */
+     *  POSITIONAL, slash-delimited — NOT named/query params. Order: hfov/sideHFov/
+     *  yaw/roll/feather/projExp/vscale/pitch/rearRoll/rearPitch/contrast/sharpen
+     *  (contrast = p[10], sharpen = p[11] server-side; StreamingApiHandler
+     *  .handleBlindSpotParams parses this exact positional list). */
     bsTune() {
         this._bsReadSliders();
         const c = this.config;
@@ -1269,7 +1334,7 @@ BYD.roadSense = {
         this._bsTuneTimer = setTimeout(function () {
             fetch('/api/stream/bs/' + c.bsRearFov + '/' + c.bsSideFov + '/' + c.bsYaw +
                   '/' + c.bsRoll + '/' + c.bsFeather + '/' + c.bsProjExp + '/1.0/' + c.bsPitch +
-                  '/' + c.bsRearRoll + '/' + c.bsRearPitch,
+                  '/' + c.bsRearRoll + '/' + c.bsRearPitch + '/' + c.bsContrast + '/' + c.bsSharpen,
                   { method: 'POST' });
         }, 120);
     },
@@ -1434,7 +1499,8 @@ BYD.roadSense = {
         const ok = await this._bsSave({
             rearFov: c.bsRearFov, sideFov: c.bsSideFov, yaw: c.bsYaw,
             roll: c.bsRoll, pitch: c.bsPitch, feather: c.bsFeather,
-            projExp: c.bsProjExp, rearRoll: c.bsRearRoll, rearPitch: c.bsRearPitch
+            projExp: c.bsProjExp, rearRoll: c.bsRearRoll, rearPitch: c.bsRearPitch,
+            contrast: c.bsContrast, sharpen: c.bsSharpen
         });
         if (ok) this._toastSaved(); else this._toastFailed();
     },
@@ -1444,6 +1510,7 @@ BYD.roadSense = {
         c.bsRearFov = 1.66; c.bsSideFov = 1.98; c.bsYaw = 1.23;
         c.bsRoll = 0.25; c.bsPitch = -0.275; c.bsFeather = 0.38;
         c.bsProjExp = 1.0; c.bsRearRoll = 0.0; c.bsRearPitch = 0.0;
+        c.bsContrast = 1.0; c.bsSharpen = 0.0;
         this._bsSetSlider('bsRearFov', 'bsRearFovVal', c.bsRearFov);
         this._bsSetSlider('bsSideFov', 'bsSideFovVal', c.bsSideFov);
         this._bsSetSlider('bsYaw', 'bsYawVal', c.bsYaw);
@@ -1453,6 +1520,8 @@ BYD.roadSense = {
         this._bsSetSlider('bsProjExp', 'bsProjExpVal', c.bsProjExp);
         this._bsSetSlider('bsRearRoll', 'bsRearRollVal', c.bsRearRoll);
         this._bsSetSlider('bsRearPitch', 'bsRearPitchVal', c.bsRearPitch);
+        this._bsSetSlider('bsContrast', 'bsContrastVal', c.bsContrast);
+        this._bsSetSlider('bsSharpen', 'bsSharpenVal', c.bsSharpen);
         this.bsTune();
         await this.bsSave();
     }
