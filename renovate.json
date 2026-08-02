@@ -1,0 +1,41 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "schedule:weekly",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "dependencyDashboard": true,
+  "prConcurrentLimit": 5,
+  "prHourlyLimit": 2,
+  "labels": ["dependencies"],
+  "packageRules": [
+    {
+      "description": "Group non-major Gradle/AGP/Kotlin/library updates (from gradle/libs.versions.toml and app/build.gradle.kts) into a single PR. Major bumps (e.g. AGP or Kotlin major versions) are left ungrouped since they often need manual migration.",
+      "matchManagers": ["gradle"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "gradle dependencies (non-major)"
+    },
+    {
+      "description": "Group GitHub Actions SHA/digest and version bumps into a single PR. helpers:pinGitHubActionDigests (above) keeps `uses:` pinned to full commit SHAs with the version comment, which is what keeps .github/workflows zizmor-clean.",
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions"
+    },
+    {
+      "description": "MANUAL ONLY — do not touch. openh264Version/openh264Sha256 and opencvMobileVersion/opencvMobileSha256/opencvMobileTag in app/build.gradle.kts are not normal package-manager dependencies: they are digest-pinned native binaries fetched by the bespoke downloadOpenH264/downloadOpenCV Gradle tasks and checked against the hardcoded SHA-256 in verifyDigest(). Bumping the version string without also re-deriving and updating the matching SHA-256 (and re-auditing the artifact) would either break the build's digest check or silently accept an unverified binary. These are intentionally excluded from every manager and must be updated by hand.",
+      "matchManagers": ["gradle"],
+      "matchFileNames": ["app/build.gradle.kts"],
+      "matchPackageNames": [
+        "openh264Version",
+        "openh264Sha256",
+        "opencvMobileVersion",
+        "opencvMobileSha256",
+        "opencvMobileTag"
+      ],
+      "enabled": false
+    }
+  ],
+  "ignorePaths": [
+    "app/tunnel-binaries.lock"
+  ]
+}
