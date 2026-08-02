@@ -1312,7 +1312,7 @@ public class VehicleControlApiHandler {
     }
 
     /** Where screenshots are written (world-readable, same tree as other daemon files). */
-    private static final String SCREENSHOT_DIR = "/data/local/tmp/.overdrive/screenshots";
+    private static final String SCREENSHOT_DIR = "/data/local/tmp/.wheelstop/screenshots";
 
     /**
      * UI navigation + screenshot + move-to-display, run as the UID-2000 daemon via
@@ -1421,7 +1421,7 @@ public class VehicleControlApiHandler {
 
     // Audio library dir (mirror of AudioApiHandler.AUDIO_DIR) — where uploaded
     // sounds picked by the "Play Audio" action live. A "name" payload resolves here.
-    private static final String AUDIO_LIBRARY_DIR = "/data/local/tmp/.overdrive/audio";
+    private static final String AUDIO_LIBRARY_DIR = "/data/local/tmp/.wheelstop/audio";
 
     /**
      * Play an uploaded sound (by library {@code name}) or an explicit {@code path} on

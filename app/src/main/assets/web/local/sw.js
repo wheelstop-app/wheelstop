@@ -34,7 +34,7 @@
 // installs — so daemon-restart reloads still painted the wide dashboard
 // hero sprite into the narrow sidebar canvas (looked compressed), and
 // only a hard refresh (which bypasses the SW) cleared it. Bumping forces
-// a fresh precache on next visit and reaps overdrive-3d-v1.
+// a fresh precache on next visit and reaps wheelstop-3d-v1.
 //
 // v3: dashboard refactor added the 'three-quarter' hero view —
 // ev-card-3d.js gained the new camera/rotation branch AND
@@ -43,7 +43,7 @@
 // without this bump the SW would keep serving the old bytes to existing
 // installs, so the hero would render side-framed (no three-quarter
 // branch) and re-introduce the wrong-sprite-into-canvas symptom.
-const CACHE_VERSION = 'overdrive-3d-v3';
+const CACHE_VERSION = 'wheelstop-3d-v3';
 
 // Static, APK-bundled assets that the EV card needs on every page.
 // Same-origin only — the daemon serves these with public, max-age=86400,
@@ -93,7 +93,7 @@ self.addEventListener('activate', (event) => {
     // until the browser-level Cache Storage quota evicts them.
     const names = await caches.keys();
     await Promise.all(names
-      .filter((n) => n !== CACHE_VERSION && n.indexOf('overdrive-3d-') === 0)
+      .filter((n) => n !== CACHE_VERSION && n.indexOf('wheelstop-3d-') === 0)
       .map((n) => caches.delete(n)));
     await self.clients.claim();
   })());
@@ -167,7 +167,7 @@ function showFromPayload(payload) {
     // than the real branding. Same source file — Android renders it
     // monochrome anyway.
     badge: '/shared/app-icon-dark.webp',
-    tag: payload.tag || payload.category || 'overdrive',
+    tag: payload.tag || payload.category || 'wheelstop',
     timestamp: payload.ts || Date.now(),
     data: payload,
     renotify: severity === 'critical'

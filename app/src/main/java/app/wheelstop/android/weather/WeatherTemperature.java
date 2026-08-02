@@ -117,7 +117,7 @@ public final class WeatherTemperature {
                     lat, lon);
             Request request = new Request.Builder()
                     .url(url)
-                    .header("User-Agent", "OverDrive/1.0")
+                    .header("User-Agent", "Wheelstop/1.0")
                     .build();
             OkHttpClient client = new OkHttpClient.Builder()
                     .proxy(ProxyHelper.getHttpProxy())

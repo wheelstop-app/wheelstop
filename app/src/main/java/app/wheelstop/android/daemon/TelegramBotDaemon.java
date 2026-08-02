@@ -1288,7 +1288,7 @@ public class TelegramBotDaemon {
                             // the hint and deny the next legit notify its
                             // post-update framing.
                             boolean postUpdatePresent = new File(
-                                    "/data/local/tmp/overdrive_post_update_pending_telegram"
+                                    "/data/local/tmp/wheelstop_post_update_pending_telegram"
                                 ).exists();
                             // A FAILED install (Telegram-triggered) leaves the
                             // failure hint instead of the success hint — bypass
@@ -1296,7 +1296,7 @@ public class TelegramBotDaemon {
                             // install failed NOW, not 10 min later (symmetric
                             // with the post-update success bypass above).
                             boolean installFailedPresent = new File(
-                                    "/data/local/tmp/overdrive_install_failed_pending_telegram"
+                                    "/data/local/tmp/wheelstop_install_failed_pending_telegram"
                                 ).exists();
                             if (!postUpdatePresent
                                     && !installFailedPresent
@@ -1859,7 +1859,7 @@ public class TelegramBotDaemon {
         // notifyTunnel for the post-update tunnel-URL message); we only
         // peek here so both flows can read it independently.
         boolean postUpdateBypass = new File(
-                "/data/local/tmp/overdrive_post_update_pending_telegram").exists();
+                "/data/local/tmp/wheelstop_post_update_pending_telegram").exists();
 
         // Cross-process throttle: skip if we greeted within the last hour
         // AND under the same kernel boot_id. File lives in /data/local/tmp
@@ -2975,7 +2975,7 @@ public class TelegramBotDaemon {
      * avoid pulling the whole updater package transitively.
      */
     private static String consumePostUpdateHint() {
-        File hint = new File("/data/local/tmp/overdrive_post_update_pending_telegram");
+        File hint = new File("/data/local/tmp/wheelstop_post_update_pending_telegram");
         if (!hint.exists()) return null;
         String version = null;
         try (BufferedReader r = new BufferedReader(new InputStreamReader(new FileInputStream(hint)))) {
@@ -3006,7 +3006,7 @@ public class TelegramBotDaemon {
      * process and we avoid pulling the whole updater package transitively.
      */
     private static String consumeInstallFailedHint() {
-        File hint = new File("/data/local/tmp/overdrive_install_failed_pending_telegram");
+        File hint = new File("/data/local/tmp/wheelstop_install_failed_pending_telegram");
         if (!hint.exists()) return null;
         String reason = null;
         try (BufferedReader r = new BufferedReader(new InputStreamReader(new FileInputStream(hint)))) {

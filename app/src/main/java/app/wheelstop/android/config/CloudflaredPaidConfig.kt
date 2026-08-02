@@ -21,7 +21,7 @@ import org.json.JSONObject
  * The tunnel token is a Cloudflare account credential. It is persisted
  * ENCRYPTED via CredentialCipher (mirrors BydCloudConfig / NavMapConfig) —
  * never plaintext — because the unified config lives in world-readable
- * /data/local/tmp/overdrive_config.json. getToken() decrypts on read;
+ * /data/local/tmp/wheelstop_config.json. getToken() decrypts on read;
  * legacy plaintext values decrypt as-is (CredentialCipher no-ops without
  * the ENC: marker), so an upgrade does not lose an existing token.
  */

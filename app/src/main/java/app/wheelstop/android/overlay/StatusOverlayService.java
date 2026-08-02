@@ -1164,7 +1164,7 @@ public class StatusOverlayService extends Service {
             // FIX M4: a single forceReload at the top of the tick replaces
             // four separate forceReload() calls scattered through
             // refreshAudioConfig / parseStatus / updateUI. Each forceReload
-            // re-reads /data/local/tmp/overdrive_config.json and re-parses
+            // re-reads /data/local/tmp/wheelstop_config.json and re-parses
             // the JSON; doing it 4× per 3 s tick was ~12 disk reads + 4
             // JSON parses for the same file mtime. The cache is now
             // consistent across the four downstream reads in this tick;
@@ -1529,7 +1529,7 @@ public class StatusOverlayService extends Service {
         // app process.
         if (!running.get()) return;
         // User-facing visibility toggles. Stored in the unified config file
-        // (/data/local/tmp/overdrive_config.json) rather than SharedPreferences
+        // (/data/local/tmp/wheelstop_config.json) rather than SharedPreferences
         // because both the app UID and the shell/daemon UID need to see the
         // same values. Read fresh on every poll so a flip in Settings reflects
         // without a service restart. Defaults to true so existing installs

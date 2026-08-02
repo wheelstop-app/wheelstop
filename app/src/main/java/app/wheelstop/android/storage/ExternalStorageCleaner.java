@@ -107,7 +107,7 @@ public class ExternalStorageCleaner {
     };
     
     // Config file location (shared with StorageManager)
-    private static final String CONFIG_FILE = "/data/local/tmp/overdrive_config.json";
+    private static final String CONFIG_FILE = "/data/local/tmp/wheelstop_config.json";
     
     // Default configuration
     private static final long DEFAULT_RESERVED_SPACE_MB = 2048;  // 2GB
@@ -253,7 +253,7 @@ public class ExternalStorageCleaner {
             // Skip Android system directories
             String name = dir.getName();
             if (name.equals("Android") || name.equals(".") || name.equals("..") || 
-                name.startsWith(".") || name.equals("Overdrive")) {
+                name.startsWith(".") || name.equals("Wheelstop") || name.equals("Overdrive")) {
                 continue;
             }
             
@@ -373,7 +373,7 @@ public class ExternalStorageCleaner {
      *
      * <p>Routes the {@code externalCleanup} section persist through
      * UnifiedConfigManager so there is ONE lock domain + ONE atomic writer over
-     * /data/local/tmp/overdrive_config.json. The previous body did its own
+     * /data/local/tmp/wheelstop_config.json. The previous body did its own
      * read-modify-write (FileReader read + bare truncating FileWriter) guarded
      * only by {@code synchronized(this)} — a disjoint mutex from UCM's
      * cross-process FileLock + tmp+rename. The two schemes did not exclude each

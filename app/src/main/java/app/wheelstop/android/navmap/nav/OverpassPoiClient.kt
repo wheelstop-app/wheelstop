@@ -49,7 +49,7 @@ object OverpassPoiClient {
     private const val OVERPASS_ENDPOINT = "https://overpass-api.de/api/interpreter"
 
     /** Required by OSM/Overpass usage policy (identifies the client). */
-    private const val USER_AGENT = "OverDrive/1.0 (RoadSense navigation)"
+    private const val USER_AGENT = "Wheelstop/1.0 (RoadSense navigation)"
 
     /** Max results pulled per query (keeps dense city bboxes bounded). */
     private const val RESULT_CAP = 50

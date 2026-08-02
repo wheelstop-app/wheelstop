@@ -37,10 +37,10 @@ public final class NotificationStore {
     private static final String TAG = "NotificationStore";
     private static final DaemonLogger logger = DaemonLogger.getInstance(TAG);
 
-    // Dedicated H2 file — NOT shared with overdrive_soc_h2. DB_CLOSE_ON_EXIT=FALSE:
+    // Dedicated H2 file — NOT shared with wheelstop_soc_h2. DB_CLOSE_ON_EXIT=FALSE:
     // shutdown is driven explicitly from CameraDaemon.shutdown() (mirrors
     // SocHistoryDatabase). FILE_LOCK=SOCKET is the cross-process safety net.
-    private static final String DB_PATH = "/data/local/tmp/overdrive_notif_h2";
+    private static final String DB_PATH = "/data/local/tmp/wheelstop_notif_h2";
     private static final String JDBC_URL = "jdbc:h2:file:" + DB_PATH +
             ";FILE_LOCK=SOCKET;TRACE_LEVEL_FILE=0;DB_CLOSE_ON_EXIT=FALSE";
 
@@ -113,7 +113,7 @@ public final class NotificationStore {
 
             // Retry loop with stale-lock cleanup + backoff. The head unit is
             // frequently hard-killed (ACC-off yank, OOM, restart storms), which
-            // can orphan overdrive_notif_h2.lock.db; a single getConnection
+            // can orphan wheelstop_notif_h2.lock.db; a single getConnection
             // would then leave the log dark for the whole session. Mirrors
             // SocHistoryDatabase.init().
             int maxRetries = 3;

@@ -1026,7 +1026,7 @@ public class CameraDaemon {
 
                     // ONE-TIME migration: clear poisoned consumption buckets
                     // if this is a PHEV and the migration hasn't been done.
-                    java.io.File bucketMigrationMarker = new java.io.File("/data/local/tmp/overdrive_bucket_migration_done");
+                    java.io.File bucketMigrationMarker = new java.io.File("/data/local/tmp/wheelstop_bucket_migration_done");
                     if (sohEstSnapshot != null && sohEstSnapshot.getNominalCapacityKwh() > 0
                             && sohEstSnapshot.getNominalCapacityKwh() < 30.0
                             && tam.getDatabase() != null

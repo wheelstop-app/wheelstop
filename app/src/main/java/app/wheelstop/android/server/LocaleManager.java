@@ -18,13 +18,13 @@ import java.util.Set;
  * <p>Backed by {@link UnifiedConfigManager} under the {@code nativeShell}
  * section. Both the app process (UID 10xxx, runs the picker dialog) and the
  * daemon process (UID 2000, runs the HTTP server + {@link Messages}) read
- * and write the same {@code overdrive_config.json}, which the daemon creates
+ * and write the same {@code wheelstop_config.json}, which the daemon creates
  * with {@code 0666} so the app UID can write to the existing file even
  * though it can't create new files in {@code /data/local/tmp/}.
  *
  * <p>This replaces an earlier design that wrote a plain-text file at
- * {@code /data/local/tmp/.overdrive/locale}. That path required the picker's
- * UID to {@code mkdir} {@code /data/local/tmp/.overdrive/}, which the app
+ * {@code /data/local/tmp/.wheelstop/locale}. That path required the picker's
+ * UID to {@code mkdir} {@code /data/local/tmp/.wheelstop/}, which the app
  * UID can't do — the write silently failed and the language reverted to
  * the system locale on next cold start. {@link #migrateLegacyIfNeeded()}
  * imports any value left over from that scheme on first call.
@@ -58,7 +58,7 @@ public final class LocaleManager {
      * fails from the app UID, which is exactly the bug we're migrating away
      * from — so reads stay best-effort and the migration is a one-shot.
      */
-    private static final String LEGACY_STATE_FILE = "/data/local/tmp/.overdrive/locale";
+    private static final String LEGACY_STATE_FILE = "/data/local/tmp/.wheelstop/locale";
     private static volatile boolean legacyMigrationChecked = false;
 
     /** In-memory cache so we don't re-parse the unified config on every request. */

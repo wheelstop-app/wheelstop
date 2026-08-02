@@ -77,7 +77,7 @@ class ZrokController(
     
     /**
      * Get the permanent URL (only valid if using reserved mode).
-     * Uses auto-generated unique name: overdrive<random>
+     * Uses auto-generated unique name: wheelstop<random>
      */
     fun getPermanentUrl(): String {
         return "https://${ZrokLauncher.uniqueName}.share.zrok.io"
@@ -168,7 +168,7 @@ class ZrokController(
      * Reserve a permanent URL (ONE-TIME setup).
      * After this, the token is saved and will be used automatically.
      * 
-     * @param customName Optional custom name. If null, uses auto-generated unique name (overdrive<random>)
+     * @param customName Optional custom name. If null, uses auto-generated unique name (wheelstop<random>)
      */
     fun reservePermanentUrl(customName: String? = null, callback: DaemonCallback) {
         callback.onStatusChanged(DaemonStatus.STARTING, "Reserving permanent URL...")

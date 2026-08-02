@@ -23,7 +23,7 @@ class ConfigManager private constructor(private val context: Context) {
             }
         }
         
-        private const val PREFS_NAME = "overdrive_config"
+        private const val PREFS_NAME = "wheelstop_config"
         private const val KEY_DEVICE_ID = "device_id"
         private const val KEY_OUTPUT_DIR = "output_dir"
         private const val KEY_STREAM_MODE = "stream_mode"

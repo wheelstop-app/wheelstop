@@ -30,7 +30,7 @@ import app.wheelstop.android.R;
 public class SetupGuideDialog {
 
     private static final String TAG = "SetupGuideDialog";
-    private static final String PREFS_NAME = "overdrive_setup";
+    private static final String PREFS_NAME = "wheelstop_setup";
     private static final String KEY_LAST_SEEN_INSTALL_TIME = "last_seen_install_time";
 
     /**

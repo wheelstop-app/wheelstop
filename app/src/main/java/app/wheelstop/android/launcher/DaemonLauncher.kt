@@ -218,7 +218,7 @@ class DaemonLauncher(
                 // watchdog must exit instead of respawning, same as the user .disabled
                 // sentinel. Cleared on the ACC-on edge. Never exists in onAndOff mode, so
                 // this gate is inert there (watchdog behaves byte-identically).
-                "PARKED=\"/data/local/tmp/overdrive_parked_shutdown\"",
+                "PARKED=\"/data/local/tmp/wheelstop_parked_shutdown\"",
                 "PROXY_ARGS=\"$proxyArgs\"",
                 "",
                 "/system/bin/device_config put activity_manager max_phantom_processes 2147483647 > /dev/null 2>&1",
@@ -307,7 +307,7 @@ class DaemonLauncher(
                 "LOG_FILE=\"$TELEGRAM_DAEMON_LOG\"",
                 "LOCK_FILE=\"/data/local/tmp/telegram_bot_daemon.lock\"",
                 "SENTINEL=\"/data/local/tmp/telegram_bot_daemon.disabled\"",
-                "PARKED=\"/data/local/tmp/overdrive_parked_shutdown\"",
+                "PARKED=\"/data/local/tmp/wheelstop_parked_shutdown\"",
                 "RETRY_COUNT=0",
                 "HEALTHY_UPTIME_SEC=300",
                 "",
@@ -388,7 +388,7 @@ class DaemonLauncher(
                 "LOG_FILE=\"$CAMERA_DAEMON_LOG\"",
                 "LOCK_FILE=\"/data/local/tmp/camera_daemon.lock\"",
                 "SENTINEL=\"/data/local/tmp/camera_daemon.disabled\"",
-                "PARKED=\"/data/local/tmp/overdrive_parked_shutdown\"",
+                "PARKED=\"/data/local/tmp/wheelstop_parked_shutdown\"",
                 "RETRY_COUNT=0",
                 "HEALTHY_UPTIME_SEC=300",
                 // Record THIS supervisor loop's PID so the kill-readers

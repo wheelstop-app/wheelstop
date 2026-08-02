@@ -102,7 +102,7 @@ object KeyMapDispatcher {
     // instead of one per REFRESH_THROTTLE_MS — the zero-overhead-when-disabled bar.
     private const val REENABLE_POLL_MS = 30_000L
     // Unified config file — watched for instant propagation of settings edits.
-    private const val CONFIG_PATH = "/data/local/tmp/overdrive_config.json"
+    private const val CONFIG_PATH = "/data/local/tmp/wheelstop_config.json"
 
     // Pooled I/O executor for daemon POSTs and config refreshes. Cached (not
     // single-thread) so one slow/hung POST never blocks either the timing
@@ -215,7 +215,7 @@ object KeyMapDispatcher {
      * We do NOT register the instant-propagation FileObserver here: doing so
      * unconditionally would put an inotify watch on the busy /data/local/tmp dir
      * whose observer thread is woken by the ~44 unrelated subsystems that rewrite
-     * overdrive_config.json at heartbeat rate — even on the majority of installs
+     * wheelstop_config.json at heartbeat rate — even on the majority of installs
      * where keymap.enabled=false. Instead the watcher is started lazily from
      * [refresh] the first time the snapshot is observed enabled (and stopped when
      * it flips back to disabled), so a disabled feature holds no watch descriptor
@@ -253,7 +253,7 @@ object KeyMapDispatcher {
             val obs = object : FileObserver(dir.absolutePath, mask) {
                 override fun onEvent(event: Int, path: String?) {
                     if (path == null || path != name) return
-                    // Zero-overhead-when-disabled gate. overdrive_config.json is
+                    // Zero-overhead-when-disabled gate. wheelstop_config.json is
                     // rewritten by ~44 unrelated subsystems (RoadSense sync, camera
                     // lease heartbeat, overlay heartbeat, …), so an event here does
                     // NOT imply a keymap change. If our last-known snapshot says the
@@ -267,7 +267,7 @@ object KeyMapDispatcher {
                     // poll (kicked from onKey while disabled).
                     if (cache?.enabled == false) return
                     // Never do work on the observer thread, and never reparse per
-                    // event: overdrive_config.json is rewritten at heartbeat rate by
+                    // event: wheelstop_config.json is rewritten at heartbeat rate by
                     // the ~44 unrelated subsystems named above, so an unthrottled
                     // refresh() here would forceReload() (whole-file read + JSON parse
                     // + migration walk that transiently nulls the shared process-wide

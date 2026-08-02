@@ -35,7 +35,7 @@ public class QualitySettingsApiHandler {
     private static String recordingBitrate = "STANDARD";
     private static String recordingCodec = "H264";      // H264 or H265
     
-    private static final String UNIFIED_CONFIG_FILE = "/data/local/tmp/overdrive_config.json";
+    private static final String UNIFIED_CONFIG_FILE = "/data/local/tmp/wheelstop_config.json";
     private static final String LEGACY_SETTINGS_FILE = "/data/local/tmp/camera_settings.json";
     
     /**

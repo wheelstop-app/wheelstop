@@ -15,7 +15,7 @@ import app.wheelstop.android.ui.model.DaemonType
 object PreferencesManager {
     
     private const val TAG = "PreferencesManager"
-    private const val PREFS_NAME = "overdrive_prefs"
+    private const val PREFS_NAME = "wheelstop_prefs"
     private const val KEY_ENABLED_DAEMONS = "enabled_daemons"
     private const val KEY_THEME_MODE = "theme_mode"
     private const val KEY_SELECTED_CAMERAS = "selected_cameras"

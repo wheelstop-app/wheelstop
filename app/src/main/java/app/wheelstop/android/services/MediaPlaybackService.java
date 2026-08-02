@@ -37,7 +37,7 @@ import java.util.Map;
  * it the sound to play.
  *
  * <p><b>File source.</b> A library sound arrives as {@code libName}; the app can't read
- * {@code /data/local/tmp/.overdrive/audio} directly (SELinux untrusted_app), so it
+ * {@code /data/local/tmp/.wheelstop/audio} directly (SELinux untrusted_app), so it
  * streams the bytes from the daemon's authenticated {@code /api/audio/library/raw}
  * endpoint (JWT cookie via {@link AuthManager}). An external-storage sound arrives as
  * {@code filePath} and is opened directly (the app can read shared storage).
@@ -50,7 +50,7 @@ import java.util.Map;
 public final class MediaPlaybackService extends Service {
 
     private static final String TAG = "MediaPlaybackService";
-    private static final String CHANNEL_ID = "overdrive_media_playback";
+    private static final String CHANNEL_ID = "wheelstop_media_playback";
     private static final int NOTIFICATION_ID = 9971;
     /** Daemon base — same loopback the app's DaemonHttpClient uses. */
     private static final String DAEMON_BASE = "http://127.0.0.1:8080";
@@ -211,7 +211,7 @@ public final class MediaPlaybackService extends Service {
         try {
             android.os.Bundle params = new android.os.Bundle();
             params.putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, streamForChannel(channel));
-            String uttId = "overdrive-tts";
+            String uttId = "wheelstop-tts";
             tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
                 @Override public void onStart(String id) {}
                 @Override public void onDone(String id) { stopSelf(); }

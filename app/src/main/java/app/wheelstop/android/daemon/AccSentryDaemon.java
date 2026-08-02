@@ -4207,7 +4207,7 @@ public class AccSentryDaemon {
      */
     private static void launchParkReaper() {
         final String marker = app.wheelstop.android.ui.model.ParkedShutdown.MARKER_PATH;
-        final String reaperPath = "/data/local/tmp/overdrive_park_reaper.sh";
+        final String reaperPath = "/data/local/tmp/wheelstop_park_reaper.sh";
         // psAwkKill helper line: kill by argv match, excluding our own PID; SIGKILL.
         StringBuilder sb = new StringBuilder();
         sb.append("#!/system/bin/sh\n");

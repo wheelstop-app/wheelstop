@@ -153,7 +153,7 @@ class TailscaleLauncher(
             override fun onTunnelUrl(url: String?) {
                 // The login command waits for login completion. Instead, call it with a 1ms timeout so we can get the login url from the status command
                 runTailscaleCommand(
-                    cmd = "login --hostname overdrive --timeout 1ms || echo done",
+                    cmd = "login --hostname wheelstop --timeout 1ms || echo done",
                     callback = object : AdbShellExecutor.ShellCallback {
                         override fun onSuccess(output: String) {
                             waitForLoginUrl(0, loginUrl)

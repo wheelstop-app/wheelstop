@@ -36,8 +36,8 @@ public final class UpdateLifecycle {
             + "if [ \"$pid\" != \"$MY_PID\" ]; then kill -9 $pid 2>/dev/null; fi; done\n";
     }
 
-    public static final String UPDATE_IN_PROGRESS_FILE = "/data/local/tmp/overdrive_update_in_progress";
-    public static final String POST_UPDATE_FILE = "/data/local/tmp/overdrive_post_update";
+    public static final String UPDATE_IN_PROGRESS_FILE = "/data/local/tmp/wheelstop_update_in_progress";
+    public static final String POST_UPDATE_FILE = "/data/local/tmp/wheelstop_post_update";
     /**
      * One-shot marker read by TelegramBotDaemon's notifyTunnel handler so the
      * first post-update tunnel-URL message can include the new version (and a
@@ -46,7 +46,7 @@ public final class UpdateLifecycle {
      * daemon after consuming.
      */
     public static final String TELEGRAM_POST_UPDATE_HINT_FILE =
-            "/data/local/tmp/overdrive_post_update_pending_telegram";
+            "/data/local/tmp/wheelstop_post_update_pending_telegram";
     /**
      * Failure twin of {@link #TELEGRAM_POST_UPDATE_HINT_FILE}. Planted by the
      * detached install script's FAILURE branch (only for an IPC-triggered
@@ -60,7 +60,7 @@ public final class UpdateLifecycle {
      * this one, so the bot never sends both a success and a failure message.
      */
     public static final String TELEGRAM_INSTALL_FAILED_HINT_FILE =
-            "/data/local/tmp/overdrive_install_failed_pending_telegram";
+            "/data/local/tmp/wheelstop_install_failed_pending_telegram";
 
     public static final String EXTRA_POST_UPDATE = "post_update";
 
@@ -171,7 +171,7 @@ public final class UpdateLifecycle {
                 // time the new MainActivity runs this reset — remove it so it
                 // doesn't linger in /data/local/tmp (hygiene; it's rewritten via
                 // atomic tmp+rename each install so it never blocks recovery).
-                "rm -f /data/local/tmp/overdrive_install.sh 2>/dev/null\n" +
+                "rm -f /data/local/tmp/wheelstop_install.sh 2>/dev/null\n" +
                 // Clear ONLY the CORE per-daemon sentinels so the new
                 // MainActivity starts clean (core re-arms on app-launch). The
                 // OPTIONAL daemon sentinels (telegram_bot_daemon.disabled,
@@ -194,7 +194,7 @@ public final class UpdateLifecycle {
                 // user wants to send. Excludes the install log + sentinels.
                 (app.wheelstop.android.BuildConfig.LOG_CAPTURE ? "" :
                     "for lf in /data/local/tmp/*.log /data/local/tmp/*.log.[0-9]*; do " +
-                    "case \"$lf\" in *overdrive_install.log) ;; *) rm -f \"$lf\" 2>/dev/null;; esac; " +
+                    "case \"$lf\" in *wheelstop_install.log) ;; *) rm -f \"$lf\" 2>/dev/null;; esac; " +
                     "done\n") +
                 "rm -f " + UPDATE_IN_PROGRESS_FILE + " " + POST_UPDATE_FILE + " 2>/dev/null\n" +
                 "echo done\n";

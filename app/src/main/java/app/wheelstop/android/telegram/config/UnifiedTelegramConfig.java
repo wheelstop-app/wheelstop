@@ -13,7 +13,7 @@ import java.util.Properties;
  * Single source of truth for Telegram bot configuration.
  *
  * Backed by {@link UnifiedConfigManager}'s {@code telegram} section, which lives
- * at {@code /data/local/tmp/overdrive_config.json} with 0666 permissions so both
+ * at {@code /data/local/tmp/wheelstop_config.json} with 0666 permissions so both
  * the app process (UID 10xxx) and the shell-UID daemons (UID 2000) read and
  * write the same store. The {@code botToken} field is wrapped with
  * {@link CredentialCipher} (AES-GCM, device-bound key) — same posture used for

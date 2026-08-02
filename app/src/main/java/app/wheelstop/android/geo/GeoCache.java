@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * On-disk cache of resolved place names, keyed by {@code (geohash7, locale)}.
  *
  * <p>Backed by a single JSON file at {@code /data/local/tmp/geocache.json}
- * for the same cross-UID reasons as {@code overdrive_config.json} — the
+ * for the same cross-UID reasons as {@code wheelstop_config.json} — the
  * daemon (UID 2000) and the app (UID 10xxx) both read it; only the daemon
  * writes it. SQLite would tie the file to one UID's app-specific dir and
  * lock the other process out.

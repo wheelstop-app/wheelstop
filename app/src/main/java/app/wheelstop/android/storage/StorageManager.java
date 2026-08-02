@@ -140,7 +140,7 @@ public class StorageManager {
     public static final String TRIPS_SUBDIR = "trips";
     
     // Config file location
-    private static final String CONFIG_FILE = "/data/local/tmp/overdrive_config.json";
+    private static final String CONFIG_FILE = "/data/local/tmp/wheelstop_config.json";
 
     // Persisted UUID of whichever public volume we've previously confirmed as
     // the SD card. Used as the first-class signal in classifyPublicVolume()
@@ -152,7 +152,7 @@ public class StorageManager {
     // serial from a previous successful cycle bridges the gap. File is
     // tiny (~10 bytes), atomic-write semantics not required because a stale
     // value still resolves to the same physical card.
-    private static final String LEARNED_SD_UUID_FILE = "/data/local/tmp/overdrive_sd_uuid";
+    private static final String LEARNED_SD_UUID_FILE = "/data/local/tmp/wheelstop_sd_uuid";
     
     // Default limits (in bytes)
     private static final long DEFAULT_RECORDINGS_LIMIT_MB = 500;
@@ -560,7 +560,7 @@ public class StorageManager {
      * resolves to internal at every read.
      *
      * <p>Does NOT overwrite the persisted preference (the persisted value
-     * stays untouched in {@code overdrive_config.json}). On the next boot
+     * stays untouched in {@code wheelstop_config.json}). On the next boot
      * with the volume re-attached, parseStorageType + normalizeStorageType
      * will return the user's original choice.
      */
@@ -1623,7 +1623,7 @@ public class StorageManager {
         if (dir.canWrite()) return true;
         try {
             Process p = Runtime.getRuntime().exec(new String[]{
-                "sh", "-c", "touch " + mountPath + "/.overdrive_probe && rm " + mountPath + "/.overdrive_probe"
+                "sh", "-c", "touch " + mountPath + "/.wheelstop_probe && rm " + mountPath + "/.wheelstop_probe"
             });
             // 2s ceiling — touch/rm against a healthy FUSE mount returns in
             // single-digit ms; anything slower is a stuck filesystem and
@@ -2681,11 +2681,11 @@ public class StorageManager {
         try {
             // Route the storage-section persist through UnifiedConfigManager so
             // there is ONE lock domain + ONE atomic writer over
-            // /data/local/tmp/overdrive_config.json. The previous body did its
+            // /data/local/tmp/wheelstop_config.json. The previous body did its
             // own read-modify-write guarded only by synchronized(this) (the
             // StorageManager monitor) and wrote with a plain truncating
             // FileWriter — a disjoint mutex from UCM's cross-process FileLock on
-            // overdrive_config.json.lock + tmp+rename. The two schemes did not
+            // wheelstop_config.json.lock + tmp+rename. The two schemes did not
             // exclude each other, so a concurrent UCM updateSection (same file)
             // could lost-update the storage limit, torn-read a half-truncated
             // file, or — worst — a SIGKILL/ACC-cut between the FileWriter
@@ -2868,7 +2868,7 @@ public class StorageManager {
     }
     
     /** Marker file that stores the epoch millis of the last successful broadcast scan. */
-    private static final String BROADCAST_MARKER_FILE = "/data/local/tmp/overdrive_last_mediascan";
+    private static final String BROADCAST_MARKER_FILE = "/data/local/tmp/wheelstop_last_mediascan";
     
     /** Throttle delay between individual file broadcasts (ms). */
     private static final long BROADCAST_THROTTLE_MS = 50;

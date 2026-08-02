@@ -1069,7 +1069,7 @@ public class SurveillanceEngineGpu {
             } catch (Throwable t) {
                 logger.debug("Orphan hero sweep failed: " + t.getMessage());
             }
-        }, "OverdriveOrphanHeroSweep").start();
+        }, "WheelstopOrphanHeroSweep").start();
 
         // Initialize V2 per-quadrant pipeline
         try {
@@ -5597,7 +5597,7 @@ public class SurveillanceEngineGpu {
                         done.notifyAll();
                     }
                 }
-            }, "OverdriveOrphanHeroExtract-" + name);
+            }, "WheelstopOrphanHeroExtract-" + name);
             worker.setDaemon(true);
             worker.start();
             synchronized (done) {
@@ -5650,7 +5650,7 @@ public class SurveillanceEngineGpu {
                     done.notifyAll();
                 }
             }
-        }, "OverdriveFallbackHero-" + mp4File.getName());
+        }, "WheelstopFallbackHero-" + mp4File.getName());
         worker.setDaemon(true);
         worker.start();
         synchronized (done) {

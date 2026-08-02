@@ -27,7 +27,7 @@ import java.io.File
  * reading); 1..<CONFIRMED is "seen once"; 0 is "new".
  *
  * ## Cost / persistence
- * Persisted in its OWN file [COVERAGE_PATH], NOT in the shared overdrive_config.json
+ * Persisted in its OWN file [COVERAGE_PATH], NOT in the shared wheelstop_config.json
  * (audit storage HIGH-2): the tile→count map can reach ~240 KB at the cap, and the
  * shared config is rewritten in full on EVERY updateSection by ANY subsystem — so
  * keeping coverage there would make every unrelated config write drag the whole map,
@@ -140,9 +140,9 @@ class RouteCoverage {
     enum class Level { NEW, SEEN, MAPPED }
 
     companion object {
-        /** Own file (NOT the shared overdrive_config.json) — see class doc. Sits in
+        /** Own file (NOT the shared wheelstop_config.json) — see class doc. Sits in
          *  the same daemon-writable dir as the H2 stores. */
-        private const val COVERAGE_PATH = "/data/local/tmp/overdrive_roadsense_coverage.json"
+        private const val COVERAGE_PATH = "/data/local/tmp/wheelstop_roadsense_coverage.json"
         /** Tiles to remember for the boundary-bounce guard (audit S5). ~3 covers a
          *  GPS jitter ping-pong across one boundary without blocking a genuine
          *  re-entry after driving away and coming back later in the trip. */

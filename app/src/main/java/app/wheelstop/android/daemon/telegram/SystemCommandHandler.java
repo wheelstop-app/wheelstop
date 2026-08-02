@@ -199,7 +199,7 @@ public class SystemCommandHandler implements TelegramCommandHandler {
     
     private void handleHelp(long chatId, CommandContext ctx) {
         // App display version: getDisplayVersionFromFile() prefers the persisted
-        // GitHub label from /data/local/tmp/overdrive_version (the cross-UID
+        // GitHub label from /data/local/tmp/wheelstop_version (the cross-UID
         // source of truth), falling back to the BuildConfig identity
         // (getInstalledVersion = channel + "-v" + versionName) when the file is
         // absent, malformed, or a stale cross-channel label.

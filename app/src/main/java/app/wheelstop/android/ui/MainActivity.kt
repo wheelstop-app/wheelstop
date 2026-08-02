@@ -229,7 +229,7 @@ class MainActivity : AppCompatActivity() {
             // shared daemonStartupManager.adbLauncher — allocating a fresh
             // AdbDaemonLauncher here would leak its non-daemon executor + a
             // tunnel-poll scheduler thread on every postDelayed firing.
-            daemonStartupManager.adbLauncher.executeShellCommand("rm -f /data/local/tmp/overdrive_update.apk", object : app.wheelstop.android.launcher.AdbDaemonLauncher.LaunchCallback {
+            daemonStartupManager.adbLauncher.executeShellCommand("rm -f /data/local/tmp/wheelstop_update.apk", object : app.wheelstop.android.launcher.AdbDaemonLauncher.LaunchCallback {
                 override fun onLog(message: String) {}
                 override fun onLaunched() {}
                 override fun onError(error: String) {}
@@ -906,7 +906,7 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * Run the install in the DAEMON (UID 2000) via IPC, then poll progress —
-     * the same INSTALL_UPDATE → /overdrive_update_progress.json path the webapp
+     * the same INSTALL_UPDATE → /wheelstop_update_progress.json path the webapp
      * and Telegram already use. Why not download in-process: the app UID can't
      * write /data/local/tmp/, so the old in-process path fell back to a shell
      * `wget` that emits no parseable progress — the bar pinned at 15% for the
