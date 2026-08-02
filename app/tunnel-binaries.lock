@@ -45,12 +45,22 @@
 # previously-vendored blobs had no PackHeader and could not be audited: they had been
 # through packaging.)
 #
-# Regenerate with: .github/workflows/tunnel-binaries.yml (compression=max for releases).
-# Update this file and app/build.gradle.kts's release tag in the same commit.
+# THIS FILE IS THE SINGLE SOURCE OF TRUTH for the tunnel binaries' versions, hosting and
+# digests. build.gradle.kts (base_url + digests), the build workflows (versions), release.yml
+# (sing-box source), and THIRD_PARTY_NOTICES.md (generated) all read from here — change a
+# version in one place, here.
+#
+# To bump a version: edit the `.upstream` ref below, run the "Release tunnel binaries"
+# workflow (it reads these versions), then paste the tag/base_url/digests it prints back
+# here, and run scripts/gen-third-party-notices.py. CI fails if the notice drifts.
 
 release = tunnel-binaries-2026.08.01
-base_url = https://github.com/shauneccles/Overdrive-release/releases/download/tunnel-binaries-2026.08.01
+base_url = https://github.com/wheelstop-app/wheelstop/releases/download/tunnel-binaries-2026.08.01
 strip_tool = ndk/26.1.10909125 llvm-strip --strip-all
+
+# `.license` (SPDX) and, for GPL components, `.source_commit` / `.source_sha256` drive the
+# generated THIRD_PARTY_NOTICES.md (scripts/gen-third-party-notices.py). Keep them in step
+# with `.upstream` — CI regenerates the notice and fails if it drifts.
 
 # libtailscale.so — tailscaled, built from source. No official artifact matches: the ~60
 # ts_omit_* tags are what keep it near 4 MB instead of ~30 MB, and were recovered from the
@@ -58,19 +68,25 @@ strip_tool = ndk/26.1.10909125 llvm-strip --strip-all
 libtailscale.upstream       = source github.com/tailscale/tailscale v1.98.10 36550d57f4a4055246ef7412f4e650a012a465f1
 libtailscale.sha256_shipped = b1a4e9c2db0ea6a29b9de9b405751acd33a5a7dc3b12497a210f07eb54fff93f
 libtailscale.sha256_intact  = b52b3e5715cafc135fe032bd4672e1f6a01992502206c98c4324359356d3d95d
+libtailscale.license      = BSD-3-Clause
 
 # libcloudflared.so — upstream's own linux-arm64 release asset.
 libcloudflared.upstream       = release github.com/cloudflare/cloudflared 2026.7.3 cloudflared-linux-arm64 sha256=65259e652a7bea08bf5df603233ab22b8bf3116af8df9f9206209af6a1b955c0
 libcloudflared.sha256_shipped = eaeac1dee8b2d4f2ba34a393545515ca30dc7603987d297130388a00aa26a7dc
 libcloudflared.sha256_intact  = 458c61bc15d33d5d79e3acc4e4bac9efecc934435f1504a55b7f6971ee2cc7dd
+libcloudflared.license      = Apache-2.0
 
 # libzrok.so — upstream's own linux-arm64 release asset. PINNED TO v1.x ON PURPOSE: zrok v2
 # renames the command to cmd/zrok2 and is a breaking change for ZrokLauncher.
 libzrok.upstream       = release github.com/openziti/zrok v1.1.11 zrok_1.1.11_linux_arm64.tar.gz sha256=2c38069ee27c3c96f8d35cbe23e3a51457651229049edcd017bdbb485c9f1920
 libzrok.sha256_shipped = e4141cfe7acfc010144fd2a7af6532f2e17b6eef1333a64de25187fa871a1e2f
 libzrok.sha256_intact  = 199629a6395d1b78850c555e2971bd76ed598ac094e101190e50581628c0ff1e
+libzrok.license      = Apache-2.0
 
 # libsingbox.so — upstream's own ANDROID-arm64 release asset (sing-box publishes one).
 libsingbox.upstream       = release github.com/sagernet/sing-box v1.12.14 sing-box-1.12.14-android-arm64.tar.gz sha256=b46d945f563834a508db34f3ed433fbcf9f622c4ba7278890d28d610661960d6
 libsingbox.sha256_shipped = 4a7b85a400eaa5c454193f8fa4ed12586697eca0a273e518f05f003a4abf5206
 libsingbox.sha256_intact  = 5642eaf957aebaba6061d2ace38e929b3fc1dad690834aedcad316a29cdf203b
+libsingbox.license       = GPL-3.0-or-later
+libsingbox.source_commit = f56d9ab94569d46a48bfc2bcd97eea566ad365c8
+libsingbox.source_sha256 = f19761d09f88e2d33aadfdb3c4ff471654f34b28561826e4786b9859654ca887

@@ -9,6 +9,18 @@
   "prConcurrentLimit": 5,
   "prHourlyLimit": 2,
   "labels": ["dependencies"],
+  "customManagers": [
+    {
+      "description": "Track the vendored tunnel binaries' upstream versions in app/tunnel-binaries.lock. Renovate proposes a version bump when upstream cuts a release; the binary is then rebuilt+re-hosted and re-pinned by the 'Release tunnel binaries' workflow (which reads its versions from this same lock).",
+      "customType": "regex",
+      "fileMatch": ["^app/tunnel-binaries\\.lock$"],
+      "matchStrings": [
+        "lib\\w+\\.upstream\\s*=\\s*\\S+ github\\.com/(?<depName>[^ /]+/[^ ]+) (?<currentValue>v?\\d[^ ]*)"
+      ],
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver-coerced"
+    }
+  ],
   "packageRules": [
     {
       "description": "Group non-major Gradle/AGP/Kotlin/library updates (from gradle/libs.versions.toml and app/build.gradle.kts) into a single PR. Major bumps (e.g. AGP or Kotlin major versions) are left ungrouped since they often need manual migration.",
@@ -20,6 +32,19 @@
       "description": "Group GitHub Actions SHA/digest and version bumps into a single PR. helpers:pinGitHubActionDigests (above) keeps `uses:` pinned to full commit SHAs with the version comment, which is what keeps .github/workflows zizmor-clean.",
       "matchManagers": ["github-actions"],
       "groupName": "github actions"
+    },
+    {
+      "description": "Vendored tunnel binaries (app/tunnel-binaries.lock): a version bump here is a PROPOSAL — it is not shippable until the binary is rebuilt at that version, re-hosted, and its digests refreshed. Run the 'Release tunnel binaries' workflow (it reads versions from the lock and prints the new tag/base_url/digests to paste back), then run scripts/gen-third-party-notices.py. Never automerge: these open network tunnels on the car. One PR per binary so each can be rebuilt independently.",
+      "matchFileNames": ["app/tunnel-binaries.lock"],
+      "addLabels": ["tunnel-binaries"],
+      "automerge": false,
+      "separateMinorPatch": true
+    },
+    {
+      "description": "zrok must stay on v1.x — v2 renamed the command to cmd/zrok2 and is a breaking change for ZrokLauncher.",
+      "matchFileNames": ["app/tunnel-binaries.lock"],
+      "matchPackageNames": ["openziti/zrok"],
+      "allowedVersions": "<2.0.0"
     },
     {
       "description": "MANUAL ONLY — do not touch. openh264Version/openh264Sha256 and opencvMobileVersion/opencvMobileSha256/opencvMobileTag in app/build.gradle.kts are not normal package-manager dependencies: they are digest-pinned native binaries fetched by the bespoke downloadOpenH264/downloadOpenCV Gradle tasks and checked against the hardcoded SHA-256 in verifyDigest(). Bumping the version string without also re-deriving and updating the matching SHA-256 (and re-auditing the artifact) would either break the build's digest check or silently accept an unverified binary. These are intentionally excluded from every manager and must be updated by hand.",
@@ -34,8 +59,5 @@
       ],
       "enabled": false
     }
-  ],
-  "ignorePaths": [
-    "app/tunnel-binaries.lock"
   ]
 }

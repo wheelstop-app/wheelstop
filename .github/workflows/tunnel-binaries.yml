@@ -28,33 +28,34 @@ on:
   # duplicating the whole build.
   workflow_call:
     inputs:
-      tailscale_ref:   { type: string, default: "v1.98.10" }
-      cloudflared_ref: { type: string, default: "2026.7.3" }
-      zrok_ref:        { type: string, default: "v1.1.11" }
-      singbox_ref:     { type: string, default: "v1.12.14" }
+      # Blank => use the version pinned in app/tunnel-binaries.lock (single source of truth).
+      tailscale_ref:   { type: string, default: "" }
+      cloudflared_ref: { type: string, default: "" }
+      zrok_ref:        { type: string, default: "" }
+      singbox_ref:     { type: string, default: "" }
       compression:
         description: "fast (default UPX) or max (--best --lzma)"
         type: string
         default: "fast"
   workflow_dispatch:
     inputs:
+      # Every ref defaults to blank => the version pinned in app/tunnel-binaries.lock is used.
+      # Set one only to test a different upstream ref without touching the lock.
       tailscale_ref:
-        description: "tailscale git tag, or 'latest'"
-        default: "v1.98.10"
+        description: "tailscale git tag (blank = lock)"
+        default: ""
       cloudflared_ref:
-        description: "cloudflared git tag, or 'latest'"
-        default: "2026.7.3"
+        description: "cloudflared git tag (blank = lock)"
+        default: ""
       zrok_ref:
         # NOT 'latest'. zrok v2 renamed the command to cmd/zrok2 and is a breaking major;
-        # the binary this app shipped self-reports v1.1.x, and ZrokLauncher is written
-        # against that CLI. Staying on v1 is a compatibility requirement, not conservatism.
-        description: "zrok git tag (stay on v1.x — v2 is a breaking change for ZrokLauncher)"
-        default: "v1.1.11"
+        # ZrokLauncher is written against the v1.x CLI. Staying on v1 is a compatibility
+        # requirement — which is why the pinned version lives in the lock, not 'latest'.
+        description: "zrok git tag (blank = lock; stay on v1.x — v2 breaks ZrokLauncher)"
+        default: ""
       singbox_ref:
-        # The version the shipped binary self-reported, corroborated against the upstream
-        # tag by the audit. Keeping it means the app gets the sing-box it was tested with.
-        description: "sing-box git tag"
-        default: "v1.12.14"
+        description: "sing-box git tag (blank = lock)"
+        default: ""
       compression:
         description: "fast (default UPX) or max (--best --lzma, much slower)"
         type: choice
@@ -128,12 +129,18 @@ jobs:
           set -euo pipefail
           mkdir -p out
 
-          # Defaults live here as well as in the inputs block: a `push`-triggered run has
-          # no inputs at all, so these would otherwise be empty.
-          TS_REF="${TS_REF_IN:-v1.98.10}"
-          CF_REF="${CF_REF_IN:-2026.7.3}"
-          ZR_REF="${ZR_REF_IN:-v1.1.11}"
-          SB_REF="${SB_REF_IN:-v1.12.14}"
+          # Single source of truth: versions come from app/tunnel-binaries.lock. A non-blank
+          # workflow_dispatch input overrides one ref for testing; a `push`-triggered run has
+          # no inputs, so the lock supplies all four.
+          lock_ver() { awk -F= -v k="^$1\\.upstream" '$0 ~ k {split($2,a," "); print a[3]}' app/tunnel-binaries.lock; }
+          TS_REF="${TS_REF_IN:-$(lock_ver libtailscale)}"
+          CF_REF="${CF_REF_IN:-$(lock_ver libcloudflared)}"
+          ZR_REF="${ZR_REF_IN:-$(lock_ver libzrok)}"
+          SB_REF="${SB_REF_IN:-$(lock_ver libsingbox)}"
+          for kv in "tailscale=$TS_REF" "cloudflared=$CF_REF" "zrok=$ZR_REF" "sing-box=$SB_REF"; do
+            [ -n "${kv#*=}" ] || { echo "::error::no version for ${kv%%=*} in app/tunnel-binaries.lock"; exit 1; }
+          done
+          echo "Refs (from lock unless overridden): tailscale=$TS_REF cloudflared=$CF_REF zrok=$ZR_REF sing-box=$SB_REF"
 
           # Reject anything that is not a plausible module version. These are pasted into
           # `go install mod@REF`, and this is the last line of defence if the env-var
