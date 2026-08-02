@@ -1,0 +1,124 @@
+name: Release
+
+# Manually-triggered signed release. Builds :app:assembleRelease with the
+# df8fc138 signing key (loaded from secrets), refuses to publish anything signed
+# with a different certificate, and pushes the APK + SHA256SUMS to the rolling
+# "alpha" release the in-app updater reads. Same-cert signing is what lets the
+# car install the update in place (pm install -r) with no data wipe.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version label baked into the asset name, e.g. v33.1 (must sort newer than what's on the car)"
+        required: true
+        type: string
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Build, cert-gate, publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write # create/update the alpha release
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07 # v4
+        with:
+          java-version: "17"
+          distribution: temurin
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+
+      - name: Install NDK + CMake
+        run: sdkmanager --install "ndk;26.1.10909125" "cmake;3.22.1"
+
+      - name: Cache Gradle
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', 'gradle/libs.versions.toml') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Cache native dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            app/src/main/cpp/opencv
+            app/src/main/cpp/openh264
+          key: native-deps-${{ runner.os }}-${{ hashFiles('app/build.gradle.kts') }}
+
+      - name: Decode signing keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_B64:-}" ]; then
+            echo "::error::SIGNING_KEYSTORE_B64 secret is not set"; exit 1
+          fi
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+
+      - name: Assemble signed release
+        env:
+          KEYSTORE_FILE: ${{ runner.temp }}/release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.SIGNING_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+        run: ./gradlew :app:assembleRelease --no-daemon --console=plain
+
+      - name: Gate on the pinned signing certificate
+        env:
+          EXPECTED_CERT: df8fc138481d279c019ff92137d104993de4a37d966504a7b7f78bb274c9a84e
+        run: |
+          set -euo pipefail
+          APK=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
+          if [ -z "$APK" ]; then echo "::error::no release APK produced"; exit 1; fi
+          echo "Signed APK: $APK"
+          APKSIGNER=$(find "$ANDROID_SDK_ROOT/build-tools" -name apksigner | sort -V | tail -1)
+          echo "Using $APKSIGNER"
+          GOT=$("$APKSIGNER" verify --print-certs "$APK" \
+            | grep -i "certificate SHA-256 digest" | head -1 \
+            | tr 'A-F' 'a-f' | grep -oE '[0-9a-f]{64}')
+          echo "signer SHA-256: $GOT"
+          if [ "$GOT" != "$EXPECTED_CERT" ]; then
+            echo "::error::signer cert $GOT != pinned $EXPECTED_CERT — refusing to publish"; exit 1
+          fi
+
+      - name: Stage assets (versioned APK + SHA256SUMS)
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          APK=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
+          mkdir -p dist
+          cp "$APK" "dist/overdrive-alpha-${VERSION}.apk"
+          ( cd dist && sha256sum "overdrive-alpha-${VERSION}.apk" | tee SHA256SUMS )
+
+      - name: Publish to the rolling alpha release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          NOTES="Signed release ${VERSION}. Cert-gated (df8fc138). Installs in place via same-cert pm install -r."
+          if gh release view alpha >/dev/null 2>&1; then
+            gh release upload alpha "dist/overdrive-alpha-${VERSION}.apk" dist/SHA256SUMS --clobber
+            gh release edit alpha --title "alpha ${VERSION}" --notes "$NOTES" --target "$GITHUB_SHA"
+          else
+            gh release create alpha \
+              "dist/overdrive-alpha-${VERSION}.apk" dist/SHA256SUMS \
+              --title "alpha ${VERSION}" --notes "$NOTES" --target "$GITHUB_SHA"
+          fi

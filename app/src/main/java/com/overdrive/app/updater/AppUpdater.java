@@ -37,7 +37,7 @@ import okhttp3.Response;
 public class AppUpdater {
 
     private static final String TAG = "AppUpdater";
-    private static final String GITHUB_REPO = "yash-srivastava/Overdrive-release";
+    private static final String GITHUB_REPO = BuildConfig.UPDATE_REPO;
     private static final String PREFS_NAME = "app_updater";
     // LEGACY (pre-channel) baseline key/file. Still read once by
     // migrateBaseline() to seed the per-channel "alpha" slot, then unused.
@@ -212,6 +212,8 @@ public class AppUpdater {
     private com.overdrive.app.launcher.AdbDaemonLauncher adbLauncher; // For daemon management
 
     private String latestDownloadUrl;
+    /** URL of the current release's SHA256SUMS asset, or "" if none published. */
+    private String latestSha256SumsUrl = "";
     private String releaseNotes;
     private String remoteVersion;
     private String remoteUpdatedAt;
@@ -462,6 +464,7 @@ public class AppUpdater {
     }
 
     private static final String APK_PATH = "/data/local/tmp/overdrive_update.apk";
+    private static final String SUMS_PATH = "/data/local/tmp/overdrive_update.sha256";
 
     private String getApkPath() {
         return APK_PATH;
@@ -504,6 +507,54 @@ public class AppUpdater {
             }
         }
         return null;
+    }
+
+    /**
+     * URL of the release's {@code SHA256SUMS} asset (case-insensitive name
+     * match), or {@code ""} if the release doesn't publish one. Mirrors
+     * {@link #firstApkAsset(JSONArray)}'s null-tolerant walk.
+     */
+    static String sha256SumsAssetUrl(JSONArray assets) {
+        if (assets == null) return "";
+        for (int i = 0; i < assets.length(); i++) {
+            JSONObject asset = assets.optJSONObject(i);
+            if (asset == null) continue;
+            if ("SHA256SUMS".equalsIgnoreCase(asset.optString("name", ""))) {
+                return asset.optString("browser_download_url", "");
+            }
+        }
+        return "";
+    }
+
+    /**
+     * The expected APK digest from a {@code SHA256SUMS} file body. Returns the
+     * lowercase hex from the first line that references a {@code .apk}, or
+     * {@code ""} if none. Format per line: {@code <hex>  <filename>}.
+     */
+    static String expectedApkDigest(String sumsContent) {
+        if (sumsContent == null) return "";
+        for (String line : sumsContent.split("\n")) {
+            String trimmed = line.trim();
+            if (trimmed.isEmpty()) continue;
+            if (!trimmed.toLowerCase(java.util.Locale.ROOT).contains(".apk")) continue;
+            int sp = trimmed.indexOf(' ');
+            String hex = (sp < 0 ? trimmed : trimmed.substring(0, sp)).trim();
+            return hex.toLowerCase(java.util.Locale.ROOT);
+        }
+        return "";
+    }
+
+    /**
+     * VERIFIED when both digests are present and equal (case-insensitive),
+     * MISMATCH when both present and differ, UNVERIFIED when either is missing
+     * (the caller then falls back to same-cert-only install).
+     */
+    static String classifyDigest(String expectHex, String actualHex) {
+        if (expectHex == null || expectHex.isEmpty()
+                || actualHex == null || actualHex.isEmpty()) {
+            return "UNVERIFIED";
+        }
+        return expectHex.equalsIgnoreCase(actualHex) ? "VERIFIED" : "MISMATCH";
     }
 
     /**
@@ -571,6 +622,7 @@ public class AppUpdater {
                     String updatedAt = apk[2];
 
                     latestDownloadUrl = apkUrl;
+                    latestSha256SumsUrl = sha256SumsAssetUrl(release.optJSONArray("assets"));
                     remoteUpdatedAt = updatedAt;
                     // Bind the pending install to THIS channel at the seed
                     // point so downloadAndInstall advances the right baseline
@@ -900,6 +952,26 @@ public class AppUpdater {
                     });
                     postInstallError(callback, "Invalid APK (size: " + fileSize + ")");
                     return;
+                }
+
+                // Step 2b: Verify the APK digest against the release's published
+                // SHA256SUMS before we hand off to `pm install`. This is
+                // defense-in-depth: `pm install -r` already rejects any APK not
+                // signed with the on-device certificate, so the primary guard
+                // holds regardless. A definitive MISMATCH aborts; a missing sums
+                // asset / missing `sha256sum` tool / unreadable file falls back to
+                // same-cert-only install (UNVERIFIED) rather than blocking updates.
+                if (latestSha256SumsUrl == null || latestSha256SumsUrl.isEmpty()) {
+                    Log.i(TAG, "No SHA256SUMS asset; same-cert install is the only guard.");
+                } else {
+                    postProgress(callback, "Verifying signature...");
+                    String verdict = verifyApkDigest();
+                    if ("MISMATCH".equals(verdict)) {
+                        cleanupLeftoverApk();
+                        postInstallError(callback, "Update rejected: APK digest does not match SHA256SUMS");
+                        return;
+                    }
+                    Log.i(TAG, "APK digest verdict: " + verdict);
                 }
 
                 // Step 3: Save update info BEFORE we touch any daemon (the daemon
@@ -1242,6 +1314,75 @@ public class AppUpdater {
             activeCall = null;
         }
     }
+
+    /**
+     * Downloads the release SHA256SUMS and compares the on-disk APK's digest
+     * against it. Returns "VERIFIED", "MISMATCH", or "UNVERIFIED". All file
+     * access is via runShell so it works from both the daemon (UID 2000) and
+     * app UID — the app UID cannot read /data/local/tmp directly. Any failure
+     * degrades to "UNVERIFIED" (same-cert install still protects).
+     */
+    private String verifyApkDigest() {
+        try {
+            // 1. Fetch SHA256SUMS to SUMS_PATH, mirroring the APK download paths.
+            if (canWriteLocalTmp()) {
+                try {
+                    downloadApkOkHttp(latestSha256SumsUrl, SUMS_PATH, NO_OP_CALLBACK);
+                } catch (Exception e) {
+                    Log.w(TAG, "SHA256SUMS download failed: " + e.getMessage());
+                    return "UNVERIFIED";
+                }
+            } else {
+                final boolean[] done = {false};
+                runShell(buildDownloadCommand(latestSha256SumsUrl, SUMS_PATH),
+                        new com.overdrive.app.launcher.AdbDaemonLauncher.LaunchCallback() {
+                    @Override public void onLog(String m) {}
+                    @Override public void onLaunched() { done[0] = true; synchronized (done) { done.notify(); } }
+                    @Override public void onError(String e) { done[0] = true; synchronized (done) { done.notify(); } }
+                });
+                synchronized (done) { if (!done[0]) done.wait(30000); }
+            }
+
+            // 2. Read the sums file body and the APK's actual digest via shell.
+            String sumsBody = runShellCapture("cat " + SUMS_PATH + " 2>/dev/null");
+            String actual = runShellCapture("sha256sum " + APK_PATH + " 2>/dev/null | cut -d' ' -f1").trim();
+            String expected = expectedApkDigest(sumsBody);
+
+            // 3. Best-effort cleanup of the sums temp file.
+            runShell("rm -f " + SUMS_PATH, new com.overdrive.app.launcher.AdbDaemonLauncher.LaunchCallback() {
+                @Override public void onLog(String m) {}
+                @Override public void onLaunched() {}
+                @Override public void onError(String e) {}
+            });
+
+            return classifyDigest(expected, actual);
+        } catch (Exception e) {
+            Log.w(TAG, "Digest verification error, proceeding same-cert-only: " + e.getMessage());
+            return "UNVERIFIED";
+        }
+    }
+
+    /** Runs a shell command via the ADB self-connection and returns its stdout
+     *  (best-effort, "" on error). Blocks up to 15s. */
+    private String runShellCapture(String cmd) {
+        final StringBuilder out = new StringBuilder();
+        final boolean[] done = {false};
+        runShell(cmd, new com.overdrive.app.launcher.AdbDaemonLauncher.LaunchCallback() {
+            @Override public void onLog(String m) { if (m != null) out.append(m).append('\n'); }
+            @Override public void onLaunched() { done[0] = true; synchronized (done) { done.notify(); } }
+            @Override public void onError(String e) { done[0] = true; synchronized (done) { done.notify(); } }
+        });
+        try { synchronized (done) { if (!done[0]) done.wait(15000); } } catch (InterruptedException ignored) {}
+        return out.toString();
+    }
+
+    /** No-op InstallCallback for internal downloads that report no UI progress. */
+    private static final InstallCallback NO_OP_CALLBACK = new InstallCallback() {
+        @Override public void onProgress(String message) {}
+        @Override public void onDownloadProgress(int percent) {}
+        @Override public void onSuccess() {}
+        @Override public void onError(String error) {}
+    };
 
     /**
      * Daemon-process install path: write a self-contained install script and
@@ -2603,6 +2744,7 @@ public class AppUpdater {
             }
             releaseNotes = release.optString("body", "");
             latestDownloadUrl = apk[0];
+            latestSha256SumsUrl = sha256SumsAssetUrl(release.optJSONArray("assets"));
             remoteUpdatedAt = apk[2];
             // Canonicalize to "alpha-v<semver>" (this path is alpha-only) so a
             // filename missing the channel prefix still persists a label the
