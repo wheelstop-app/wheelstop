@@ -32,8 +32,6 @@ Wheelstop diverges from upstream on the things that make a project trustworthy t
   completeness.
 - **Standard OSS hygiene.** Public issues, release-please changelogs, Renovate, zizmor-checked workflows.
 
-See the [design spec](docs/superpowers/specs/2026-08-02-wheelstop-rebrand-and-org.md) for the full story.
-
 ## Install
 
 Grab the signed APK from [Releases](https://github.com/wheelstop-app/wheelstop/releases) and sideload it
