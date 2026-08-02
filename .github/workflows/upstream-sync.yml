@@ -1,0 +1,102 @@
+name: Upstream sync
+
+# Weekly (and on demand) sync assistant. When upstream/main moves ahead, it creates
+# a sync branch, attempts the merge, and opens a PR. A CLEAN merge → a ready PR. A
+# CONFLICTING merge (the common case — this fork diverges heavily from upstream) →
+# a DRAFT PR whose branch carries the conflict markers, so the diff is a precise
+# conflict map you resolve by hand. See docs/fork-maintenance.md.
+#
+# Note: token-created branches/PRs do NOT trigger other workflows (GitHub's loop
+# guard), so build.yml won't auto-run on the sync PR — push a commit to trigger it.
+on:
+  schedule:
+    - cron: "0 8 * * 1" # Mondays 08:00 UTC (after the completeness check)
+  workflow_dispatch:
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  UPSTREAM_URL: https://github.com/yash-srivastava/Overdrive-release.git
+
+jobs:
+  sync:
+    name: Merge upstream/main and open a PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # push the sync branch
+      pull-requests: write # open the sync PR
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Attempt merge and open PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name "overdrive-sync[bot]"
+          git config user.email "overdrive-sync@users.noreply.github.com"
+
+          git remote add upstream "$UPSTREAM_URL"
+          git fetch --no-tags upstream main
+
+          AHEAD=$(git rev-list --count origin/main..upstream/main)
+          echo "upstream/main is $AHEAD commit(s) ahead of origin/main"
+          if [ "$AHEAD" -eq 0 ]; then echo "nothing to sync"; exit 0; fi
+
+          SHORT=$(git rev-parse --short upstream/main)
+          BRANCH="sync/upstream-${SHORT}"
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            echo "branch $BRANCH already exists for this upstream state — nothing to do"
+            exit 0
+          fi
+
+          git checkout -b "$BRANCH" origin/main
+          if git merge --no-edit upstream/main; then
+            STATE="clean"; CONFLICTS=""
+          else
+            STATE="conflicts"
+            CONFLICTS=$(git diff --name-only --diff-filter=U | sort)
+            git add -A
+            git commit --no-edit
+          fi
+
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "HEAD:refs/heads/${BRANCH}"
+
+          {
+            echo "Automated sync of \`upstream/main\` (\`${SHORT}\`, ${AHEAD} commit(s) ahead of \`origin/main\`)."
+            echo
+            echo "### Upstream commits"
+            echo '```'
+            git log --oneline "origin/main..upstream/main" | head -50
+            echo '```'
+            echo
+            if [ "$STATE" = "clean" ]; then
+              echo "✅ Merged cleanly — review and merge."
+            else
+              echo "⚠️ **Merge conflicts.** This branch was committed *with* conflict markers so the diff below is an exact conflict map. Resolve before merging:"
+              echo
+              echo '```'
+              echo "$CONFLICTS"
+              echo '```'
+              echo
+              echo "Resolve locally: \`git fetch origin ${BRANCH} && git checkout ${BRANCH}\`, edit out the \`<<<<<<<\` / \`>>>>>>>\` markers, then \`git commit\` and \`git push\`."
+            fi
+            echo
+            echo "_Token-created PRs don't auto-run CI — push a commit to trigger \`build.yml\`._"
+          } > body.md
+
+          DRAFT=""
+          [ "$STATE" = "conflicts" ] && DRAFT="--draft"
+          gh pr create --base main --head "$BRANCH" \
+            --title "Sync upstream ${SHORT} (${STATE})" \
+            --body-file body.md ${DRAFT}
