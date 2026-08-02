@@ -21,7 +21,7 @@ public class MqttConnectionConfig {
     public String name;                  // User-friendly label ("Home Assistant", "Fleet Server")
     public String brokerUrl;             // tcp://broker.hivemq.com or ssl://your-broker.com
     public int port;                     // 1883 (tcp) or 8883 (ssl)
-    public String topic;                 // e.g. overdrive/vehicle/telemetry
+    public String topic;                 // e.g. wheelstop/vehicle/telemetry
     public String clientId;              // Auto-generated from deviceId + connectionId
     public String username;              // Optional MQTT auth
     public String password;              // Optional MQTT auth
@@ -93,7 +93,14 @@ public class MqttConnectionConfig {
         this.name = "";
         this.brokerUrl = "";
         this.port = DEFAULT_PORT;
-        this.topic = "overdrive/vehicle/telemetry";
+        // Rebrand note: root changed from "overdrive/vehicle/telemetry" to
+        // "wheelstop/vehicle/telemetry". Existing connections that saved the old root under
+        // mqtt_connections.json will keep publishing there (fromJson() below only substitutes
+        // this default for brand-new/unset configs). On migration, either clear the old root's
+        // retained HA discovery messages (publish empty retained payloads) or leave them to
+        // expire so Home Assistant doesn't end up with stale duplicate entities under both
+        // "overdrive/..." and "wheelstop/..." roots. See migration runbook.
+        this.topic = "wheelstop/vehicle/telemetry";
         this.clientId = "";
         this.username = "";
         this.password = "";
@@ -185,9 +192,9 @@ public class MqttConnectionConfig {
             return clientId;
         }
         if (deviceId != null && !deviceId.isEmpty()) {
-            return "overdrive-" + deviceId.substring(0, Math.min(8, deviceId.length())) + "-" + id;
+            return "wheelstop-" + deviceId.substring(0, Math.min(8, deviceId.length())) + "-" + id;
         }
-        return "overdrive-" + id;
+        return "wheelstop-" + id;
     }
 
     /**
@@ -283,7 +290,7 @@ public class MqttConnectionConfig {
         config.name = json.optString("name", "");
         config.brokerUrl = json.optString("brokerUrl", "");
         config.port = json.optInt("port", DEFAULT_PORT);
-        config.topic = json.optString("topic", "overdrive/vehicle/telemetry");
+        config.topic = json.optString("topic", "wheelstop/vehicle/telemetry");
         config.clientId = json.optString("clientId", "");
         // decrypt() passes plaintext through unchanged (isEncrypted() check),
         // so this also transparently migrates connections saved before
