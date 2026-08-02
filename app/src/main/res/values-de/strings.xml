@@ -814,7 +814,7 @@
     <string name="settings_about_license_title">Lizenz</string>
     <string name="settings_about_license_value">MIT  Open Source. Tippen Sie, um den vollständigen Text anzuzeigen.</string>
     <string name="settings_about_source_title">Quellcode</string>
-    <string name="settings_about_source_value">Github.com/yash-srivastava/Overdrive-Veröffentlichung</string>
+    <string name="settings_about_source_value">github.com/wheelstop-app/wheelstop</string>
     <string name="settings_about_star_title">Werfen Sie einen auf GitHub</string>
     <string name="settings_about_star_value">Es dauert nur eine Sekunde.</string>
     <string name="settings_about_thanks_title">Danke</string>
