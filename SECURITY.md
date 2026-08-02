@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-The following versions of OverDrive are currently receiving security updates:
+The following versions of Wheelstop are currently receiving security updates:
 
 | Version | Supported          |
 | ------- | ------------------ |
@@ -15,19 +15,19 @@ We recommend always running the latest release. Older versions will not receive 
 
 **Please do not report security vulnerabilities through public GitHub issues.**
 
-If you discover a security vulnerability, please report it responsibly:
+If you discover a security vulnerability, please report it responsibly using
+**GitHub's private vulnerability reporting**: go to the repository's **Security**
+tab → **Report a vulnerability**. Please include:
 
-1. **Discord/Telegram**: Send a detailed report to **@irshsay**
-2. **Include**:
-   - A description of the vulnerability
-   - Steps to reproduce the issue
-   - Affected components (e.g., HTTP server, MQTT, surveillance, camera, Telegram bot)
-   - Potential impact
-   - Any suggested fix (optional)
+- A description of the vulnerability
+- Steps to reproduce the issue
+- Affected components (e.g., HTTP server, MQTT, surveillance, camera, Telegram bot)
+- Potential impact
+- Any suggested fix (optional)
 
 ## Security Considerations
 
-Given that OverDrive runs on vehicle hardware and handles sensitive data, the following areas are particularly security-sensitive:
+Given that Wheelstop runs on vehicle hardware and handles sensitive data, the following areas are particularly security-sensitive:
 
 - **HTTP/TCP/IPC servers** — Unauthorized access to API endpoints could expose vehicle data or camera feeds
 - **MQTT messaging** — Improperly secured MQTT connections could leak telemetry data
@@ -60,4 +60,4 @@ We ask that you give us reasonable time to address the issue before any public d
 
 ---
 
-Thank you for helping keep OverDrive and its users safe.
+Thank you for helping keep Wheelstop and its users safe.

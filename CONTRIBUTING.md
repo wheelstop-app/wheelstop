@@ -1,6 +1,6 @@
-# Contributing to OverDrive
+# Contributing to Wheelstop
 
-Thanks for your interest in contributing to OverDrive! This guide will help you get started.
+Thanks for your interest in contributing to Wheelstop! This guide will help you get started.
 
 ## Table of Contents
 
@@ -41,8 +41,8 @@ By participating in this project, you agree to maintain a respectful and inclusi
 
 ```bash
 # Clone your fork
-git clone https://github.com/yash-srivastava/Overdrive-release.git
-cd overdrive
+git clone https://github.com/wheelstop-app/wheelstop.git
+cd wheelstop
 
 # Build the project
 ./gradlew assembleDebug
@@ -59,7 +59,7 @@ The app is designed for BYD vehicles with specific hardware APIs. For general de
 
 ```
 app/src/main/
-├── java/com/overdrive/app/
+├── java/app/wheelstop/android/
 │   ├── abrp/              # ABRP telemetry integration
 │   ├── byd/               # BYD vehicle API integration
 │   ├── camera/            # Camera management (AVM, panoramic)
@@ -175,4 +175,4 @@ By contributing, you agree that your contributions will be licensed under the sa
 
 ---
 
-Thanks for helping make OverDrive better!
+Thanks for helping make Wheelstop better!

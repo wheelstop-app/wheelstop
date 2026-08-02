@@ -3,8 +3,8 @@
 This fork carries substantial changes on top of upstream `yash-srivastava/Overdrive-release`
 (open `BsCoefficients` replacing `libod.so`, hardened CI, digest-pinned native fetch,
 signed-release pipeline + fork updater, blind-spot features). Upstream ships as large,
-squashed "export" commits from a private tree, with no release CI. These two workflows keep
-the fork current and honest about what upstream is actually shipping.
+squashed "export" commits from a private tree, with no release CI. The `upstream-sync`
+workflow keeps the fork current with what upstream is shipping.
 
 ## The reality of syncing
 
@@ -38,28 +38,6 @@ Conflicts you'll see most often, and how they resolve:
 - `app/build.gradle.kts` — version handling + native-dep fetch. Keep the fork's digest-pinned
   `downloadOpenCV`/`downloadOpenH264` and `UPDATE_REPO`; take upstream's real feature changes.
 - Deleted `libod.so` reappears as a modify/delete conflict — keep it **deleted**.
-
-## `upstream-completeness.yml` — the "is a feature missing from source?" monitor
-
-Runs weekly (Mon 07:00 UTC) and on demand. It answers the worry that upstream ships features
-whose source never lands in the repo.
-
-- Downloads the **latest upstream release APK** and its **tagged source**, then runs
-  `.github/scripts/upstream-completeness.sh`: every `com/overdrive` class in the binary that
-  has no matching `.java`/`.kt` file or type declaration in the source is flagged.
-- **Green run →** every kept class resolves to source (the v36.6 state).
-- **Failed run →** the release ships code not in its source (the v35.1 state — e.g. the
-  `VehicleActuatorService` / cluster-mirror classes that shipped without source). Issues are
-  disabled on this fork, so the failure itself is the alert (GitHub emails the owner on a
-  failed scheduled run); the flagged classes are in the **job summary** and the
-  `completeness-result` artifact.
-
-**Heuristic limit:** R8 renames non-kept classes, so this only sees the classes upstream keeps
-un-obfuscated — which is exactly where past gaps appeared, but it is not a proof of total
-completeness. For a definitive answer, do a full rebuild-and-diff (below).
-
-When it fires, decide per case: wait for upstream's next export to include the source, raise it
-upstream, or reverse-engineer the feature from the binary (as was done for `libod`).
 
 ## Definitive check: rebuild a tag and diff
 
