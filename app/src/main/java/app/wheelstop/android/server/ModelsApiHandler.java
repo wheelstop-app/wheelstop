@@ -56,7 +56,7 @@ public class ModelsApiHandler {
     private static final String MANIFEST_REMOTE_CACHE = "/data/local/tmp/overdrive/models/manifest.json";
     // GitHub release manifest URL — same baseUrl convention as the GLBs themselves.
     private static final String MANIFEST_REMOTE_URL =
-            "https://github.com/yash-srivastava/Overdrive-release/releases/download/models-v1/manifest.json";
+            "https://github.com/wheelstop-app/wheelstop-assets/releases/download/models-v1/manifest.json";
 
     // Two concurrent downloads is plenty — the BYD AVN's storage and LTE both serialize anyway.
     private static final ExecutorService downloadExec = Executors.newFixedThreadPool(2);
