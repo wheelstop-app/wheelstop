@@ -474,7 +474,7 @@
     <string name="settings_about_support_section">Styret av folk som deg</string>
     <string name="settings_about_support_share_title">Si ifra til en annen eier</string>
     <string name="settings_about_support_share_value">Hver delte lenke hjelper en annen BYD eier oppdage Wheelstop.</string>
-    <string name="settings_about_support_share_message">Sjekk Wheelstop  åpen kildekode overvåking &amp; dashcam for BYD: https://overdrive-5lc.pages.dev/</string>
+    <string name="settings_about_support_share_message">Sjekk Wheelstop åpen kildekode overvåking &amp; dashcam for BYD: https://overdrive-5lc.pages.dev/</string>
     <string name="settings_about_support_share_chooser">Del Wheelstop</string>
     <string name="settings_about_open_link_failed">Jeg kunne ikke åpne lenken.</string>
     <string name="settings_about_open_link_copied">Ingen nettleser funnet. URL kopiert: %1$s</string>

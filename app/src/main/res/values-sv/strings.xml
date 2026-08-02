@@ -395,7 +395,7 @@
     <string name="update_picker_current_suffix">%1$s (installerad)</string>
     <string name="update_picker_older_suffix">%1$s (äldre)</string>
     <!-- Update progress (title + per-step status; no emoji — state icon carries the cue) -->
-    <string name="update_progress_title">Uppdatera överväxel</string>
+    <string name="update_progress_title">Uppdatera Wheelstop</string>
     <string name="update_step_downloading">Laddar ner uppdatering…</string>
     <string name="update_step_verifying">Verifierar nedladdning…</string>
     <string name="update_step_stopping">Stoppar demoner…</string>
@@ -610,7 +610,7 @@
          or only the keepalive survived an OOM respawn. -->
     <string name="daemon_keepalive_notif_title">Wheelstop aktiv</string>
     <string name="daemon_keepalive_notif_text">Övervakning av fordonssystem</string>
-    <string name="overdrive_status_summary_title">Överväxel</string>
+    <string name="overdrive_status_summary_title">Wheelstop</string>
     <string name="overdrive_status_summary_text">Bakgrundstjänster som körs</string>
     <!-- ============================================================== -->
     <!-- M3 Revamp: navigation rail + settings sub-rail + theme picker  -->
@@ -659,7 +659,7 @@
     <string name="settings_about_support_share_title">Berätta för en annan ägare</string>
     <string name="settings_about_support_share_value">Varje delad länk hjälper en annan BYD-ägare upptäcka Wheelstop.</string>
     <string name="settings_about_support_share_message">Kolla in Wheelstop — open-source övervakning &amp; dashcam för BYD: https://overdrive-5lc.pages.dev/</string>
-    <string name="settings_about_support_share_chooser">Dela överväxel</string>
+    <string name="settings_about_support_share_chooser">Dela Wheelstop</string>
     <string name="settings_about_open_link_failed">Kunde inte öppna länk.</string>
     <string name="settings_about_open_link_copied">Ingen webbläsare hittad. URL kopierad: %1$s</string>
     <string name="settings_about_support_kofi_title">Bränsle nästa utgåva</string>
@@ -971,7 +971,7 @@
         <item quantity="other">Wheelstop online för %1$d dagar, %2$d h</item>
     </plurals>
     <plurals name="dashboard_insight_uptime_hours">
-        <item quantity="one">Överväxel online för %1$d timme</item>
+        <item quantity="one">Wheelstop online för %1$d timme</item>
         <item quantity="other">Wheelstop online i %1$d timmar</item>
     </plurals>
     <!-- Duration helpers used inside insights (last_charge etc.). -->

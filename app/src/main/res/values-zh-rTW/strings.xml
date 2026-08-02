@@ -963,10 +963,10 @@
     </plurals>
     <!-- Process uptime. Days form takes (days, hours); hours form takes hours only. -->
     <plurals name="dashboard_insight_uptime_days_hours">
-        <item quantity="other">在網路上駕駛超過%1$d天,%2$d小時</item>
+        <item quantity="other">在網路上Wheelstop%1$d天,%2$d小時</item>
     </plurals>
     <plurals name="dashboard_insight_uptime_hours">
-        <item quantity="other">在網路上駕駛超過%1$d小時</item>
+        <item quantity="other">在網路上Wheelstop%1$d小時</item>
     </plurals>
     <!-- Duration helpers used inside insights (last_charge etc.). -->
     <plurals name="dashboard_insight_minutes">
@@ -1197,7 +1197,7 @@
     <string name="onboarding_camera_applying_body">畫面會變黑並閃爍約 10 秒。這是正常現象 — 請稍候。</string>
     <string name="onboarding_expert_menu_start">開始導覽</string>
     <string name="onboarding_expert_security_body">設定 PIN 碼以為共用車輛把關。應用程式鎖定期間，監控與錄影仍持續運作。忘記的 PIN 碼只能透過 USB 由電腦清除。</string>
-    <string name="settings_backup_default_filename">overdrive-backup.json</string>
+    <string name="settings_backup_default_filename">wheelstop-backup.json</string>
     <string name="settings_backup_import_value">載入在同一台主機上建立的備份檔案。</string>
     <string name="onboarding_camera_opening_body">正在載入相機的即時預覽。這可能需要幾秒鐘。</string>
     <string name="roadsense_map_route_http">路線規劃服務錯誤（%1$d）。請稍後再試。</string>

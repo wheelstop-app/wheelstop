@@ -963,10 +963,10 @@
     </plurals>
     <!-- Process uptime. Days form takes (days, hours); hours form takes hours only. -->
     <plurals name="dashboard_insight_uptime_days_hours">
-        <item quantity="other">%1$d 일 동안 온라인에서 오버 드라이브, %2$d hr</item>
+        <item quantity="other">%1$d 일 동안 온라인에서 Wheelstop, %2$d hr</item>
     </plurals>
     <plurals name="dashboard_insight_uptime_hours">
-        <item quantity="other">%1$d 시간 동안 오프라인 운전</item>
+        <item quantity="other">%1$d 시간 동안 오프라인 Wheelstop</item>
     </plurals>
     <!-- Duration helpers used inside insights (last_charge etc.). -->
     <plurals name="dashboard_insight_minutes">
@@ -1197,7 +1197,7 @@
     <string name="onboarding_camera_applying_body">약 10초 동안 화면이 어두워지고 깜빡입니다. 정상적인 현상이니 잠시 기다려 주세요.</string>
     <string name="onboarding_expert_menu_start">투어 시작</string>
     <string name="onboarding_expert_security_body">공유 차량을 위해 PIN을 설정하여 앱을 잠그세요. 앱이 잠긴 동안에도 감시와 녹화는 계속 작동합니다. 잊어버린 PIN은 USB를 통해 컴퓨터에서만 해제할 수 있습니다.</string>
-    <string name="settings_backup_default_filename">overdrive-backup.json</string>
+    <string name="settings_backup_default_filename">wheelstop-backup.json</string>
     <string name="settings_backup_import_value">이 동일한 헤드 유닛에서 만든 백업 파일을 불러옵니다.</string>
     <string name="onboarding_camera_opening_body">카메라에서 실시간 미리보기를 불러오는 중입니다. 몇 초 정도 걸릴 수 있습니다.</string>
     <string name="roadsense_map_route_http">경로 안내 서비스 오류(%1$d). 잠시 후 다시 시도하세요.</string>

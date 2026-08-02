@@ -784,7 +784,7 @@
     <string name="settings_backup_export_value">Сохраните резервную копию ваших текущих настроек. Сохраните её конфиденциальной — в ней хранятся ваши учетные данные.</string>
     <string name="settings_backup_import_title">Восстановить настройки</string>
     <string name="settings_backup_import_value">Загрузить файл резервной копии с той же самой головной единицей.</string>
-    <string name="settings_backup_default_filename">overdrive-backup.json</string>
+    <string name="settings_backup_default_filename">wheelstop-backup.json</string>
     <string name="settings_backup_exporting">Создание резервной копии…</string>
     <string name="settings_backup_export_failed">Не удалось сделать резервную копию</string>
     <string name="settings_backup_saved">Резервная копия сохранена</string>
@@ -811,7 +811,7 @@
     <string name="settings_about_support_section">Поддерживаются такими людьми, как ты.</string>
     <string name="settings_about_support_share_title">Расскажите другому владельцу</string>
     <string name="settings_about_support_share_value">Каждый общий ссылка помогает другому владельцу BYD обнаружить Wheelstop.</string>
-    <string name="settings_about_support_share_message">Проверьте Wheelstop  открытый код наблюдения и дашкамы для BYD: https://overdrive-5lc.pages.dev/</string>
+    <string name="settings_about_support_share_message">Проверьте Wheelstop открытый код наблюдения и дашкамы для BYD: https://overdrive-5lc.pages.dev/</string>
     <string name="settings_about_support_share_chooser">Поделиться Wheelstop</string>
     <string name="settings_about_open_link_failed">Не удалось открыть ссылку.</string>
     <string name="settings_about_open_link_copied">Никакой браузер не найден. URL скопирован: %1$s</string>
@@ -1124,16 +1124,16 @@
     </plurals>
     <!-- Process uptime. Days form takes (days, hours); hours form takes hours only. -->
     <plurals name="dashboard_insight_uptime_days_hours">
-        <item quantity="one">Перегонка в режиме онлайн на %1$d день, %2$d ч</item>
-        <item quantity="few">Перегонка в режиме онлайн в течение %1$d дней, %2$d часов</item>
-        <item quantity="many">Перегонка в режиме онлайн в течение %1$d дней, %2$d часов</item>
-        <item quantity="other">Перегонка в режиме онлайн в течение %1$d дней, %2$d часов</item>
+        <item quantity="one">Wheelstop в режиме онлайн на %1$d день, %2$d ч</item>
+        <item quantity="few">Wheelstop в режиме онлайн в течение %1$d дней, %2$d часов</item>
+        <item quantity="many">Wheelstop в режиме онлайн в течение %1$d дней, %2$d часов</item>
+        <item quantity="other">Wheelstop в режиме онлайн в течение %1$d дней, %2$d часов</item>
     </plurals>
     <plurals name="dashboard_insight_uptime_hours">
-        <item quantity="one">Перегонка в режиме %1$d часа</item>
-        <item quantity="few">Превышение скорости движения в режиме онлайн в течение %1$d часов</item>
-        <item quantity="many">Превышение скорости движения в режиме онлайн в течение %1$d часов</item>
-        <item quantity="other">Превышение скорости движения в режиме онлайн в течение %1$d часов</item>
+        <item quantity="one">Wheelstop в режиме %1$d часа</item>
+        <item quantity="few">Wheelstop в режиме онлайн в течение %1$d часов</item>
+        <item quantity="many">Wheelstop в режиме онлайн в течение %1$d часов</item>
+        <item quantity="other">Wheelstop в режиме онлайн в течение %1$d часов</item>
     </plurals>
     <!-- Duration helpers used inside insights (last_charge etc.). -->
     <plurals name="dashboard_insight_minutes">

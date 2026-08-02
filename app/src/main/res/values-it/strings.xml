@@ -780,7 +780,7 @@ Questa azione non puo essere annullata.</string>
     <string name="settings_backup_export_value">Salva un file di backup delle impostazioni correnti. Tienilo privato — contiene le tue credenziali.</string>
     <string name="settings_backup_import_title">Ripristina impostazioni</string>
     <string name="settings_backup_import_value">Carica un file di backup fatto su questa stessa unità di testa.</string>
-    <string name="settings_backup_default_filename">overdrive-backup.json</string>
+    <string name="settings_backup_default_filename">wheelstop-backup.json</string>
     <string name="settings_backup_exporting">Costruzione backup…</string>
     <string name="settings_backup_export_failed">Esportazione backup fallita</string>
     <string name="settings_backup_saved">Backup salvato</string>

@@ -773,7 +773,7 @@
     <string name="settings_backup_export_value">Lagre en sikkerhetskopifil av dine gjeldende innstillinger. Behold den privat – den har din legitimasjon.</string>
     <string name="settings_backup_import_title">Gjenopprett innstillinger</string>
     <string name="settings_backup_import_value">Last inn en sikkerhetskopifil som er gjort på dette hodet enhet.</string>
-    <string name="settings_backup_default_filename">overdrive-backup.json</string>
+    <string name="settings_backup_default_filename">wheelstop-backup.json</string>
     <string name="settings_backup_exporting">Lager sikkerhetskopi…</string>
     <string name="settings_backup_export_failed">Eksport av sikkerhetskopiering mislyktes</string>
     <string name="settings_backup_saved">Sikkerhetskopi lagret</string>

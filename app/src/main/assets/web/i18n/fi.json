@@ -10,7 +10,7 @@
     "tagline": "Seuranta Järjestelmä",
     "live_view_title": "Live View - Wheelstop",
     "events_title": "Tapahtumat - Wheelstop",
-    "surveillance_title": "Valvonta - Yliajoitus",
+    "surveillance_title": "Valvonta - Wheelstop",
     "recordings_title": "Tallenteet - Wheelstop",
     "performance_title": "Suorituskyky - Wheelstop",
     "abrp_title": "ABRP - Wheelstop",
@@ -1822,7 +1822,7 @@
   },
   "map": {
     "your_vehicle": "Sinun Ajoneuvo",
-    "your_vehicle_sub": "Yliajojen Valvonta",
+    "your_vehicle_sub": "Wheelstop Valvonta",
     "you_are_here": "Olet täällä"
   },
   "pip": {

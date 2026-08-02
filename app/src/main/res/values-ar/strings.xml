@@ -1337,7 +1337,7 @@
     <string name="settings_about_star_url">https://github.com/yash-srivastava/Overdrive-release</string>
     <string name="settings_about_support_kofi_url">https://ko-fi.com/E1E71XALHX</string>
     <string name="settings_backup_daemon_down">يجب أن تكون خدمة الكاميرا قيد التشغيل لعمل النسخ الاحتياطي أو الاستعادة. قم بتشغيلها من Daemons ثم حاول مرة أخرى.</string>
-    <string name="settings_backup_default_filename">overdrive-backup.json</string>
+    <string name="settings_backup_default_filename">wheelstop-backup.json</string>
     <string name="settings_backup_export_failed">فشل تصدير النسخة الاحتياطية</string>
     <string name="settings_backup_export_title">تصدير الإعدادات</string>
     <string name="settings_backup_export_value">احفظ ملف نسخ احتياطية من إعداداتك الحالية. احتفظ به خاصًا — يحتوي على بيانات اعتمادك.</string>

@@ -778,7 +778,7 @@
     <string name="settings_backup_export_value">Salve um arquivo de backup de suas configurações atuais. Mantenha-o privado - ele contém suas credenciais.</string>
     <string name="settings_backup_import_title">Restaurar configurações</string>
     <string name="settings_backup_import_value">Carregar um arquivo de backup feito nesta mesma central multimídia.</string>
-    <string name="settings_backup_default_filename">overdrive-backup.json</string>
+    <string name="settings_backup_default_filename">wheelstop-backup.json</string>
     <string name="settings_backup_exporting">Criando backup…</string>
     <string name="settings_backup_export_failed">Falha na exportação do backup</string>
     <string name="settings_backup_saved">Backup salvo</string>
@@ -1115,12 +1115,12 @@
     </plurals>
     <!-- Process uptime. Days form takes (days, hours); hours form takes hours only. -->
     <plurals name="dashboard_insight_uptime_days_hours">
-        <item quantity="one">Excesso de condução online para dia %1$d, %2$d horas</item>
-        <item quantity="other">Excesso de velocidade em linha durante %1$d dias, %2$d horas</item>
+        <item quantity="one">Wheelstop online para dia %1$d, %2$d horas</item>
+        <item quantity="other">Wheelstop em linha durante %1$d dias, %2$d horas</item>
     </plurals>
     <plurals name="dashboard_insight_uptime_hours">
-        <item quantity="one">Excesso de velocidade em linha durante a hora %1$d</item>
-        <item quantity="other">Excesso de condução em linha durante %1$d horas</item>
+        <item quantity="one">Wheelstop em linha durante a hora %1$d</item>
+        <item quantity="other">Wheelstop em linha durante %1$d horas</item>
     </plurals>
     <!-- Duration helpers used inside insights (last_charge etc.). -->
     <plurals name="dashboard_insight_minutes">

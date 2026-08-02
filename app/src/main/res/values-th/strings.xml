@@ -1197,7 +1197,7 @@
     <string name="onboarding_camera_applying_body">ภาพจะมืดและกะพริบประมาณ 10 วินาที นี่เป็นเรื่องปกติ — โปรดรอสักครู่</string>
     <string name="onboarding_expert_menu_start">เริ่มทัวร์</string>
     <string name="onboarding_expert_security_body">ตั้ง PIN เพื่อจำกัดแอปสำหรับยานพาหนะที่ใช้ร่วมกัน การเฝ้าระวังและการบันทึกยังคงทำงานขณะแอปถูกล็อก PIN ที่ลืมสามารถล้างได้จากคอมพิวเตอร์ผ่าน USB เท่านั้น</string>
-    <string name="settings_backup_default_filename">overdrive-backup.json</string>
+    <string name="settings_backup_default_filename">wheelstop-backup.json</string>
     <string name="settings_backup_import_value">โหลดไฟล์สำรองที่สร้างบนหัวเครื่องเดียวกันนี้</string>
     <string name="onboarding_camera_opening_body">กำลังโหลดภาพแสดงตัวอย่างสดจากกล้องของคุณ อาจใช้เวลาสองสามวินาที</string>
     <string name="roadsense_map_route_http">ข้อผิดพลาดของบริการนำทาง (%1$d) ลองอีกครั้งในไม่ช้า</string>

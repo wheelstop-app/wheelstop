@@ -1194,7 +1194,7 @@
     "limit_min_default": "100 MB",
     "limit_max_default": "100 GB",
     "storage_usage": "Brug Af Lager",
-    "events_saved_to_default": "Begivenheder gemt i Overdrev/overvågning",
+    "events_saved_to_default": "Begivenheder gemt i Overdrive/overvågning",
     "storage_location_desc": "Vælg hvor overvågningshændelser skal gemmes",
     "storage_title": "Opbevaring Af Overvågning",
     "recording_settings_title": "Indstillinger For Optagelse",

@@ -659,7 +659,7 @@
     <string name="settings_about_support_section">Senin gibi insanlar tarafından güçlendirilmiş.</string>
     <string name="settings_about_support_share_title">Başka bir araç sahibine bahset</string>
     <string name="settings_about_support_share_value">Paylaşılan her bağlantı başka bir BYD sahibinin Wheelstop\'i keşfetmesine yardımcı olur.</string>
-    <string name="settings_about_support_share_message">BYD için Wheelstop  açık kaynaklı gözetim &amp; dashcam\'ı kontrol edin: https://overdrive-5lc.pages.dev/</string>
+    <string name="settings_about_support_share_message">BYD için Wheelstop açık kaynaklı gözetim &amp; dashcam\'ı kontrol edin: https://overdrive-5lc.pages.dev/</string>
     <string name="settings_about_support_share_chooser">Wheelstop\'ı Paylaş</string>
     <string name="settings_about_open_link_failed">Bağlantıyı açamadım.</string>
     <string name="settings_about_open_link_copied">URL kopyalandı: %1$s</string>
@@ -968,12 +968,12 @@
     </plurals>
     <!-- Process uptime. Days form takes (days, hours); hours form takes hours only. -->
     <plurals name="dashboard_insight_uptime_days_hours">
-        <item quantity="one">%1$d gün, %2$d saat için çevrimiçi sürüş</item>
-        <item quantity="other">%1$d günleri, %2$d saatleri için online sürüş</item>
+        <item quantity="one">%1$d gün, %2$d saat için çevrimiçi Wheelstop</item>
+        <item quantity="other">%1$d günleri, %2$d saatleri için online Wheelstop</item>
     </plurals>
     <plurals name="dashboard_insight_uptime_hours">
-        <item quantity="one">%1$d saat boyunca online sürüş</item>
-        <item quantity="other">%1$d saat boyunca online sürüş</item>
+        <item quantity="one">%1$d saat boyunca online Wheelstop</item>
+        <item quantity="other">%1$d saat boyunca online Wheelstop</item>
     </plurals>
     <!-- Duration helpers used inside insights (last_charge etc.). -->
     <plurals name="dashboard_insight_minutes">
@@ -1207,7 +1207,7 @@
     <string name="onboarding_camera_applying_body">Görüntü yaklaşık 10 saniye kararacak ve titreyecek. Bu normaldir — biraz bekleyin.</string>
     <string name="onboarding_expert_menu_start">Tura başla</string>
     <string name="onboarding_expert_security_body">Paylaşılan araçlar için uygulamayı korumak üzere bir PIN belirleyin. Uygulama kilitliyken Gözetim ve kayıt çalışmaya devam eder. Unutulan bir PIN yalnızca bir bilgisayardan USB üzerinden temizlenebilir.</string>
-    <string name="settings_backup_default_filename">overdrive-backup.json</string>
+    <string name="settings_backup_default_filename">wheelstop-backup.json</string>
     <string name="settings_backup_import_value">Aynı bu kafa ünitesinde oluşturulmuş bir yedek dosyasını yükleyin.</string>
     <string name="onboarding_camera_opening_body">Kameralarınızdan canlı bir önizleme yükleniyor. Bu birkaç saniye sürebilir.</string>
     <string name="roadsense_map_route_http">Rota hizmeti hatası (%1$d). Birazdan tekrar deneyin.</string>

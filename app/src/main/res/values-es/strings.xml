@@ -778,7 +778,7 @@
     <string name="settings_backup_export_value">Guarda un archivo de copia de seguridad de tus ajustes actuales. Manténgalo privado — guarda tus credenciales.</string>
     <string name="settings_backup_import_title">Restaurar ajustes</string>
     <string name="settings_backup_import_value">Cargar un archivo de copia de seguridad hecho en esta misma unidad de cabeza.</string>
-    <string name="settings_backup_default_filename">overdrive-backup.json</string>
+    <string name="settings_backup_default_filename">wheelstop-backup.json</string>
     <string name="settings_backup_exporting">Building backup…</string>
     <string name="settings_backup_export_failed">Error al exportar la copia de seguridad</string>
     <string name="settings_backup_saved">Copia guardada</string>
@@ -805,7 +805,7 @@
     <string name="settings_about_support_section">Alimentado por gente como tú</string>
     <string name="settings_about_support_share_title">Cuéntaselo a otro propietario</string>
     <string name="settings_about_support_share_value">Cada enlace compartido ayuda a otro propietario de BYD a descubrir Wheelstop.</string>
-    <string name="settings_about_support_share_message">Consulte Wheelstop  vigilancia de código abierto y dashcam para BYD: https://overdrive-5lc.pages.dev/</string>
+    <string name="settings_about_support_share_message">Consulte Wheelstop vigilancia de código abierto y dashcam para BYD: https://overdrive-5lc.pages.dev/</string>
     <string name="settings_about_support_share_chooser">Compartir Wheelstop</string>
     <string name="settings_about_open_link_failed">No pude abrir el enlace.</string>
     <string name="settings_about_open_link_copied">No se ha encontrado ningún navegador. URL copiado: %1$s</string>
@@ -1114,12 +1114,12 @@
     </plurals>
     <!-- Process uptime. Days form takes (days, hours); hours form takes hours only. -->
     <plurals name="dashboard_insight_uptime_days_hours">
-        <item quantity="one">Superconducción en línea para %1$d día, %2$d hora</item>
-        <item quantity="other">Superconducción en línea durante %1$d días, %2$d horas</item>
+        <item quantity="one">Wheelstop en línea para %1$d día, %2$d hora</item>
+        <item quantity="other">Wheelstop en línea durante %1$d días, %2$d horas</item>
     </plurals>
     <plurals name="dashboard_insight_uptime_hours">
-        <item quantity="one">Superconducción en línea durante %1$d hora</item>
-        <item quantity="other">Superconducción en línea durante %1$d horas</item>
+        <item quantity="one">Wheelstop en línea durante %1$d hora</item>
+        <item quantity="other">Wheelstop en línea durante %1$d horas</item>
     </plurals>
     <!-- Duration helpers used inside insights (last_charge etc.). -->
     <plurals name="dashboard_insight_minutes">

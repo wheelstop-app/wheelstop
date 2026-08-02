@@ -778,7 +778,7 @@
     <string name="settings_backup_export_value">Sichern Sie eine Sicherungsdatei Ihrer aktuellen Einstellungen. Halten Sie sie privat – sie enthält Ihre Anmeldeinformationen.</string>
     <string name="settings_backup_import_title">Einstellungen wiederherstellen</string>
     <string name="settings_backup_import_value">Laden Sie eine Backup-Datei aus der gleichen Head-Einheit.</string>
-    <string name="settings_backup_default_filename">overdrive-backup.json</string>
+    <string name="settings_backup_default_filename">wheelstop-backup.json</string>
     <string name="settings_backup_exporting">Backup erstellen…</string>
     <string name="settings_backup_export_failed">Backup-Export fehlgeschlagen</string>
     <string name="settings_backup_saved">Sicherung gespeichert</string>
@@ -805,7 +805,7 @@
     <string name="settings_about_support_section">Von Leuten wie dir angetrieben.</string>
     <string name="settings_about_support_share_title">Sag es einem anderen Besitzer</string>
     <string name="settings_about_support_share_value">Jeder gemeinsame Link hilft einem anderen BYD-Besitzer, Wheelstop zu entdecken.</string>
-    <string name="settings_about_support_share_message">Überprüfen Sie Wheelstop  Open-Source-Überwachung &amp; Dashcam für BYD: https://overdrive-5lc.pages.dev/</string>
+    <string name="settings_about_support_share_message">Überprüfen Sie Wheelstop Open-Source-Überwachung &amp; Dashcam für BYD: https://overdrive-5lc.pages.dev/</string>
     <string name="settings_about_support_share_chooser">Wheelstop teilen</string>
     <string name="settings_about_open_link_failed">Ich konnte die Verbindung nicht öffnen.</string>
     <string name="settings_about_open_link_copied">Keine Browser gefunden. URL kopiert: %1$s</string>
@@ -1114,12 +1114,12 @@
     </plurals>
     <!-- Process uptime. Days form takes (days, hours); hours form takes hours only. -->
     <plurals name="dashboard_insight_uptime_days_hours">
-        <item quantity="one">Überfahren online für %1$d Tag, %2$d Stunden</item>
-        <item quantity="other">Überfahren online für %1$d Tage, %2$d Stunden</item>
+        <item quantity="one">Wheelstop online für %1$d Tag, %2$d Stunden</item>
+        <item quantity="other">Wheelstop online für %1$d Tage, %2$d Stunden</item>
     </plurals>
     <plurals name="dashboard_insight_uptime_hours">
-        <item quantity="one">Überfahren für %1$d Stunde online</item>
-        <item quantity="other">%1$d-Stunden lang online überfahren</item>
+        <item quantity="one">Wheelstop für %1$d Stunde online</item>
+        <item quantity="other">%1$d-Stunden lang online Wheelstop</item>
     </plurals>
     <!-- Duration helpers used inside insights (last_charge etc.). -->
     <plurals name="dashboard_insight_minutes">

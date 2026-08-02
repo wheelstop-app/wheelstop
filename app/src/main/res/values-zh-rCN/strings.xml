@@ -775,7 +775,7 @@
     <string name="settings_backup_export_value">保存您当前设置的备份文件。保持隐私 — — 它持有您的凭据。</string>
     <string name="settings_backup_import_title">还原设置</string>
     <string name="settings_backup_import_value">加载在同一头部设备上的备份文件。</string>
-    <string name="settings_backup_default_filename">超驱动器备份.json</string>
+    <string name="settings_backup_default_filename">Wheelstop备份.json</string>
     <string name="settings_backup_exporting">Building backup…</string>
     <string name="settings_backup_export_failed">备份导出失败</string>
     <string name="settings_backup_saved">备份已保存</string>
@@ -1109,10 +1109,10 @@
     </plurals>
     <!-- Process uptime. Days form takes (days, hours); hours form takes hours only. -->
     <plurals name="dashboard_insight_uptime_days_hours">
-        <item quantity="other">在线开车%1$d天,%2$d小时</item>
+        <item quantity="other">在线Wheelstop%1$d天,%2$d小时</item>
     </plurals>
     <plurals name="dashboard_insight_uptime_hours">
-        <item quantity="other">在线开车%1$d小时</item>
+        <item quantity="other">在线Wheelstop%1$d小时</item>
     </plurals>
     <!-- Duration helpers used inside insights (last_charge etc.). -->
     <plurals name="dashboard_insight_minutes">

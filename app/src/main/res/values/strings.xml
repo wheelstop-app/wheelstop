@@ -910,7 +910,7 @@
     <string name="settings_backup_export_value">Save a backup file of your current settings. Keep it private — it holds your credentials.</string>
     <string name="settings_backup_import_title">Restore settings</string>
     <string name="settings_backup_import_value">Load a backup file made on this same head unit.</string>
-    <string name="settings_backup_default_filename">overdrive-backup.json</string>
+    <string name="settings_backup_default_filename">wheelstop-backup.json</string>
     <string name="settings_backup_exporting">Building backup…</string>
     <string name="settings_backup_export_failed">Backup export failed</string>
     <string name="settings_backup_saved">Backup saved</string>

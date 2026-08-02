@@ -656,7 +656,7 @@
     <string name="settings_about_support_section">Được vận hành bởi những người như anh</string>
     <string name="settings_about_support_share_title">Hãy nói với chủ xe khác</string>
     <string name="settings_about_support_share_value">Mỗi liên kết được chia sẻ giúp một chủ sở hữu BYD khác khám phá Wheelstop.</string>
-    <string name="settings_about_support_share_message">Kiểm tra Wheelstop  giám sát nguồn mở &amp; dashcam cho BYD: https://overdrive-5lc.pages.dev/</string>
+    <string name="settings_about_support_share_message">Kiểm tra Wheelstop giám sát nguồn mở &amp; dashcam cho BYD: https://overdrive-5lc.pages.dev/</string>
     <string name="settings_about_support_share_chooser">Chia sẻ Wheelstop</string>
     <string name="settings_about_open_link_failed">Không thể mở liên kết.</string>
     <string name="settings_about_open_link_copied">Không tìm thấy trình duyệt. URL sao chép: %1$s</string>
@@ -963,10 +963,10 @@
     </plurals>
     <!-- Process uptime. Days form takes (days, hours); hours form takes hours only. -->
     <plurals name="dashboard_insight_uptime_days_hours">
-        <item quantity="other">Chuyển đường trên mạng trong %1$d ngày, %2$d giờ</item>
+        <item quantity="other">Wheelstop trên mạng trong %1$d ngày, %2$d giờ</item>
     </plurals>
     <plurals name="dashboard_insight_uptime_hours">
-        <item quantity="other">Chuyển đường trên mạng trong %1$d giờ</item>
+        <item quantity="other">Wheelstop trên mạng trong %1$d giờ</item>
     </plurals>
     <!-- Duration helpers used inside insights (last_charge etc.). -->
     <plurals name="dashboard_insight_minutes">
@@ -1197,7 +1197,7 @@
     <string name="onboarding_camera_applying_body">Khung hình sẽ tối đi và nhấp nháy khoảng 10 giây. Điều này là bình thường — hãy đợi một chút.</string>
     <string name="onboarding_expert_menu_start">Bắt đầu hướng dẫn</string>
     <string name="onboarding_expert_security_body">Đặt mã PIN để khóa ứng dụng đối với xe dùng chung. Giám sát và ghi hình vẫn tiếp tục chạy khi ứng dụng bị khóa. Mã PIN bị quên chỉ có thể được xóa từ máy tính qua USB.</string>
-    <string name="settings_backup_default_filename">overdrive-backup.json</string>
+    <string name="settings_backup_default_filename">wheelstop-backup.json</string>
     <string name="settings_backup_import_value">Tải tệp sao lưu được tạo trên chính head-unit này.</string>
     <string name="onboarding_camera_opening_body">Đang tải bản xem trực tiếp từ camera của bạn. Việc này có thể mất vài giây.</string>
     <string name="roadsense_map_route_http">Lỗi dịch vụ định tuyến (%1$d). Hãy thử lại trong giây lát.</string>

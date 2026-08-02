@@ -775,7 +775,7 @@
     <string name="settings_backup_export_value">現在の設定のバックアップファイルを保存します。非公開にしてください。認証情報は保持されます。</string>
     <string name="settings_backup_import_title">設定を復元</string>
     <string name="settings_backup_import_value">この同じヘッドユニットに作成されたバックアップファイルをロードします。</string>
-    <string name="settings_backup_default_filename">overdrive-backup.json</string>
+    <string name="settings_backup_default_filename">wheelstop-backup.json</string>
     <string name="settings_backup_exporting">Building backup…</string>
     <string name="settings_backup_export_failed">バックアップのエクスポートに失敗しました</string>
     <string name="settings_backup_saved">バックアップを保存しました</string>
@@ -1109,10 +1109,10 @@
     </plurals>
     <!-- Process uptime. Days form takes (days, hours); hours form takes hours only. -->
     <plurals name="dashboard_insight_uptime_days_hours">
-        <item quantity="other">%1$d日,%2$d時間,オンラインで運転する</item>
+        <item quantity="other">%1$d日,%2$d時間,オンラインでWheelstop</item>
     </plurals>
     <plurals name="dashboard_insight_uptime_hours">
-        <item quantity="other">%1$d時間 オンラインでオーバードライブ</item>
+        <item quantity="other">%1$d時間 オンラインでWheelstop</item>
     </plurals>
     <!-- Duration helpers used inside insights (last_charge etc.). -->
     <plurals name="dashboard_insight_minutes">
