@@ -1,6 +1,6 @@
 # Blind-spot coefficients — derivation and provenance
 
-`com.overdrive.app.blindspot.BsCoefficients.resolve` computes 20 sampler coefficients from
+`app.wheelstop.android.blindspot.BsCoefficients.resolve` computes 20 sampler coefficients from
 11 stitch parameters for the blind-spot (view-7/8) camera shader. This computation was
 previously a prebuilt `libod.so` with no published source. This documents what that binary
 did, how the Kotlin replacement was derived, and how it was shown to be equivalent.
