@@ -18,7 +18,7 @@ import app.wheelstop.android.ui.util.PreferencesManager
  * Application class for Wheelstop.
  * Initializes global singletons before any Activity is created.
  */
-class OverdriveApplication : Application() {
+class WheelstopApplication : Application() {
     
     override fun onCreate() {
         super.onCreate()
@@ -89,9 +89,9 @@ class OverdriveApplication : Application() {
                     val live = merged(newValue)
                     LogManager.getInstance().updateConfig(live)
                     try {
-                        LogCleaner.schedule(this@OverdriveApplication, live.cleanupIntervalHours.toLong())
+                        LogCleaner.schedule(this@WheelstopApplication, live.cleanupIntervalHours.toLong())
                     } catch (e: Exception) {
-                        Log.w("OverdriveApplication", "LogCleaner re-schedule failed: ${e.message}")
+                        Log.w("WheelstopApplication", "LogCleaner re-schedule failed: ${e.message}")
                     }
                 }
             }
@@ -103,7 +103,7 @@ class OverdriveApplication : Application() {
         try {
             LogCleaner.schedule(this, persisted.cleanupIntervalHours.toLong())
         } catch (e: Exception) {
-            Log.w("OverdriveApplication", "LogCleaner schedule failed: ${e.message}")
+            Log.w("WheelstopApplication", "LogCleaner schedule failed: ${e.message}")
         }
     }
 
@@ -117,7 +117,7 @@ class OverdriveApplication : Application() {
             }
             AppCompatDelegate.setApplicationLocales(locales)
         } catch (e: Exception) {
-            Log.w("OverdriveApplication", "applyPersistedLocale failed: ${e.message}")
+            Log.w("WheelstopApplication", "applyPersistedLocale failed: ${e.message}")
         }
     }
 }

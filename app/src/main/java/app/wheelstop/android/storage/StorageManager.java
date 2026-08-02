@@ -2109,12 +2109,12 @@ public class StorageManager {
     }
 
     /**
-     * Build {@code <volumePath>/Overdrive/{recordings,surveillance,proximity,trips}}
+     * Build {@code <volumePath>/Wheelstop/{recordings,surveillance,proximity,trips}}
      * with world rwx so the app UID can read them. Returns the four dirs in
      * order, or null if the base couldn't be created.
      */
     private File[] initVolumeDirectories(String volumePath, String label) {
-        File base = new File(volumePath, "Overdrive");
+        File base = new File(volumePath, "Wheelstop");
         boolean baseCreated = base.mkdirs();
         if (!base.exists()) {
             logError("Failed to create " + label + " base directory: " + base.getAbsolutePath());

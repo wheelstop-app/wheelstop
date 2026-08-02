@@ -774,7 +774,7 @@ class RoadSenseOverlayService : Service() {
         }
 
         // Locale: the app's in-app language (AppCompatDelegate.setApplicationLocales,
-        // set from LocaleManager in OverdriveApplication) is applied to Activities but
+        // set from LocaleManager in WheelstopApplication) is applied to Activities but
         // NOT to a bare Service — its Resources stay on the SYSTEM locale, so getString()
         // for the roadsense_* pill/caption strings would ignore the user's chosen
         // language. Pull the app locale list and set it on the config so the overlay
