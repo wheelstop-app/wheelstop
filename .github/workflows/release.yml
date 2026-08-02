@@ -38,6 +38,10 @@ permissions:
 jobs:
   release:
     name: Build, cert-gate, publish
+    # Only the semver app releases release-please cuts (v1.2.3), or a manual rebuild.
+    # Other releases sharing this repo — e.g. the `tunnel-binaries-*` vendored-binary
+    # releases — must not trigger an app build/publish.
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -147,12 +151,23 @@ jobs:
 
           # GPLv3 compliance: the APK bundles the GPL-3 sing-box binary, so every release
           # must convey its Corresponding Source and the licence/notice in the same place.
-          cp THIRD_PARTY_NOTICES.md LICENSES/GPL-3.0.txt LICENSES/Apache-2.0.txt LICENSES/sing-box.LICENSE dist/
-          SB_VER=$(grep -E '^libsingbox\.upstream' app/tunnel-binaries.lock | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-          if [ -z "$SB_VER" ]; then echo "::error::could not read sing-box version from app/tunnel-binaries.lock"; exit 1; fi
-          curl -fsSL -o "dist/sing-box-${SB_VER#v}-corresponding-source.tar.gz" \
-            "https://github.com/SagerNet/sing-box/archive/refs/tags/${SB_VER}.tar.gz"
-          echo "staged Corresponding Source for sing-box ${SB_VER}"
+          cp THIRD_PARTY_NOTICES.md \
+             LICENSES/GPL-3.0.txt LICENSES/Apache-2.0.txt LICENSES/BSD-3-Clause.txt LICENSES/sing-box.LICENSE \
+             dist/
+          # sing-box version and the pinned source digest come from app/tunnel-binaries.lock
+          # (the single source of truth), and the fetched source is verified against it.
+          SB_VER=$(awk -F= '/^libsingbox\.upstream/{split($2,a," ");print a[3]}' app/tunnel-binaries.lock)
+          SB_SHA=$(awk -F= '/^libsingbox\.source_sha256/{gsub(/[ \t]/,"",$2);print $2}' app/tunnel-binaries.lock)
+          if [ -z "$SB_VER" ] || [ -z "$SB_SHA" ]; then
+            echo "::error::sing-box version/source_sha256 missing from app/tunnel-binaries.lock"; exit 1
+          fi
+          SRC="dist/sing-box-${SB_VER#v}-corresponding-source.tar.gz"
+          curl -fsSL -o "$SRC" "https://github.com/SagerNet/sing-box/archive/refs/tags/${SB_VER}.tar.gz"
+          GOT=$(sha256sum "$SRC" | cut -d' ' -f1)
+          if [ "$GOT" != "$SB_SHA" ]; then
+            echo "::error::sing-box source digest $GOT != pinned $SB_SHA — re-pin libsingbox.source_sha256 and regenerate notices"; exit 1
+          fi
+          echo "staged + verified Corresponding Source for sing-box ${SB_VER}"
 
       - name: Publish to the rolling alpha release
         env:
@@ -165,7 +180,7 @@ jobs:
             "dist/wheelstop-alpha-${VERSION}.apk"
             dist/SHA256SUMS
             dist/THIRD_PARTY_NOTICES.md
-            dist/GPL-3.0.txt dist/Apache-2.0.txt dist/sing-box.LICENSE
+            dist/GPL-3.0.txt dist/Apache-2.0.txt dist/BSD-3-Clause.txt dist/sing-box.LICENSE
             dist/sing-box-*-corresponding-source.tar.gz
           )
           if gh release view alpha >/dev/null 2>&1; then
