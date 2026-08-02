@@ -29,3 +29,9 @@ Task D (prose/comments + i18n folder text + HA origin + geocoding UA): DONE — 
   Task C). Preserved-token count unchanged (35). Remaining grep: 103 hits, all
   reviewed and categorized in the report.
 Next: build gate + whole-branch review + PR (per line above).
+Task D (prose/i18n/HA/UA): DONE 972a77a9 — 404->103 residual, all deliberate. Preserved tokens untouched.
+Tail fixes: DONE $(git rev-parse --short HEAD) — GAP1 (SD/USB + backup dirs -> Wheelstop) + OverdriveApplication class -> WheelstopApplication.
+PRESERVED (functional/data-compat, documented for user): HA entity-id prefix "overdrive_", overdrive:// URI scheme,
+  X-Overdrive-* HTTP headers, private prefs (overdrive_onboarding/setup/dashboard_insights), CHANNEL_IDs, DB name,
+  and the legacy com.overdrive.app detection refs (real coexisting old app).
+Next: build gate + whole-branch review + PR.

@@ -11,7 +11,7 @@ public class AppUpdaterDigestTest {
     @Test public void findsSumsAssetCaseInsensitively() throws Exception {
         JSONArray assets = new JSONArray();
         JSONObject apk = new JSONObject();
-        apk.put("name", "overdrive-alpha-v33.1.apk");
+        apk.put("name", "wheelstop-alpha-v33.1.apk");
         apk.put("browser_download_url", "https://example/apk");
         JSONObject sums = new JSONObject();
         sums.put("name", "sha256sums"); // lower-case on purpose
@@ -24,7 +24,7 @@ public class AppUpdaterDigestTest {
     @Test public void sumsAssetAbsentYieldsEmpty() throws Exception {
         JSONArray assets = new JSONArray();
         JSONObject apk = new JSONObject();
-        apk.put("name", "overdrive-alpha-v33.1.apk");
+        apk.put("name", "wheelstop-alpha-v33.1.apk");
         apk.put("browser_download_url", "https://example/apk");
         assets.put(apk);
         assertEquals("", AppUpdater.sha256SumsAssetUrl(assets));
@@ -37,7 +37,7 @@ public class AppUpdaterDigestTest {
     @Test public void extractsApkDigestIgnoringOtherLines() {
         String sums =
             "0000000000000000000000000000000000000000000000000000000000000000  NOTES.txt\n"
-          + "ABCDEF0123456789abcdef0123456789ABCDEF0123456789abcdef0123456789  overdrive-alpha-v33.1.apk\n";
+          + "ABCDEF0123456789abcdef0123456789ABCDEF0123456789abcdef0123456789  wheelstop-alpha-v33.1.apk\n";
         // lower-cased, apk line only
         assertEquals(
             "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
