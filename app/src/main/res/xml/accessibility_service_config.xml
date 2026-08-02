@@ -18,4 +18,4 @@
     android:canRequestFilterKeyEvents="true"
     android:canRetrieveWindowContent="true"
     android:notificationTimeout="100"
-    android:settingsActivity="com.overdrive.app.ui.MainActivity" />
+    android:settingsActivity="app.wheelstop.android.ui.MainActivity" />

@@ -225,7 +225,7 @@
             android:layout_marginTop="@dimen/card_gap_vertical"
             android:background="@android:color/black">
 
-            <com.overdrive.app.ui.view.ProjectionBoundsView
+            <app.wheelstop.android.ui.view.ProjectionBoundsView
                 android:id="@+id/projectionBounds"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />

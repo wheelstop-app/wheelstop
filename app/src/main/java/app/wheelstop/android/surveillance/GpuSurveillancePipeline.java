@@ -1,0 +1,6860 @@
+package app.wheelstop.android.surveillance;
+import app.wheelstop.android.logging.DaemonLogger;
+import app.wheelstop.android.storage.StorageManager;
+import app.wheelstop.android.telemetry.TelemetryDataCollector;
+
+import app.wheelstop.android.camera.PanoramicCameraGpu;
+
+import java.io.File;
+
+/**
+ * GpuSurveillancePipeline - Complete GPU Zero-Copy surveillance system.
+ * 
+ * Orchestrates all components of the GPU pipeline:
+ * - PanoramicCameraGpu: Camera → GPU texture
+ * - GpuMosaicRecorder: GPU composition → Encoder
+ * - GpuDownscaler: GPU thumbnail → CPU
+ * - SurveillanceEngineGpu: Motion detection & AI
+ * - AdaptiveBitrateController: Quality optimization
+ * 
+ * Achieves <10% CPU usage through GPU zero-copy architecture.
+ */
+public class GpuSurveillancePipeline {
+    private static final String TAG = "GpuPipeline";
+    private static final DaemonLogger logger = DaemonLogger.getInstance(TAG);
+    
+    // Components
+    // volatile: read from worker threads (IdleShutdown, yield listener,
+    // applyBatchedChange holds reconfigLock — different monitor than stop()'s
+    // `this`) where the writer's monitor isn't held; volatile makes the
+    // null-after-stop and swap-on-reinit visible without tearing.
+    private volatile PanoramicCameraGpu camera;
+    private volatile GpuMosaicRecorder recorder;  // Single recorder for both modes
+    private GpuDownscaler downscaler;
+    // Volatile: the sentry-teardown fixes read this from non-main threads — the
+    // WS IdleShutdown thread (idle-timeout keep-alive check consults
+    // sentry.isActive()) and stopRecording()'s callers (incl. the StorageManager
+    // SD-card-watchdog thread). Matches the recorder/encoder/bitrateController
+    // rationale above: without volatile there's no happens-before edge and a
+    // reader could see a stale/partial reference (or miss the null-after-release).
+    private volatile SurveillanceEngineGpu sentry;
+    private volatile HardwareEventRecorderGpu encoder;  // Single encoder for recording/surveillance
+    // Volatile: read from non-main threads (proximity binder/scheduler via
+    // setRecordingBitrate) and nulled by stop()'s teardown body which runs
+    // OUTSIDE the synchronized prologue. Without volatile there's no
+    // happens-before edge and a reader could see a stale/partial reference.
+    private volatile AdaptiveBitrateController bitrateController;
+    
+    // Streaming components (separate encoder - always available)
+    private app.wheelstop.android.streaming.GpuStreamScaler streamScaler;
+    private HardwareEventRecorderGpu streamEncoder;
+    private app.wheelstop.android.streaming.WebSocketStreamServer wsStreamServer;
+    // volatile so the camera GL render loop's read sees the latest
+    // disable-write atomically; otherwise the loop can keep snapshot
+    // streamScaler/streamEncoder past the disable cycle.
+    private volatile boolean streamingEnabled = false;
+    // Stream-lifecycle ReentrantLock replaces the per-instance monitor
+    // (synchronized) on enableStreaming/disableStreaming/attachExternalStreamCallback.
+    // ReentrantLock so we can explicitly release it around the 2-second
+    // GL-thread init wait inside enableStreamingInternal — pre-fix,
+    // synchronized(this) pinned every disable / attach / stop caller for
+    // the entire wait. ReentrantLock + "drop around the wait" lets the
+    // peers proceed while the stream init is pending; the partial-state
+    // window is bounded by the existing camera.setStreamingComponents
+    // invariant (called at the END of enableStreamingInternal, AFTER the
+    // GL init completes) so a concurrent disable observes either both
+    // components committed or neither.
+    private final java.util.concurrent.locks.ReentrantLock streamLifecycleLock =
+        new java.util.concurrent.locks.ReentrantLock();
+
+    // ── Dedicated blind-spot lane (views 7/8) — NATIVE SurfaceControl path ────
+    // A SECOND, independent GpuStreamScaler fed from the same camera texture via
+    // PanoramicCameraGpu's PASS 1C render-loop fan-out, rendering the libod view
+    // 7/8 stitch STRAIGHT onto a daemon-owned SurfaceControl layer on screen.
+    // NO encoder, NO WebSocket, NO MediaCodec decoder — GPU → screen, all in the
+    // daemon (UID 2000). Validated on this firmware by BsSurfaceControlSpike
+    // (non-fullscreen + GL-fed + setGeometry-positioned SC layer composites).
+    // Buffer is BS_WIDTH×BS_HEIGHT; on-screen rect comes from config (setGeometry),
+    // since SurfaceControl layers have no InputChannel (not finger-draggable).
+    private app.wheelstop.android.streaming.GpuStreamScaler bsScaler;
+    private app.wheelstop.android.surveillance.BsNativeLayer bsLayer;
+    private volatile boolean blindSpotEnabled = false;
+    // True while an enableBlindSpot() is in flight (set under bsLifecycleLock
+    // before entering enableBlindSpotInternal, cleared when it returns). The
+    // internal init releases bsLifecycleLock around its GL-init wait; this flag
+    // lets a second caller that reacquires the lock during that window detect
+    // an in-flight enable that has not yet set blindSpotEnabled, and bail
+    // instead of double-allocating the lane.
+    private boolean bsEnabling = false;
+    private volatile int bsViewMode = 7;   // 7=Rear+Left, 8=Right+Rear
+    // On-screen geometry for the SC layer (panel pixels). Read from config on
+    // enable; defaults to a top-right card. setBsGeometry updates it live.
+    // BS-GEO-3: single atomic rect [x,y,w,h] (panel px) so a reader never sees a
+    // torn quad (e.g. new x + old w) when the API thread updates it mid-read on
+    // the turn/rotation thread. Writers build the 4-tuple locally + assign the
+    // reference once; readers snapshot the reference once. -1s = unresolved.
+    private volatile int[] bsGeomRect = new int[]{-1, -1, -1, -1};
+    // Orientation-safe geometry preset: card size (% panel width) + corner. The px
+    // rect is RECOMPUTED from these against the live panel on enable + rotation, so
+    // position/size stay correct across portrait↔landscape. <=0 sizePct = unset.
+    private volatile int bsSizePct = 40;
+    private volatile String bsCorner = "tr";
+    // On-screen card rotation (0/90/180/270 degrees), applied by the SurfaceControl
+    // layer when it composites the fixed BS_WIDTH×BS_HEIGHT buffer. Only meaningful
+    // for the single-view merge modes (side/rear); the merged "both" view is not
+    // rotated (the stitched panorama is inherently landscape). Read from
+    // blindspot.rotation on enable + config change. resolveBsGeometry swaps the
+    // dest-rect aspect for the 90/270 cases so the scale stays uniform.
+    private volatile int bsRotationDeg = 0;
+    private volatile int bsLastPanelW = -1, bsLastPanelH = -1;  // for rotation detect
+    // Blind-spot DISPLAY TARGET: "head_unit" (default — the 15.6" center screen,
+    // layerStack 0, byte-for-byte the shipping behaviour) or "cluster" (the driver
+    // gauge screen, layerStack 1, reached only while an OEM cluster projection is
+    // open — driven by ClusterProjectionController). Read from UCM blindspot.target
+    // on enable + retarget. Geometry is persisted PER TARGET (geometry vs
+    // geometryCluster) since a card sized for the tall head-unit overflows the short
+    // 1920×720 cluster.
+    private volatile String bsTarget = "head_unit";
+    // The cluster's layerStack is NOT fixed — SurfaceFlinger reassigns it each time
+    // the projection display is (re)created (size-profile 30 → stack 1, 31 → stack 2).
+    // Resolved LIVE from dumpsys in onClusterProjectionReady (BsNativeLayer
+    // .clusterLayerStack); 1 is only the initial fallback before the first resolve.
+    private volatile int bsClusterStack = 1;
+    // Whether the layer is currently shown (turn-triggered / debug-preview gates it).
+    private volatile boolean bsLayerVisible = false;
+    // Daemon-side turn-trigger: reads the turn lamps (daemon owns the BYD light
+    // HAL) + the blindspot.debugPreview flag on a ~250ms loop while the lane is
+    // enabled, and shows/hides + side-switches the SurfaceControl layer. Replaces
+    // the deleted app-process BlindSpotOverlayService tick (no app process needed).
+    private java.util.concurrent.ScheduledExecutorService bsTurnExec;
+    private long bsLastTurnOnMs = 0L;
+    // Defense-in-depth latch for the map-leak fix: a turn-signal projection open is
+    // a SESSION (the signal goes on, blinks, goes off). On the LEADING edge of such a
+    // session — and only when no sustained map legitimately holds the projection — we
+    // dismiss any ORPHANED parked cluster-map Activity (navMap.clusterMapActive=false)
+    // so it can't paint under the partial BS card if its normal stop()-driven finish
+    // was ever missed. Latched so we issue the (full-JSON) UCM write ONCE per session,
+    // not every 250ms tick. Reset when the signal clears.
+    private boolean bsDismissedOrphanMap = false;
+    private static final long BS_TURN_POLL_MS = 250L;
+    private static final long BS_OFF_DEBOUNCE_MS = 800L;  // ride through blink off-phase
+    private final java.util.concurrent.locks.ReentrantLock bsLifecycleLock =
+        new java.util.concurrent.locks.ReentrantLock();
+    private static final int BS_WIDTH = 1280;
+    private static final int BS_HEIGHT = 960;
+
+    // ── Camera-view (on-demand) — SHARES the single BS lane (scaler+SC layer+EGL) ──
+    // Option A coexistence: there is exactly ONE on-screen native lane. Blind-spot
+    // and camera-view are two PROGRAMS that take turns on it, arbitrated every tick
+    // in bsTurnTick with BLIND-SPOT PRIORITY. No second scaler/layer/EGLSurface is
+    // ever allocated (memory-optimal), and a program switch is just a viewMode +
+    // geometry(+layerStack) reconfig — never a lane rebuild (compute-optimal).
+    // camViewActive = a camera view is requested; the lane may be shared with BS.
+    private volatile boolean camViewActive = false;
+    // True while an enableCamView() is in flight (set under bsLifecycleLock before
+    // buildSharedLaneLocked, cleared when it returns). Mirrors bsEnabling: the lane
+    // build releases bsLifecycleLock around its GL-init wait, so this lets a
+    // concurrent enable (BS or camview) detect an in-flight build and bail instead
+    // of double-allocating the scaler/layer.
+    private volatile boolean camViewEnabling = false;
+    private volatile int camViewMode = 0;         // 0=all-4 mosaic,1=front,2=right,3=rear,4=left
+    private volatile String camViewTarget = "head_unit";
+    // Camera-view geometry (panel px), independent of the BS card's geometry so the
+    // two programs can occupy different rects. Same atomic-rect discipline as bsGeomRect.
+    private volatile int[] camViewGeomRect = new int[]{-1, -1, -1, -1};
+    private volatile int camViewSizePct = 60;
+    private volatile String camViewCorner = "center";
+    // Auto-hide: elapsedRealtime deadline after which the camera view hides itself
+    // (0 = stay until explicitly hidden). Set on show.
+    private volatile long camViewHideAtMs = 0L;
+    // Which program the lane is CURRENTLY configured for (0=none,1=bs,2=camview), so
+    // the arbiter reconfigures (viewMode/calibration/geometry/target) only on a real
+    // transition, not every 250ms tick. -1 forces a reconfig on next arbitration.
+    private volatile int laneProgram = 0;
+    private static final int PROG_NONE = 0, PROG_BS = 1, PROG_CAMVIEW = 2;
+
+    // Telemetry overlay
+    private TelemetryDataCollector telemetryCollector;
+    private volatile boolean overlayEnabledConfig = false;
+
+    // Config-change listener for live propagation of recording.rectifyStrength
+    // edits. UI writes to UnifiedConfigManager; this listener picks up the
+    // change and pushes to the active recorder so the next frame uses the
+    // new value — no daemon restart, no segment rotation. Held as a field so
+    // release() can deregister it cleanly.
+    private app.wheelstop.android.config.UnifiedConfigManager.ConfigChangeListener
+        rectifyConfigListener;
+
+    // Recording composition layout (0 = standard 360 mosaic, 1 = dashcam:
+    // forward view on top + 360 left/rear/right below). Persisted in
+    // recording.recordingLayout; re-applied to each recorder on creation.
+    private volatile int recordingLayoutConfig = 0;
+    private volatile boolean dashcamUseWindshieldConfig = false;
+    private volatile int windshieldCameraIdConfig = -1;
+
+    // Sentry (surveillance) layout profile — the independent counterpart to
+    // recordingLayoutConfig / dashcamUseWindshieldConfig above. Persisted in
+    // surveillance.recordingLayout / surveillance.useWindshield. Selected over
+    // the dashcam profile by applyActiveLayoutProfile() whenever the pipeline
+    // is in SURVEILLANCE mode, so sentry and dashcam can use different layouts
+    // on the one shared recorder (the two modes are mutually exclusive).
+    private volatile int surveillanceLayoutConfig = 0;
+    private volatile boolean surveillanceUseWindshieldConfig = false;
+
+    // Mode tracking
+    private enum Mode {
+        IDLE,           // Nothing active
+        NORMAL_RECORDING,   // User manually recording
+        SURVEILLANCE    // Auto-recording on motion
+    }
+    // volatile: read from worker threads (IdleShutdown, IPC, GL yield) without
+    // taking the monitor in stop()/start().
+    private volatile Mode currentMode = Mode.IDLE;
+
+    // External "keep pipeline alive" predicate, e.g. PROXIMITY_GUARD MONITORING
+    // where currentMode is IDLE and recorder isn't recording yet, but the
+    // ADAS listener is armed and will soon trigger startRecording(). Without
+    // this hook the idle-shutdown timer would tear the pipeline down between
+    // monitoring and the next radar trigger.
+    private volatile java.util.concurrent.Callable<Boolean> keepAlivePredicate;
+
+    // Fired (best-effort) whenever the BS layer's on-screen visibility changes
+    // (turn signal on/off, debug-preview, cluster show/hide, disable). Lets
+    // RecordingModeManager re-reconcile the GLOBAL camera fps when BS is the SOLE
+    // consumer: ramp to BS active fps on show, drop to BS idle fps on hide.
+    // No-op when a recording mode owns the camera (recording fps wins). Set by
+    // RecordingModeManager; null otherwise. Invoked off the BS turn-tick thread.
+    private volatile Runnable bsVisibilityListener;
+
+    // Fired whenever live-view streaming is enabled or disabled (incl. the WS
+    // idle-shutdown auto-close). Lets RecordingModeManager re-reconcile the global
+    // camera fps floor: a live stream pins the camera at >= stream fps; when it
+    // goes away the camera can drop back to the BS idle rate (or recording rate).
+    // Set by RecordingModeManager; null otherwise.
+    private volatile Runnable streamStateListener;
+
+    // Configuration
+    private final int cameraWidth;
+    private final int cameraHeight;
+    private final int encoderWidth;
+    private final int encoderHeight;
+    private final File eventOutputDir;
+    private GpuPipelineConfig config;
+    
+    // State
+    private boolean initialized = false;
+    // volatile: idle-shutdown thread reads without taking the monitor.
+    private volatile boolean running = false;
+    // True while {@link #stop()} is mid-teardown (encoders releasing, EGL
+    // tearing down). Concurrent start() must wait until stop completes —
+    // otherwise we race the encoder release with init() allocating a new
+    // one. Guarded by the same monitor as {@code running}.
+    private volatile boolean stopping = false;
+    // True while {@link #start(boolean)} is in progress but not yet
+    // verified — set at entry, cleared once camera open is verified
+    // (running=true) or on failure. Blocks concurrent start() without
+    // publishing running=true prematurely; this is what keeps
+    // isRunning() honest if the camera GL-thread runnable throws.
+    private volatile boolean starting = false;
+    // volatile because the cold-start storage-retry thread (RecStorageRetry)
+    // reads this without holding the pipeline monitor; without volatile the
+    // retry thread can observe a stale `false` after stopRecording() flipped
+    // it, defeating the cancellation check.
+    private volatile boolean recordingMode = false;  // true = recording, false = viewing only
+
+    // Serializes runtime reconfig methods (applyFpsChange, applyBitrateChange,
+    // applyCodecChange). Without this, two web-UI changes arriving back-to-back
+    // can interleave reinitializeEncoder() calls — one observes encoder=null
+    // mid-tear-down and silently no-ops, or worse, both threads tear down
+    // recorder surfaces concurrently.
+    private final Object reconfigLock = new Object();
+    
+    // Saved init params — needed for re-initialization after stop/start cycle (ACC OFF→ON)
+    private android.content.res.AssetManager savedAssetManager;
+    private android.content.Context savedContext;
+    
+    // Deferred recording: stored when startRecording() is called before encoder is ready
+    private volatile java.io.File pendingRecordingDir = null;
+    private volatile String pendingRecordingPrefix = null;
+
+    // FIX (audit R3, Findings 3+6): the active normal-recording session's
+    // outputDir + prefix. Captured at the top of pipeline.startRecording() and
+    // cleared by stopRecording(). onPostReacquire() (camera-yield resume) uses
+    // these so it can re-enter pipeline.startRecording(dir, prefix) — the only
+    // path that gates on encoder.isFormatAvailable() and runs the storage
+    // probe + scheduleStorageReadyRetry. Without this, a yield mid-recording
+    // would call recorder.startRecording() bare, silent-no-op when the
+    // encoder hadn't republished its format yet, and wedge for the rest of
+    // the drive (no thread re-polls during ACC=ON).
+    private volatile java.io.File activeRecordingDir = null;
+    private volatile String activeRecordingPrefix = null;
+
+    // FIX (audit R1, RESIDUAL): segment-rotation timestamp. Stamped by
+    // GpuMosaicRecorder's file-closed callback when a normal segment
+    // rotates. RecordingModeManager's wedge ticker reads this via
+    // getLastSegmentRotateMs() and skips its wedge check for 5s after a
+    // rotation, so the natural isRecording()=false flicker between
+    // segments doesn't trigger a phantom wedgeDetected re-activation.
+    private volatile long lastSegmentRotateMs = 0L;
+
+    // FIX (audit R5): pipeline generation counter. Incremented on every
+    // stop() and start() to invalidate background retry threads scheduled
+    // against an earlier lifecycle. RecStorageRetry / RecStorageSlowRetry
+    // capture this at schedule time and bail when a teardown-then-restart
+    // cycle has rotated the value out from under them — the new pipeline
+    // will reschedule its own retry if it still needs one.
+    private final java.util.concurrent.atomic.AtomicLong pipelineGen =
+        new java.util.concurrent.atomic.AtomicLong(0L);
+
+    // FIX (audit R6): cache the resolved camera profile's per-quadrant strip-X
+    // offsets so reinitializeEncoder()'s defensive `new GpuMosaicRecorder()`
+    // (recorder=null branch) can rebuild with the correct viewport dims.
+    // Without this, that branch falls back to the no-arg constructor which
+    // uses DEFAULT_VIEWPORT_WIDTH/HEIGHT (2560x1920) and null offsets — a
+    // mismatch on Tang (encoderHeight=1440) that would corrupt the encoder
+    // feed. Captured during init() once the camera profile resolves.
+    private volatile float[] lastQuadrantStripOffsetX = null;
+    
+    /**
+     * Creates the GPU surveillance pipeline.
+     * 
+     * @param cameraWidth Camera width (typically 5120)
+     * @param cameraHeight Camera height (typically 960)
+     * @param eventOutputDir Directory for event recordings
+     */
+    public GpuSurveillancePipeline(int cameraWidth, int cameraHeight, File eventOutputDir) {
+        this.cameraWidth = cameraWidth;
+        this.cameraHeight = cameraHeight;
+        // Encoder/mosaic dims are derived from the strip aspect: each tile is
+        // (cameraWidth/4) wide x cameraHeight tall, mosaic is 2x2 of tiles, so
+        // encoder = (cameraWidth/2) x (cameraHeight*2). Seal 5120x960 → 2560x1920
+        // (4:3 quadrants). Tang 5120x720 → 2560x1440 (16:9 quadrants). Without
+        // this, Tang content gets stretched 33% vertically into 4:3 mosaic tiles.
+        this.encoderWidth = Math.max(1, cameraWidth / 2);
+        this.encoderHeight = Math.max(1, cameraHeight * 2);
+        this.eventOutputDir = eventOutputDir;
+        this.config = new GpuPipelineConfig();
+    }
+    
+    /**
+     * Gets the configuration.
+     */
+    public GpuPipelineConfig getConfig() {
+        return config;
+    }
+
+    /**
+     * Returns the underlying hardware encoder, or null if the pipeline has
+     * not been initialized yet. Used by callers that need the active output
+     * file path for things like push-notification deep-links.
+     */
+    public HardwareEventRecorderGpu getEncoder() {
+        return recorder != null ? recorder.getEncoder() : null;
+    }
+
+    /**
+     * Reads the shared recording.segmentDurationMinutes (clamped) and pushes
+     * it to the live encoder as a millisecond rotation interval. Called after
+     * encoder (re)init; safe no-op if the encoder isn't up yet.
+     */
+    private void applySegmentDurationFromConfig() {
+        try {
+            HardwareEventRecorderGpu enc = encoder;
+            if (enc == null) return;
+            int minutes = app.wheelstop.android.config.UnifiedConfigManager
+                .getSegmentDurationMinutes();
+            enc.setSegmentDurationMs(minutes * 60_000L);
+        } catch (Throwable t) {
+            logger.warn("Failed to apply segment duration from config: " + t.getMessage());
+        }
+    }
+
+    /**
+     * Live-apply a new clip segment length (minutes) to the running dashcam
+     * encoder without a reinit. Takes effect on the next rotation. Called by
+     * the quality API when the user changes the shared Clip Duration control.
+     */
+    public void updateSegmentDuration(int minutes) {
+        try {
+            int clamped = Math.max(
+                app.wheelstop.android.util.Constants.MIN_SEGMENT_DURATION_MINUTES,
+                Math.min(app.wheelstop.android.util.Constants.MAX_SEGMENT_DURATION_MINUTES, minutes));
+            HardwareEventRecorderGpu enc = encoder;
+            if (enc != null) {
+                enc.setSegmentDurationMs(clamped * 60_000L);
+            }
+        } catch (Throwable t) {
+            logger.warn("updateSegmentDuration failed: " + t.getMessage());
+        }
+    }
+
+    /**
+     * Set the recorder draw stride (Proximity Guard low-rate pre-record). A
+     * stride of N makes the render loop feed the recording encoder only every
+     * Nth camera frame, lowering the effective recording rate without a codec
+     * reconfigure. Streaming and blind-spot are unaffected. {@code 1} = full
+     * rate (default). No-op if the camera isn't up yet. Idempotent.
+     */
+    public void setRecorderFrameStride(int stride) {
+        PanoramicCameraGpu cam = camera;
+        if (cam != null) {
+            cam.setRecorderFrameStride(stride);
+        }
+    }
+
+    /**
+     * @return the camera's configured target FPS, or 0 if the camera isn't up.
+     * Used by Proximity Guard to derive the recorder draw stride from a desired
+     * monitor FPS (stride = round(cameraFps / monitorFps)).
+     */
+    public int getCameraTargetFps() {
+        PanoramicCameraGpu cam = camera;
+        return cam != null ? cam.getTargetFps() : 0;
+    }
+
+    /**
+     * Set the GLOBAL camera HAL emission fps at runtime (live setCameraFps, no
+     * camera reopen, no config persist). Used by RecordingModeManager to ramp the
+     * whole pipeline's rate — e.g. drop to ~1fps when the camera is kept warm only
+     * for a hidden blind-spot view, ramp to ~15fps on a turn-signal reveal. This
+     * affects ALL render-loop passes (recorder, stream, blind-spot) since they
+     * share the one camera. The recorder lane can be sub-sampled BELOW this with
+     * setRecorderFrameStride, or skipped entirely with setRecorderLaneEnabled.
+     * No-op if the camera isn't up.
+     */
+    public void setCameraTargetFps(int fps) {
+        PanoramicCameraGpu cam = camera;
+        if (cam != null) cam.setTargetFps(fps);
+    }
+
+    /**
+     * Pin the AI motion-readback cadence to a fixed wall-clock interval (ms),
+     * independent of the HAL rate; 0 restores the default frame-count modulo.
+     * Parked-idle throttle uses this to keep detection identical while the HAL
+     * fps is dropped for power. No-op if the camera isn't up (re-applied at the
+     * next AI-lane bring-up). Co-located with setCameraTargetFps because RMM
+     * sets the two together.
+     */
+    public void setAiReadbackMinIntervalMs(long ms) {
+        PanoramicCameraGpu cam = camera;
+        if (cam != null) cam.setAiReadbackMinIntervalMs(ms);
+    }
+
+    /**
+     * Enable/disable the recorder lane (PASS 1A: H.265 mosaic encode) at runtime
+     * without tearing down the pipeline. When disabled, the render loop skips the
+     * recorder drawFrame + drainEncoder entirely — the stream (PASS 1B) and
+     * blind-spot (PASS 1C) lanes are unaffected. Used when the camera is kept warm
+     * ONLY for blind-spot: BS has no encoder, and no recording mode owns the
+     * pre-record ring, so running the H.265 encoder would burn Venus for footage
+     * nothing will ever flush. Re-enabled (true) the instant a recording mode
+     * activates. No-op if the camera isn't up.
+     */
+    public void setRecorderLaneEnabled(boolean enabled) {
+        PanoramicCameraGpu cam = camera;
+        if (cam != null) cam.setRecorderLaneEnabled(enabled);
+    }
+
+    /**
+     * @return the fps of the currently-enabled live-view stream lane, or 0 when
+     * streaming is off. The stream (PASS 1B) shares the one camera; when the
+     * camera is dropped to a low BS-only idle fps, callers use this as a FLOOR so
+     * an active live view isn't starved/desynced. Returns 0 (no floor) when no
+     * stream is up.
+     */
+    public int getActiveStreamFps() {
+        if (!streamingEnabled) return 0;
+        HardwareEventRecorderGpu enc = streamEncoder;
+        if (enc == null) return 0;
+        try {
+            return enc.getFps();
+        } catch (Throwable t) {
+            return 0;
+        }
+    }
+
+    /**
+     * Set the recording encoder bitrate at runtime (Proximity Guard adaptive
+     * quality). Routed through the AdaptiveBitrateController when present so its
+     * cached currentBitrate stays coherent; falls back to a direct encoder
+     * setBitrate otherwise. No-op if the encoder isn't up. Safe and immediate —
+     * MediaCodec PARAMETER_KEY_VIDEO_BITRATE, no reconfigure, no pre-record-ring
+     * realloc.
+     */
+    public void setRecordingBitrate(int bitrate) {
+        // Capture into locals before deref — stop()'s teardown body runs
+        // outside the synchronized prologue and can null these between a
+        // re-read, so a TOCTOU re-read would NPE on the proximity binder/
+        // scheduler thread. Both fields are volatile so the null is visible.
+        AdaptiveBitrateController bc = bitrateController;
+        if (bc != null) {
+            bc.setImmediateBitrate(bitrate);
+            return;
+        }
+        HardwareEventRecorderGpu enc = getEncoder();
+        if (enc != null) {
+            enc.setBitrate(bitrate);
+        }
+    }
+
+    /**
+     * @return the pipeline's user-configured effective recording bitrate (bps).
+     * Proximity Guard restores the encoder to THIS on teardown so a follow-on
+     * recording mode inherits the user's real quality rather than proximity's
+     * own event bitrate.
+     */
+    public int getConfiguredRecordingBitrate() {
+        return config.getEffectiveBitrate();
+    }
+
+    /**
+     * @return the user-CONFIGURED recording fps from unified config (NOT the
+     * current live camera HAL rate, which may be temporarily lowered — e.g. by
+     * Proximity Guard's monitor profile). Proximity Guard uses this as the
+     * snap-UP target when a radar event fires, so the live event clip records at
+     * the user's real fps regardless of the lowered monitoring rate. Falls back
+     * to 15 if unreadable. (getCameraTargetFps() returns the live rate; this
+     * returns the configured rate.)
+     */
+    public int getConfiguredRecordingFps() {
+        return loadTargetFps();
+    }
+
+    /**
+     * @return the pipeline's effective ACC-off SURVEILLANCE bitrate (bps),
+     * resolving recording.surveillanceQuality against the shared codec. Honors
+     * an active customBitrate (thermal/network throttle) exactly like
+     * {@link #getConfiguredRecordingBitrate()}. When the surveillance tier is
+     * unset (pre-split config), falls back to the ACC-on recordingQuality tier
+     * — byte-identical to the pre-split single-knob behaviour. Used by
+     * RecordingModeManager's reconcile and by {@link #setRecordingMode} when
+     * entering SENTRY.
+     */
+    public int getEffectiveSurveillanceBitrate() {
+        return config.getEffectiveBitrateForQuality(loadSurveillanceQuality());
+    }
+
+    /**
+     * Live re-assert of the ACC-off surveillance profile (fps + bitrate) when
+     * surveillance is CURRENTLY active. Called by the settings API after a
+     * surveillance quality/fps edit so the change takes effect on the running
+     * parked recording WITHOUT a pipeline restart or encoder reinit — fps via
+     * the camera HAL live knob, bitrate via the adaptive controller / encoder
+     * setParameters, exactly mirroring setRecordingMode(SENTRY). No-op (returns
+     * false) when not in surveillance mode or the pipeline is torn down; the
+     * persisted config is picked up on the next ACC-off transition in that case.
+     *
+     * @return true if the live re-assert was applied.
+     */
+    public boolean reapplySurveillanceProfileIfActive() {
+        synchronized (reconfigLock) {
+            if (!isSurveillanceMode()) {
+                return false;
+            }
+            // Same teardown gate as applyFpsChangeLocked / applyBitrateChangeLocked:
+            // reconfigLock does not serialize against stop()'s teardown body.
+            if (!running || stopping) {
+                logger.warn("reapplySurveillanceProfile: skipping live apply "
+                    + "(running=" + running + ", stopping=" + stopping + ") — "
+                    + "config persisted, applies on next ACC-off");
+                return false;
+            }
+            return applySurveillanceProfileLocked("re-assert");
+        }
+    }
+
+    /**
+     * Applies the ACC-off surveillance fps + bitrate to the live camera + encoder.
+     * CALLER MUST HOLD {@code reconfigLock}. This is the single canonical place
+     * the surveillance tier is pushed to hardware, funnelling every arm/re-assert
+     * path (enableSurveillance, setRecordingMode(SENTRY), the settings-API live
+     * re-apply) through one reconfigLock-guarded body so they can never race each
+     * other on the camera-fps / encoder-bitrate setters. No reinit: fps is a live
+     * HAL knob and bitrate is a MediaCodec setParameters, both gap-free.
+     *
+     * <p>When the surveillance keys are unset this resolves to the ACC-on
+     * recording tier (see loadSurveillanceTargetFps / getEffectiveSurveillanceBitrate),
+     * so on a pre-split config it applies exactly what the old SENTRY path did.
+     *
+     * @param reason short tag for the log line (e.g. "arm", "re-assert").
+     * @return true if applied without throwing.
+     */
+    private boolean applySurveillanceProfileLocked(String reason) {
+        try {
+            int survFps = loadSurveillanceTargetFps();
+            // Floor the shared camera HAL rate at the active live-view stream fps
+            // (0 when no stream) so arming surveillance — or editing the
+            // surveillance fps via the settings API — while a stream is open does
+            // NOT starve/desync that stream by dropping the HAL below its rate.
+            // This is exactly what RecordingModeManager's authority computes
+            // (reconcileCameraProfileLocked / applyFullRecordingProfile take the
+            // same max), so this arm-path assert converges with RMM rather than
+            // fighting it. NOTE: surveillance runs the recorder at stride 1
+            // (continuous-style ownStrideBitrate), so the RECORDING rate equals
+            // the HAL rate — when a stream forces camFps above survFps the clip is
+            // (intentionally, by the shared-camera design) recorded at camFps for
+            // the duration of the stream; with no stream it records at survFps.
+            int camFps = Math.max(survFps, getActiveStreamFps());
+            PanoramicCameraGpu cam = camera;
+            if (cam != null) {
+                cam.setTargetFps(camFps);
+            }
+            // setRecordingBitrate routes through the adaptive controller when
+            // present (else the encoder directly) — same path RMM reconcile uses,
+            // so the throttle/override semantics stay uniform.
+            int survBitrate = getEffectiveSurveillanceBitrate();
+            setRecordingBitrate(survBitrate);
+            logger.info("Surveillance profile applied (" + reason + "): survFps="
+                + survFps + ", camFps=" + camFps + ", bitrate="
+                + (survBitrate / 1_000_000) + " Mbps");
+            return true;
+        } catch (Throwable t) {
+            logger.warn("applySurveillanceProfileLocked(" + reason + ") failed: " + t.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Request an immediate keyframe (IDR) on the recording encoder. Proximity
+     * Guard uses this to keep a keyframe inside the pre-record window while the
+     * low-rate monitor profile stretches the natural GOP, and to open the live
+     * event clip on a clean IDR. No-op if the encoder isn't up.
+     */
+    public void requestRecordingSyncFrame() {
+        HardwareEventRecorderGpu enc = getEncoder();
+        if (enc != null) {
+            enc.requestSyncFrame();
+        }
+    }
+
+    /**
+     * Sets the recording mode (Normal/Sentry).
+     */
+    public void setRecordingMode(GpuPipelineConfig.RecordingMode mode) {
+        config.setRecordingMode(mode);
+
+        // SENTRY shares the SAME camera + recorder as the ACC-ON modes. When the
+        // pipeline is REUSED across ACC-off (not freshly start()ed — the common
+        // case when Proximity Guard kept it warm), the camera HAL may have been
+        // left at a LOWERED rate by Proximity's monitor profile (~4 fps). A fresh
+        // start() would read the configured fps, but a reuse does not — so sentry
+        // would inherit ~4 fps and record motion/event clips at 4 fps. Re-assert
+        // the configured recording fps + the full recorder lane here so surveillance
+        // always captures at the user's real rate regardless of what the prior
+        // ACC-ON mode left the shared camera at. setCameraTargetFps is the live
+        // runtime knob (no reopen); idempotent if already at this rate. (Recorder
+        // lane is also re-enabled in case a BS-only-warm state had it off — the
+        // same by-construction guarantee startRecording() makes.)
+        if (mode == GpuPipelineConfig.RecordingMode.SENTRY) {
+            // SENTRY shares the SAME camera + recorder as the ACC-ON modes and is
+            // REUSED across ACC-off (not freshly start()ed — the common case when
+            // Proximity Guard kept it warm at ~4 fps). Re-assert the surveillance
+            // fps + bitrate + full recorder lane so sentry always captures at the
+            // user's real surveillance tier regardless of what the prior ACC-ON
+            // mode left the shared camera/encoder at. All live knobs (no reopen /
+            // no reinit); idempotent if already at this rate. Funnel the fps +
+            // bitrate through applySurveillanceProfileLocked so this shares ONE
+            // reconfigLock domain with enableSurveillance()'s arm assert and the
+            // settings-API re-apply — they can never race on the setters.
+            synchronized (reconfigLock) {
+                PanoramicCameraGpu cam = camera;
+                if (cam != null) {
+                    try {
+                        cam.setRecorderLaneEnabled(true);
+                    } catch (Throwable t) {
+                        logger.warn("setRecordingMode(SENTRY): recorder-lane re-enable failed: " + t.getMessage());
+                    }
+                }
+                if (running && !stopping) {
+                    applySurveillanceProfileLocked("SENTRY");
+                }
+            }
+        } else if (encoder != null) {
+            // Non-SENTRY (NORMAL etc.): re-assert the user's ACC-ON recording
+            // bitrate (NOT the RecordingMode enum's legacy per-mode default),
+            // honoring an active customBitrate throttle via getEffectiveBitrate.
+            int userBitrate = config.getEffectiveBitrate();
+            if (bitrateController != null) {
+                bitrateController.setImmediateBitrate(userBitrate);
+            }
+            logger.info(String.format("Recording mode: %s (using bitrate=%d Mbps, mode default was %d Mbps)",
+                    mode, userBitrate / 1_000_000, mode.bitrate / 1_000_000));
+        }
+    }
+    
+    /**
+     * Sets the streaming quality (HQ/LQ).
+     */
+    public void setStreamingQuality(GpuPipelineConfig.StreamingQuality quality) {
+        config.setStreamingQuality(quality);
+        // Quality is saved — it will be applied on next stream start.
+        // Don't restart the active stream to avoid disrupting the live view.
+        logger.info(String.format("Streaming quality saved: %s (%dx%d @ %dfps)",
+                quality, quality.width, quality.height, quality.fps));
+        // GL budget warning: if the stream encoder rate exceeds the
+        // recording encoder rate, both run inside the same GL render loop
+        // iteration — at 30+30 fps the GL thread may not have headroom.
+        // Not a hard error (encoder backpressure / reactive AI-skip will
+        // handle it), but worth flagging so the operator knows why
+        // performance might dip.
+        int recordingFps = encoder != null ? encoder.getFps() : 0;
+        if (recordingFps > 0 && quality.fps > recordingFps) {
+            logger.warn("Stream fps " + quality.fps
+                + " > recording fps " + recordingFps
+                + " — GL thread budget may be tight on heavy frames");
+        }
+    }
+    
+    /**
+     * Applies a bitrate change to the encoder.
+     * 
+     * Reinitializes encoder immediately to ensure new bitrate is used.
+     * 
+     * @param bitrate New bitrate in bps
+     */
+    public void applyBitrateChange(int bitrate) {
+        synchronized (reconfigLock) {
+            applyBitrateChangeLocked(bitrate);
+        }
+    }
+
+    private void applyBitrateChangeLocked(int bitrate) {
+        // Update config first
+        config.setCustomBitrate(bitrate);
+
+        // FIX (audit R7): gate against concurrent stop() teardown. reconfigLock
+        // serializes apply* against each other but NOT against stop(); stop()'s
+        // teardown body runs outside its synchronized block. Without this gate,
+        // apply* sees encoder!=null, then stop() nulls it under our feet, and
+        // reinitializeEncoder()'s defensive null-checks half-rebuild a fresh
+        // encoder bound to no recorder. Persisting the config above is fine
+        // (RMM's next activation re-reads it); skip the live reconfig.
+        if (!running || stopping) {
+            logger.warn("Bitrate change persisted to config but skipping live apply "
+                + "(running=" + running + ", stopping=" + stopping + ")");
+            return;
+        }
+
+        if (encoder == null) {
+            logger.info("Bitrate setting saved (encoder not initialized yet): " + (bitrate / 1_000_000) + " Mbps");
+            return;
+        }
+
+        // Check if bitrate actually changed
+        if (encoder.getBitrate() == bitrate) {
+            logger.info("Bitrate already set to: " + (bitrate / 1_000_000) + " Mbps");
+            return;
+        }
+
+        // Bitrate-only change: inline reconfigure via MediaCodec.setParameters.
+        // No encoder release, no recording restart, no pre-record loss. The
+        // byte-ring pre-record buffer is bitrate-agnostic; the encoder's
+        // PARAMETER_KEY_VIDEO_BITRATE is the only state that needs updating.
+        // (Full reinit is reserved for codec changes — see applyCodecChange.)
+        logger.info("Bitrate change: " + (bitrate / 1_000_000) + " Mbps (inline)");
+        try {
+            encoder.setBitrate(bitrate);
+            if (bitrateController != null) {
+                bitrateController.setImmediateBitrate(bitrate);
+            }
+            logger.info("Bitrate change applied: " + (bitrate / 1_000_000) + " Mbps");
+            // FIX (audit R5): inline-success paths previously didn't kick off
+            // any deferred recording. If a recording start arrived during a
+            // cold encoder window and got deferred to pendingRecordingPrefix,
+            // and then the user's first interaction was to change bitrate,
+            // the deferred start would sit until the next external trigger.
+            // checkPendingRecording is idempotent (no-ops if pending is null
+            // or already recording), so call it opportunistically.
+            if (pendingRecordingPrefix != null) {
+                logger.info("Inline bitrate success — kicking deferred recording check");
+                try { checkPendingRecording(); }
+                catch (Throwable t) { logger.warn("Deferred-recording kick failed: " + t.getMessage()); }
+            }
+            return;
+        } catch (Exception e) {
+            logger.error("Inline bitrate change failed, falling back to encoder reinit: " + e.getMessage());
+        }
+
+        // Fallback path (rare — only if MediaCodec.setParameters threw).
+        // Full reinit cycle: stop recording, reinit encoder, restart.
+        boolean wasSurveillance = currentMode == Mode.SURVEILLANCE;
+        boolean wasNormalRecording = currentMode == Mode.NORMAL_RECORDING;
+        boolean wasRecording = isRecording() || pendingRecordingPrefix != null || recordingMode;
+
+        try {
+            if (wasRecording && recorder != null && recorder.isRecording()) {
+                logger.info("Stopping recording for bitrate change (fallback)");
+                recorder.stopRecording();
+                Thread.sleep(500);
+            }
+
+            reinitializeEncoder();
+
+            if (bitrateController != null) {
+                bitrateController.setImmediateBitrate(bitrate);
+            }
+
+            if (wasRecording) {
+                if (wasSurveillance) {
+                    logger.info("Restarting surveillance mode with new bitrate");
+                    enableSurveillance();
+                } else if (wasNormalRecording) {
+                    // FIX (audit R6): preserve session prefix/dir across the
+                    // bitrate-fallback reinit. Mirror onPostReacquire's pendingPrefix
+                    // -> activePrefix -> "cam" preference so session-identity is
+                    // not silently regressed to default ("cam_*.mp4") on reinit.
+                    java.io.File restartDir;
+                    String restartPrefix;
+                    if (pendingRecordingPrefix != null) {
+                        restartDir = pendingRecordingDir;
+                        restartPrefix = pendingRecordingPrefix;
+                    } else if (activeRecordingPrefix != null) {
+                        restartDir = activeRecordingDir;
+                        restartPrefix = activeRecordingPrefix;
+                    } else {
+                        restartDir = null;
+                        restartPrefix = null;
+                    }
+                    if (restartPrefix != null) {
+                        logger.info("Restarting normal recording with new bitrate (prefix="
+                            + restartPrefix + ")");
+                        startRecording(restartDir, restartPrefix);
+                    } else {
+                        logger.info("Restarting normal recording with new bitrate (no captured prefix — default 'cam')");
+                        startRecording();
+                    }
+                } else if (recordingMode || pendingRecordingPrefix != null) {
+                    java.io.File restartDir;
+                    String restartPrefix;
+                    if (pendingRecordingPrefix != null) {
+                        restartDir = pendingRecordingDir;
+                        restartPrefix = pendingRecordingPrefix;
+                    } else if (activeRecordingPrefix != null) {
+                        restartDir = activeRecordingDir;
+                        restartPrefix = activeRecordingPrefix;
+                    } else {
+                        restartDir = null;
+                        restartPrefix = null;
+                    }
+                    if (restartPrefix != null) {
+                        logger.info("Restarting deferred recording with new bitrate (prefix="
+                            + restartPrefix + ")");
+                        startRecording(restartDir, restartPrefix);
+                    } else {
+                        logger.info("Restarting deferred recording with new bitrate (no captured prefix — default 'cam')");
+                        startRecording();
+                    }
+                }
+            }
+
+            logger.info("Bitrate change applied via fallback reinit: " + (bitrate / 1_000_000) + " Mbps");
+
+        } catch (Exception e) {
+            logger.error("Failed to apply bitrate change: " + e.getMessage(), e);
+            // FIX (audit R4, Findings 1+2): reinitializeEncoder() may have nulled
+            // the encoder field after releasing it but BEFORE the new encoder
+            // bound to the recorder, leaving the recorder pointed at a dead
+            // encoder. Calling startRecording() now would register a format-
+            // available listener on a released encoder that never fires —
+            // wedging recording for the rest of the ACC=ON window. Force a
+            // full pipeline.stop() so RMM's next tick rebuilds from scratch.
+            logger.warn("Forcing pipeline stop after bitrate-reinit failure — "
+                + "RMM will rebuild on next activation");
+            try {
+                stop();
+            } catch (Throwable t) {
+                logger.warn("Failed to stop pipeline after bitrate change error: "
+                    + t.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Applies a recording FPS change at runtime. Persists the new fps to
+     * UnifiedConfigManager (camera.targetFps), propagates it to the camera
+     * (so the HAL clamps emission to that rate), and reinitializes the
+     * encoder so KEY_FRAME_RATE matches.
+     *
+     * Range: 10-30 fps. Values outside this range are clamped — the panoramic
+     * HAL on this device tops out at ~26 fps and the V2 motion pipeline is
+     * tuned for 10 fps minimum (aiFrameSkip handles the higher rates).
+     *
+     * If recording is active, it is stopped, the encoder reinitialized, and
+     * recording resumes at the new rate. If the requested fps already matches
+     * the current value, no-ops.
+     */
+    public void applyFpsChange(int fps) {
+        synchronized (reconfigLock) {
+            applyFpsChangeLocked(fps);
+        }
+    }
+
+    private void applyFpsChangeLocked(int fps) {
+        int clamped = Math.max(10, Math.min(30, fps));
+        if (clamped != fps) {
+            logger.warn("FPS " + fps + " out of range [10..30] — clamped to " + clamped);
+        }
+
+        // Persist to config first so reinitializeEncoder picks it up via loadTargetFps().
+        try {
+            org.json.JSONObject cameraCfg = app.wheelstop.android.config.UnifiedConfigManager
+                .loadConfig().optJSONObject("camera");
+            if (cameraCfg == null) cameraCfg = new org.json.JSONObject();
+            cameraCfg.put("targetFps", clamped);
+            app.wheelstop.android.config.UnifiedConfigManager.updateSection("camera", cameraCfg);
+        } catch (Exception e) {
+            logger.warn("Failed to persist targetFps: " + e.getMessage());
+        }
+
+        // FIX (audit R7): gate against concurrent stop() teardown. See
+        // applyBitrateChangeLocked for the full rationale — same race window.
+        if (!running || stopping) {
+            logger.warn("FPS change persisted to config but skipping live apply "
+                + "(running=" + running + ", stopping=" + stopping + ")");
+            return;
+        }
+
+        // Propagate to camera so the HAL emission rate also tracks the new target.
+        if (camera != null) {
+            camera.setTargetFps(clamped);
+        }
+
+        if (encoder == null) {
+            logger.info("FPS setting saved (encoder not initialized yet): " + clamped + " fps");
+            return;
+        }
+        if (encoder.getFps() == clamped) {
+            logger.info("FPS already set to: " + clamped + " fps");
+            return;
+        }
+
+        logger.info("FPS change requested: " + clamped + " fps - reinitializing encoder");
+
+        boolean wasSurveillance = currentMode == Mode.SURVEILLANCE;
+        boolean wasNormalRecording = currentMode == Mode.NORMAL_RECORDING;
+        // See applyBitrateChangeLocked for why deferred-recording counts as recording.
+        boolean wasRecording = isRecording() || pendingRecordingPrefix != null || recordingMode;
+
+        try {
+            if (wasRecording && recorder != null && recorder.isRecording()) {
+                logger.info("Stopping recording for FPS change");
+                recorder.stopRecording();
+                Thread.sleep(500);
+            }
+
+            // reinitializeEncoder reads loadTargetFps() internally — picks up our persist.
+            reinitializeEncoder();
+
+            if (wasRecording) {
+                if (wasSurveillance) {
+                    enableSurveillance();
+                } else if (wasNormalRecording) {
+                    // FIX (audit R6): preserve session prefix/dir across reinit.
+                    java.io.File restartDir;
+                    String restartPrefix;
+                    if (pendingRecordingPrefix != null) {
+                        restartDir = pendingRecordingDir;
+                        restartPrefix = pendingRecordingPrefix;
+                    } else if (activeRecordingPrefix != null) {
+                        restartDir = activeRecordingDir;
+                        restartPrefix = activeRecordingPrefix;
+                    } else {
+                        restartDir = null;
+                        restartPrefix = null;
+                    }
+                    if (restartPrefix != null) {
+                        logger.info("FPS reinit: resuming normal recording (prefix="
+                            + restartPrefix + ")");
+                        startRecording(restartDir, restartPrefix);
+                    } else {
+                        logger.info("FPS reinit: resuming normal recording (no captured prefix — default 'cam')");
+                        startRecording();
+                    }
+                } else if (recordingMode || pendingRecordingPrefix != null) {
+                    // Deferred-recording window — see applyBitrateChangeLocked
+                    // for the full reasoning.
+                    java.io.File restartDir;
+                    String restartPrefix;
+                    if (pendingRecordingPrefix != null) {
+                        restartDir = pendingRecordingDir;
+                        restartPrefix = pendingRecordingPrefix;
+                    } else if (activeRecordingPrefix != null) {
+                        restartDir = activeRecordingDir;
+                        restartPrefix = activeRecordingPrefix;
+                    } else {
+                        restartDir = null;
+                        restartPrefix = null;
+                    }
+                    if (restartPrefix != null) {
+                        logger.info("FPS reinit: resuming deferred recording (prefix="
+                            + restartPrefix + ")");
+                        startRecording(restartDir, restartPrefix);
+                    } else {
+                        logger.info("FPS reinit: resuming deferred recording (no captured prefix — default 'cam')");
+                        startRecording();
+                    }
+                }
+            }
+            logger.info("FPS change applied successfully: " + clamped + " fps");
+        } catch (Exception e) {
+            logger.error("Failed to apply FPS change: " + e.getMessage(), e);
+            // FIX (audit R4, Findings 1+2): see applyBitrateChangeLocked catch
+            // for full reasoning. Force pipeline.stop() instead of calling
+            // startRecording() against a stale-encoder recorder.
+            logger.warn("Forcing pipeline stop after FPS-reinit failure — "
+                + "RMM will rebuild on next activation");
+            try {
+                stop();
+            } catch (Throwable t) {
+                logger.warn("Failed to stop pipeline after FPS change error: "
+                    + t.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Applies a codec change. Requires encoder restart.
+     *
+     * @param codec New video codec
+     */
+    public void applyCodecChange(GpuPipelineConfig.VideoCodec codec) {
+        synchronized (reconfigLock) {
+            applyCodecChangeLocked(codec);
+        }
+    }
+
+    private void applyCodecChangeLocked(GpuPipelineConfig.VideoCodec codec) {
+        // Store the new codec setting
+        config.setVideoCodec(codec);
+
+        // FIX (audit R7): gate against concurrent stop() teardown. See
+        // applyBitrateChangeLocked for the full rationale — same race window.
+        if (!running || stopping) {
+            logger.warn("Codec change persisted to config but skipping live apply "
+                + "(running=" + running + ", stopping=" + stopping + ")");
+            return;
+        }
+
+        // If encoder doesn't exist yet, just save the setting
+        if (encoder == null) {
+            logger.info("Codec changed to: " + codec.displayName + " - will apply when encoder initializes");
+            return;
+        }
+        
+        // Check if codec actually changed
+        String currentCodec = encoder.getCodecMimeType();
+        String newCodec = config.getCodecMimeType();
+        if (currentCodec.equals(newCodec)) {
+            logger.info("Codec already set to: " + codec.displayName);
+            return;
+        }
+        
+        logger.info("Codec change requested: " + codec.displayName + " - reinitializing encoder");
+
+        boolean wasSurveillance = currentMode == Mode.SURVEILLANCE;
+        boolean wasNormalRecording = currentMode == Mode.NORMAL_RECORDING;
+        // See applyBitrateChangeLocked for why deferred-recording counts as recording.
+        boolean wasRecording = isRecording() || pendingRecordingPrefix != null || recordingMode;
+        
+        try {
+            // Stop current recording first if active
+            if (wasRecording && recorder != null && recorder.isRecording()) {
+                logger.info("Stopping recording for codec change");
+                recorder.stopRecording();
+                // Wait for encoder to finish writing
+                Thread.sleep(500);
+            }
+            
+            // Reinitialize encoder with new codec
+            reinitializeEncoder();
+            
+            // Restart recording if it was active
+            if (wasRecording) {
+                if (wasSurveillance) {
+                    logger.info("Restarting surveillance mode with new codec");
+                    enableSurveillance();
+                } else if (wasNormalRecording) {
+                    // FIX (audit R6): preserve session prefix/dir across reinit.
+                    java.io.File restartDir;
+                    String restartPrefix;
+                    if (pendingRecordingPrefix != null) {
+                        restartDir = pendingRecordingDir;
+                        restartPrefix = pendingRecordingPrefix;
+                    } else if (activeRecordingPrefix != null) {
+                        restartDir = activeRecordingDir;
+                        restartPrefix = activeRecordingPrefix;
+                    } else {
+                        restartDir = null;
+                        restartPrefix = null;
+                    }
+                    if (restartPrefix != null) {
+                        logger.info("Codec reinit: resuming normal recording (prefix="
+                            + restartPrefix + ")");
+                        startRecording(restartDir, restartPrefix);
+                    } else {
+                        logger.info("Codec reinit: resuming normal recording (no captured prefix — default 'cam')");
+                        startRecording();
+                    }
+                } else if (recordingMode || pendingRecordingPrefix != null) {
+                    // Deferred-recording window — see applyBitrateChangeLocked.
+                    java.io.File restartDir;
+                    String restartPrefix;
+                    if (pendingRecordingPrefix != null) {
+                        restartDir = pendingRecordingDir;
+                        restartPrefix = pendingRecordingPrefix;
+                    } else if (activeRecordingPrefix != null) {
+                        restartDir = activeRecordingDir;
+                        restartPrefix = activeRecordingPrefix;
+                    } else {
+                        restartDir = null;
+                        restartPrefix = null;
+                    }
+                    if (restartPrefix != null) {
+                        logger.info("Codec reinit: resuming deferred recording (prefix="
+                            + restartPrefix + ")");
+                        startRecording(restartDir, restartPrefix);
+                    } else {
+                        logger.info("Codec reinit: resuming deferred recording (no captured prefix — default 'cam')");
+                        startRecording();
+                    }
+                }
+            }
+
+            logger.info("Codec change applied successfully: " + codec.displayName);
+
+        } catch (Exception e) {
+            logger.error("Failed to apply codec change: " + e.getMessage(), e);
+            // FIX (audit R4, Findings 1+2): see applyBitrateChangeLocked catch
+            // for full reasoning. Force pipeline.stop() instead of calling
+            // startRecording() against a stale-encoder recorder; the prior
+            // recovery path registered a format-available listener on the
+            // released encoder which never fires, wedging recording for the
+            // rest of the ACC=ON window.
+            logger.warn("Forcing pipeline stop after codec-reinit failure — "
+                + "RMM will rebuild on next activation");
+            try {
+                stop();
+            } catch (Throwable t) {
+                logger.warn("Failed to stop pipeline after codec change error: "
+                    + t.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Applies multiple encoder reconfig knobs in a single stop / reinit /
+     * restart cycle. The web UI's Quality tab Apply sends quality + codec +
+     * fps together; calling apply*Change three times in sequence stops the
+     * recorder once but each subsequent call observes wasRecording=false
+     * (the deferred-start window) and skips its restart, leaving the pipeline
+     * with no recording. Coalescing avoids that and also avoids three
+     * back-to-back encoder reinits when one suffices.
+     *
+     * <p>Pass {@code null} for any knob you don't want to change.
+     */
+    public void applyBatchedChange(
+            GpuPipelineConfig.RecordingQuality quality,
+            GpuPipelineConfig.VideoCodec codec,
+            Integer fps) {
+        synchronized (reconfigLock) {
+            // Three knobs, three different reconfig costs:
+            //   - Bitrate: inline via MediaCodec.setParameters(VIDEO_BITRATE).
+            //     Encoder stays alive, recording continues without a gap.
+            //     setBitrate() also resizes the pre-record buffer to match.
+            //   - FPS: camera HAL emission rate is inline via setCameraFps;
+            //     encoder's KEY_FRAME_RATE is metadata for rate control and
+            //     can ONLY be set at create time. We deliberately leave the
+            //     encoder running with stale KEY_FRAME_RATE — bitrate accuracy
+            //     drifts slightly until a natural reinit (codec/quality
+            //     change or ACC cycle), but recording keeps producing frames
+            //     with zero gap. Mirrors how SurveillanceEngineGpu treats
+            //     setCameraTargetFps as a hint, not a teardown trigger.
+            //   - Codec: requires full encoder reinit. There is no MediaCodec
+            //     API for runtime codec change; KEY_MIME_TYPE is set at
+            //     configure() and the encoder must be released and recreated.
+            //
+            // So we only stop / reinit / restart when codec actually changes.
+            // Quality- and FPS-only updates are inline.
+            boolean codecChanged = false;
+            int newBitrate = -1;
+
+            if (quality != null) {
+                config.setRecordingQuality(quality);
+                int eff = config.getEffectiveBitrate();
+                if (encoder != null && encoder.getBitrate() != eff) {
+                    newBitrate = eff;
+                }
+            }
+            if (codec != null) {
+                config.setVideoCodec(codec);
+                String want = config.getCodecMimeType();
+                if (encoder == null || !encoder.getCodecMimeType().equals(want)) {
+                    codecChanged = true;
+                }
+            }
+            int clampedFps = -1;
+            if (fps != null) {
+                clampedFps = Math.max(10, Math.min(30, fps));
+                try {
+                    org.json.JSONObject cameraCfg = app.wheelstop.android.config.UnifiedConfigManager
+                        .loadConfig().optJSONObject("camera");
+                    if (cameraCfg == null) cameraCfg = new org.json.JSONObject();
+                    cameraCfg.put("targetFps", clampedFps);
+                    app.wheelstop.android.config.UnifiedConfigManager.updateSection("camera", cameraCfg);
+                } catch (Exception e) {
+                    logger.warn("Batched apply: failed to persist targetFps: " + e.getMessage());
+                }
+                if (camera != null) camera.setTargetFps(clampedFps);
+            }
+
+            // FIX (audit R7): gate against concurrent stop() teardown. Config
+            // persistence above is fine (RMM re-reads on next activation); skip
+            // the live reconfig so we don't half-rebuild against a torn-down
+            // encoder/recorder.
+            if (!running || stopping) {
+                logger.warn("Batched apply: settings persisted but skipping live apply "
+                    + "(running=" + running + ", stopping=" + stopping + ")");
+                return;
+            }
+
+            if (encoder == null) {
+                logger.info("Batched apply: encoder not yet initialized — settings persisted, will apply on init");
+                return;
+            }
+
+            // Inline-update path: bitrate change without codec change. Encoder
+            // stays alive, recording continues seamlessly.
+            if (!codecChanged) {
+                if (newBitrate > 0) {
+                    try {
+                        encoder.setBitrate(newBitrate);
+                        if (bitrateController != null) {
+                            bitrateController.setImmediateBitrate(newBitrate);
+                        }
+                        logger.info("Batched apply: inline bitrate "
+                            + (newBitrate / 1_000_000) + " Mbps");
+                    } catch (Exception e) {
+                        logger.warn("Batched apply: inline bitrate failed: " + e.getMessage());
+                    }
+                }
+                if (clampedFps > 0) {
+                    // Resize the encoder's pre-record buffer pool to match.
+                    // Doesn't touch MediaCodec — KEY_FRAME_RATE is configure-only
+                    // per the Android API. The encoder keeps producing at the
+                    // surface's actual delivery rate; rate control recalibrates
+                    // over a few seconds.
+                    encoder.setTargetFps(clampedFps);
+                    logger.info("Batched apply: inline FPS " + clampedFps
+                        + " (camera HAL + encoder buffer pool resized; encoder"
+                        + " KEY_FRAME_RATE remains configure-time)");
+                }
+                if (newBitrate <= 0 && clampedFps <= 0) {
+                    logger.info("Batched apply: nothing changed");
+                }
+                // FIX (audit R5): inline-success — kick deferred recording.
+                // Idempotent if no pending or already recording.
+                if (pendingRecordingPrefix != null) {
+                    logger.info("Batched inline success — kicking deferred recording check");
+                    try { checkPendingRecording(); }
+                    catch (Throwable t) { logger.warn("Deferred-recording kick failed: " + t.getMessage()); }
+                }
+                return;
+            }
+
+            // Codec-change path: full reinit cycle. Stops current recording,
+            // releases old encoder, creates new one with the new MIME type
+            // (and the latest bitrate/fps from config), restarts recording.
+            logger.info("Batched apply: codec changed — reinitializing encoder (quality=" + quality
+                + ", codec=" + codec + ", fps=" + (fps == null ? "n/a" : clampedFps) + ")");
+
+            boolean wasSurveillance = currentMode == Mode.SURVEILLANCE;
+            boolean wasNormalRecording = currentMode == Mode.NORMAL_RECORDING;
+            boolean wasRecording = isRecording() || pendingRecordingPrefix != null || recordingMode;
+
+            try {
+                if (wasRecording && recorder != null && recorder.isRecording()) {
+                    recorder.stopRecording();
+                    Thread.sleep(500);
+                }
+
+                reinitializeEncoder();
+
+                if (bitrateController != null && newBitrate > 0) {
+                    bitrateController.setImmediateBitrate(newBitrate);
+                }
+
+                if (wasRecording) {
+                    if (wasSurveillance) {
+                        enableSurveillance();
+                    } else if (wasNormalRecording) {
+                        // FIX (audit R6): preserve session prefix/dir across reinit.
+                        java.io.File restartDir;
+                        String restartPrefix;
+                        if (pendingRecordingPrefix != null) {
+                            restartDir = pendingRecordingDir;
+                            restartPrefix = pendingRecordingPrefix;
+                        } else if (activeRecordingPrefix != null) {
+                            restartDir = activeRecordingDir;
+                            restartPrefix = activeRecordingPrefix;
+                        } else {
+                            restartDir = null;
+                            restartPrefix = null;
+                        }
+                        if (restartPrefix != null) {
+                            logger.info("Batched apply: resuming normal recording (prefix="
+                                + restartPrefix + ")");
+                            startRecording(restartDir, restartPrefix);
+                        } else {
+                            logger.info("Batched apply: resuming normal recording (no captured prefix — default 'cam')");
+                            startRecording();
+                        }
+                    } else if (recordingMode || pendingRecordingPrefix != null) {
+                        // Deferred-recording window — see applyBitrateChangeLocked.
+                        java.io.File restartDir;
+                        String restartPrefix;
+                        if (pendingRecordingPrefix != null) {
+                            restartDir = pendingRecordingDir;
+                            restartPrefix = pendingRecordingPrefix;
+                        } else if (activeRecordingPrefix != null) {
+                            restartDir = activeRecordingDir;
+                            restartPrefix = activeRecordingPrefix;
+                        } else {
+                            restartDir = null;
+                            restartPrefix = null;
+                        }
+                        if (restartPrefix != null) {
+                            logger.info("Batched apply: resuming deferred recording (prefix="
+                                + restartPrefix + ")");
+                            startRecording(restartDir, restartPrefix);
+                        } else {
+                            logger.info("Batched apply: resuming deferred recording (no captured prefix — default 'cam')");
+                            startRecording();
+                        }
+                    }
+                }
+                logger.info("Batched apply: codec reinit complete");
+            } catch (Exception e) {
+                logger.error("Batched apply failed: " + e.getMessage(), e);
+                // FIX (audit R4, Findings 1+2): see applyBitrateChangeLocked
+                // catch for full reasoning. Force pipeline.stop() so the
+                // recorder isn't left bound to a released encoder with a
+                // dead format-available listener.
+                logger.warn("Forcing pipeline stop after batched-reinit failure — "
+                    + "RMM will rebuild on next activation");
+                try {
+                    stop();
+                } catch (Throwable t) {
+                    logger.warn("Batched apply: stop failed: " + t.getMessage());
+                }
+            }
+        }
+    }
+
+    /**
+     * Returns true if the encoder is alive and its configured FPS no longer
+     * matches the user's selected FPS in unified config. Caller (typically
+     * RecordingModeManager at the start of an ACC ON activation) is expected
+     * to follow up with a {@link #stop()} so the next {@link #start()} re-runs
+     * {@link #init()} and picks up the new FPS through {@link #loadTargetFps()}.
+     *
+     * Returning false is the no-action case: encoder hasn't been built yet
+     * (next start() will pick up config naturally), pipeline isn't running,
+     * or FPS is already current.
+     */
+    public boolean isFpsConfigStale() {
+        if (!running || encoder == null) return false;
+        return encoder.getFps() != loadTargetFps();
+    }
+
+    /**
+     * Reads the user-selected camera FPS from unified config.
+     * Falls back to 15 if missing or unreadable. Restricted to BYD-supported
+     * values {8, 15, 25} via the UI; other values are clamped to 15 by the
+     * settings API before being persisted.
+     */
+    private static int loadTargetFps() {
+        try {
+            org.json.JSONObject cameraConfig = app.wheelstop.android.config.UnifiedConfigManager
+                .loadConfig().optJSONObject("camera");
+            if (cameraConfig != null) {
+                return cameraConfig.optInt("targetFps", 15);
+            }
+        } catch (Exception ignored) {}
+        return 15;
+    }
+
+    /**
+     * Reads the user-selected ACC-off surveillance camera FPS from unified
+     * config (camera.surveillanceTargetFps). Falls back to the ACC-on
+     * targetFps, then to 15 — so a config predating the split (key absent)
+     * resolves to EXACTLY the pre-split rate (byte-identical). Same {8,15,25}
+     * UI restriction as loadTargetFps(); the settings API clamps before
+     * persisting.
+     */
+    private static int loadSurveillanceTargetFps() {
+        try {
+            org.json.JSONObject cameraConfig = app.wheelstop.android.config.UnifiedConfigManager
+                .loadConfig().optJSONObject("camera");
+            if (cameraConfig != null) {
+                int accOnFallback = cameraConfig.optInt("targetFps", 15);
+                return cameraConfig.optInt("surveillanceTargetFps", accOnFallback);
+            }
+        } catch (Exception ignored) {}
+        return 15;
+    }
+
+    /**
+     * Resolves the configured ACC-off surveillance quality tier from unified
+     * config (recording.surveillanceQuality). Returns {@code null} when the key
+     * is ABSENT (pre-split config) so the caller
+     * ({@link GpuPipelineConfig#getEffectiveBitrateForQuality}) falls back to
+     * the ACC-on recordingQuality tier — byte-identical to the pre-split world.
+     * A present-but-unparseable value degrades to STANDARD via fromString, the
+     * same default recordingQuality itself uses.
+     */
+    private static GpuPipelineConfig.RecordingQuality loadSurveillanceQuality() {
+        try {
+            org.json.JSONObject rec = app.wheelstop.android.config.UnifiedConfigManager
+                .loadConfig().optJSONObject("recording");
+            if (rec != null) {
+                String q = rec.optString("surveillanceQuality", null);
+                if (q != null) {
+                    return GpuPipelineConfig.RecordingQuality.fromString(q);
+                }
+            }
+        } catch (Exception ignored) {}
+        return null;  // null => getEffectiveBitrateForQuality falls back to recordingQuality
+    }
+
+    /**
+     * Reinitializes the encoder with current config settings.
+     * This is a synchronous operation that waits for completion.
+     *
+     * SOTA: Properly synchronizes with GL thread to prevent EGL_BAD_SURFACE errors.
+     */
+    private void reinitializeEncoder() throws Exception {
+        logger.info("Reinitializing encoder...");
+        
+        // SOTA: First, release recorder's encoder surface on GL thread
+        // This prevents EGL_BAD_SURFACE errors when the encoder is released
+        if (camera != null && camera.getGlHandler() != null && recorder != null) {
+            final Object releaseLock = new Object();
+            final boolean[] releaseDone = {false};
+            
+            camera.getGlHandler().post(() -> {
+                try {
+                    // Release recorder's surface (it will be recreated after new encoder is ready)
+                    recorder.releaseEncoderSurface();
+                    logger.info("Recorder encoder surface released on GL thread");
+                } catch (Exception e) {
+                    logger.warn("Error releasing recorder surface: " + e.getMessage());
+                } finally {
+                    synchronized (releaseLock) {
+                        releaseDone[0] = true;
+                        releaseLock.notify();
+                    }
+                }
+            });
+            
+            // Wait for GL thread to release surface (max 1 second)
+            synchronized (releaseLock) {
+                if (!releaseDone[0]) {
+                    releaseLock.wait(1000);
+                }
+            }
+        }
+        
+        // Now safe to release old encoder
+        if (encoder != null) {
+            // Wait for any pending writes to complete
+            if (encoder.isWritingToFile()) {
+                logger.info("Waiting for encoder to finish writing...");
+                encoder.flushAndClose();
+                Thread.sleep(200);
+            }
+            encoder.release();
+            encoder = null;
+        }
+        
+        // Create new encoder with current config
+        String codecMimeType = config.getCodecMimeType();
+        int bitrate = config.getEffectiveBitrate();
+        int fps = loadTargetFps();
+
+        logger.info("Creating new encoder: " +
+            (codecMimeType.contains("hevc") ? "H.265" : "H.264") +
+            " @ " + fps + "fps, " + (bitrate / 1_000_000) + " Mbps");
+
+        // FIX (audit R4, Findings 1+2): on encoder allocation failure, ensure
+        // both the encoder field AND the recorder's internal encoder reference
+        // are cleared so the caller's catch (which now calls stop()) sees a
+        // coherent torn-down state. Without this, a throw here leaves the
+        // recorder bound to the released-and-nulled encoder, and stop()
+        // would then try to flushAndClose against a NULL encoder field while
+        // recorder.encoder still points at a freed instance.
+        try {
+            encoder = new HardwareEventRecorderGpu(encoderWidth, encoderHeight, fps, bitrate, codecMimeType);
+            encoder.setManualClipRetentionDuration(
+                app.wheelstop.android.recording.ManualClipService.getConfiguredRetentionSeconds());
+        } catch (Throwable t) {
+            logger.warn("New encoder allocation failed — clearing recorder's stale "
+                + "encoder ref so caller can stop() cleanly: " + t.getMessage());
+            encoder = null;
+            // Best-effort: drop the recorder's internal encoder ref by releasing
+            // its surface again (the prior releaseEncoderSurface() covered the
+            // GL surface; this path now has no live encoder to bind to).
+            if (recorder != null) {
+                try {
+                    final GpuMosaicRecorder snapRec = recorder;
+                    if (camera != null && camera.getGlHandler() != null) {
+                        camera.getGlHandler().post(() -> {
+                            try { snapRec.releaseEncoderSurface(); }
+                            catch (Throwable ignored) {}
+                        });
+                    }
+                } catch (Throwable ignored) {}
+            }
+            throw t instanceof Exception ? (Exception) t : new RuntimeException(t);
+        }
+        // On encoder reinit (codec change), restore the pre-record window
+        // from the source-of-truth config for the ACTIVE recording mode.
+        // Without mode-awareness, a codec change while in PROXIMITY_GUARD
+        // would silently revert to the sentry/surveillance value, ignoring
+        // the proximity tab's slider until the next setMode() cycle.
+        //
+        // The proximity controller's setPreRecordDuration call (after
+        // reinit completes) is the long-term source of truth, but we seed
+        // the encoder here with the right value up-front so the byte
+        // ring's first allocations / window are correctly sized.
+        try {
+            int preRecordSec = -1;
+            // Prefer proximity's value when the active mode is proximity guard.
+            try {
+                app.wheelstop.android.recording.RecordingModeManager rmm =
+                    app.wheelstop.android.daemon.CameraDaemon.getRecordingModeManager();
+                if (rmm != null
+                        && rmm.getCurrentMode() == app.wheelstop.android.recording.RecordingModeManager.Mode.PROXIMITY_GUARD) {
+                    org.json.JSONObject pgCfg =
+                        app.wheelstop.android.config.UnifiedConfigManager.getProximityGuard();
+                    int v = pgCfg.optInt("preRecordSeconds", -1);
+                    if (v > 0) preRecordSec = v;
+                }
+            } catch (Throwable t) {
+                logger.debug("Proximity-mode pre-record lookup failed: " + t.getMessage());
+            }
+            // Fallback: surveillance config (the historical source).
+            if (preRecordSec <= 0) {
+                SurveillanceConfigManager cfgMgr = new SurveillanceConfigManager();
+                if (cfgMgr.configExists()) {
+                    SurveillanceConfig survCfg = cfgMgr.loadConfig();
+                    preRecordSec = survCfg.getPreRecordSeconds();
+                }
+            }
+            if (preRecordSec > 0) {
+                encoder.setPreRecordDuration(preRecordSec);
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to apply pre-record duration on reinit: " + e.getMessage());
+        }
+        // Wire the StorageManager cleanup gate against the new encoder so
+        // post-save / periodic / sidecar cleanup paths defer their delete
+        // bursts while we're mid-write. Field-deref lambda (audit P1) so a
+        // future reinit that swaps `encoder` is reflected without rebinding —
+        // the older `enc::isWritingToFile` form captured the *instance* and
+        // would return false on a released encoder, leaving cleanup un-gated
+        // during the reinit window.
+        //
+        // Wired BEFORE encoder.init() (audit: probeWired gate): a persistent
+        // encoder.init() failure (codec configure timeout / OOM) must NOT leave
+        // probeWired=false forever, which would silently disable the ENTIRE
+        // periodic limit-enforcement ticker (including the encoder-independent
+        // trips/proximity categories). The lambda already null-guards the field
+        // and returns false until the encoder both exists and is actually
+        // writing, so wiring it before init() preserves the anti-fail-open
+        // intent while flipping probeWired=true on the first init attempt.
+        try {
+            app.wheelstop.android.storage.StorageManager.getInstance()
+                .setEncoderWritingProbe(() -> {
+                    HardwareEventRecorderGpu e = this.encoder;
+                    return e != null && e.isWritingToFile();
+                });
+        } catch (Exception e) {
+            logger.warn("Failed to wire encoder writing probe: " + e.getMessage());
+        }
+
+        encoder.init();
+
+        // Re-seed the clip segment length after a codec/quality reinit so the
+        // fresh encoder keeps the user's chosen rotation interval.
+        applySegmentDurationFromConfig();
+
+        // Reinitialize recorder with new encoder on GL thread
+        if (camera != null && camera.getEglCore() != null) {
+            final Object initLock = new Object();
+            final boolean[] initDone = {false};
+            final Exception[] initError = {null};
+            
+            camera.getGlHandler().post(() -> {
+                try {
+                    // Recreate recorder if needed
+                    if (recorder == null) {
+                        // FIX (audit R6): use the cached profile-driven offsets
+                        // + actual encoderWidth/encoderHeight instead of the
+                        // no-arg constructor's DEFAULT_VIEWPORT_*. Without this,
+                        // a Tang trim (encoderHeight=1440) would silently regress
+                        // to 2560x1920 and corrupt encoder strip slicing. Falls
+                        // through to no-arg only when init() has not yet captured
+                        // a profile (cold-start race; should never happen on
+                        // this code path because reinit only runs after init).
+                        if (lastQuadrantStripOffsetX != null) {
+                            logger.info("Reinit: rebuilding recorder with cached profile offsets ("
+                                + encoderWidth + "x" + encoderHeight + ")");
+                            recorder = new GpuMosaicRecorder(
+                                lastQuadrantStripOffsetX, encoderWidth, encoderHeight);
+                        } else {
+                            logger.warn("Reinit: no cached profile offsets — falling back to no-arg "
+                                + "GpuMosaicRecorder (Tang trims may be miss-sized)");
+                            recorder = new GpuMosaicRecorder();
+                        }
+                        // FIX (audit R1, RESIDUAL): re-wire segment-rotated
+                        // listener after a fresh recorder allocation so RMM
+                        // wedge-ticker grace-windowing keeps working post-
+                        // encoder-reinit.
+                        recorder.setSegmentRotatedListener(this::noteSegmentRotated);
+                    }
+                    recorder.init(camera.getEglCore(), encoder);
+                    logger.info("Recorder reinitialized on GL thread");
+                } catch (Exception e) {
+                    initError[0] = e;
+                    logger.error("Failed to reinitialize recorder on GL thread", e);
+                } finally {
+                    synchronized (initLock) {
+                        initDone[0] = true;
+                        initLock.notify();
+                    }
+                }
+            });
+            
+            // Wait for GL thread initialization (max 3 seconds)
+            synchronized (initLock) {
+                if (!initDone[0]) {
+                    initLock.wait(3000);
+                }
+            }
+            
+            if (initError[0] != null) {
+                throw initError[0];
+            }
+            
+            if (!initDone[0]) {
+                throw new RuntimeException("Encoder reinitialization timed out");
+            }
+        }
+        
+        // Update bitrate controller
+        if (bitrateController != null) {
+            bitrateController = new AdaptiveBitrateController(encoder, bitrate);
+        }
+
+        // Preserve deferred-recording intent across the encoder swap. If the
+        // user had recording active and a chain of apply* calls reinit the
+        // encoder more than once (multi-setting POST: quality + codec + fps),
+        // the format-available listener registered against the prior encoder
+        // dies with it — and `wasRecording = isRecording()` reads false on
+        // the second/third apply, so the normal restart path skips. Re-arm
+        // the listener here so the new encoder's first frame still triggers
+        // checkPendingRecording().
+        if (recordingMode || pendingRecordingPrefix != null) {
+            encoder.setFormatAvailableListener(() -> {
+                new Thread(() -> {
+                    try {
+                        checkPendingRecording();
+                    } catch (Exception e) {
+                        logger.warn("Deferred recording start (post-reinit) failed: " + e.getMessage());
+                    }
+                }, "PendingRecKickoffReinit").start();
+            });
+        }
+
+        logger.info("Encoder reinitialized successfully: " +
+            (codecMimeType.contains("hevc") ? "H.265" : "H.264") +
+            " @ " + (bitrate / 1_000_000) + " Mbps");
+    }
+    
+    /**
+     * Initializes the complete GPU pipeline.
+     * 
+     * @throws Exception if initialization fails
+     */
+    public void init() throws Exception {
+        init(savedAssetManager, savedContext);
+    }
+    
+    /**
+     * Initializes the complete GPU pipeline with AssetManager for YOLO.
+     * 
+     * @param assetManager Android AssetManager for loading YOLO model (null = skip YOLO)
+     * @throws Exception if initialization fails
+     */
+    public void init(android.content.res.AssetManager assetManager) throws Exception {
+        init(assetManager, null);
+    }
+    
+    /**
+     * Initializes the complete GPU pipeline with Context for Java TFLite.
+     * 
+     * @param assetManager Android AssetManager (unused, kept for compatibility)
+     * @param context Android Context for TFLite initialization
+     * @throws Exception if initialization fails
+     */
+    public void init(android.content.res.AssetManager assetManager, android.content.Context context) throws Exception {
+        if (initialized) {
+            logger.warn("Already initialized");
+            return;
+        }
+        
+        // Save for re-initialization after stop/start cycle
+        if (assetManager != null) this.savedAssetManager = assetManager;
+        if (context != null) this.savedContext = context;
+        
+        logger.info("Initializing GPU surveillance pipeline...");
+        
+        // Ensure output directory exists
+        if (!eventOutputDir.exists()) {
+            eventOutputDir.mkdirs();
+        }
+        
+        // SOTA: Release any stuck encoder resources before creating new one
+        // This helps recover from previous crashes that left encoder in bad state
+        if (encoder != null) {
+            logger.info("Releasing previous encoder before reinit...");
+            try {
+                encoder.release();
+            } catch (Exception e) {
+                logger.warn("Error releasing previous encoder: " + e.getMessage());
+            }
+            encoder = null;
+        }
+        
+        // 1. Create hardware encoder (shared by normal recording and surveillance)
+        // Use config settings for bitrate, codec, and FPS. The encoder's KEY_FRAME_RATE
+        // must match the camera's setCameraFps(), otherwise the encoder's PTS pacing
+        // diverges from actual frame delivery and recorded video plays back at the
+        // wrong speed (faster or slower than realtime).
+        String codecMimeType = config.getCodecMimeType();
+        int bitrate = config.getEffectiveBitrate();
+        int fps = loadTargetFps();
+        logger.info("Creating encoder with config: " +
+            (codecMimeType.contains("hevc") ? "H.265" : "H.264") +
+            " @ " + fps + "fps, " + (bitrate / 1_000_000) + " Mbps");
+        encoder = new HardwareEventRecorderGpu(encoderWidth, encoderHeight, fps, bitrate, codecMimeType);
+        encoder.setManualClipRetentionDuration(
+            app.wheelstop.android.recording.ManualClipService.getConfiguredRetentionSeconds());
+
+        // Pre-load saved pre-record duration BEFORE encoder.init() so the
+        // byte ring is sized correctly on first allocation. Mode-aware:
+        // when the persisted mode is PROXIMITY_GUARD, prefer the proximity
+        // tab's value so cold boot is symmetric with the codec-reinit
+        // path (see reinitializeEncoder at the same point in the file).
+        // Without this, cold boot with mode=PROXIMITY_GUARD briefly sizes
+        // the ring to surveillance's value before proximityController.start()
+        // resizes it; functionally fine (no realloc) but inconsistent.
+        SurveillanceConfig preLoadedConfig = null;
+        int preRecordSec = -1;
+        try {
+            // Mode-aware preference: read mode FROM CONFIG (RecordingModeManager
+            // isn't yet constructed at this point in init()). UnifiedConfigManager
+            // exposes the persisted mode under recording.mode.
+            try {
+                org.json.JSONObject recCfg =
+                    app.wheelstop.android.config.UnifiedConfigManager.getRecording();
+                String persistedMode = recCfg.optString("mode", "");
+                if ("PROXIMITY_GUARD".equals(persistedMode)) {
+                    org.json.JSONObject pgCfg =
+                        app.wheelstop.android.config.UnifiedConfigManager.getProximityGuard();
+                    int v = pgCfg.optInt("preRecordSeconds", -1);
+                    if (v > 0) preRecordSec = v;
+                }
+            } catch (Throwable t) {
+                logger.debug("Cold-boot mode-aware pre-record lookup failed: " + t.getMessage());
+            }
+            if (preRecordSec <= 0) {
+                SurveillanceConfigManager configManager = new SurveillanceConfigManager();
+                if (configManager.configExists()) {
+                    preLoadedConfig = configManager.loadConfig();
+                    preRecordSec = preLoadedConfig.getPreRecordSeconds();
+                }
+            }
+            if (preRecordSec > 0) {
+                encoder.setPreRecordDuration(preRecordSec);
+                logger.info("Pre-applied pre-record duration: " + preRecordSec + "s");
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to pre-load config (will retry after init): " + e.getMessage());
+        }
+
+        // Wire the StorageManager cleanup gate (RC9). Field-deref lambda so
+        // reinit-driven encoder swaps don't leave a stale instance ref.
+        //
+        // Wired BEFORE encoder.init() (audit: probeWired gate): a persistent
+        // encoder.init() failure (codec configure timeout / OOM) must NOT leave
+        // probeWired=false forever, which would silently disable the ENTIRE
+        // periodic limit-enforcement ticker (including the encoder-independent
+        // trips/proximity categories). The lambda null-guards the field and
+        // returns false until the encoder exists AND is writing, so this keeps
+        // the anti-fail-open intent while flipping probeWired=true on the first
+        // init attempt regardless of whether init() later throws.
+        try {
+            app.wheelstop.android.storage.StorageManager.getInstance()
+                .setEncoderWritingProbe(() -> {
+                    HardwareEventRecorderGpu e = this.encoder;
+                    return e != null && e.isWritingToFile();
+                });
+        } catch (Exception e) {
+            logger.warn("Failed to wire encoder writing probe: " + e.getMessage());
+        }
+
+        encoder.init();
+
+        // Seed the clip segment length from the shared recording config so the
+        // ACC-on dashcam axis rotates at the user's chosen interval (2/5/10
+        // min). Same key the ACC-off / OEM axis reads — one control, both axes.
+        applySegmentDurationFromConfig();
+
+        // Resolve the camera profile NOW so the recorder, downscaler, foveated
+        // cropper, and PanoramicCameraGpu all share consistent per-quadrant
+        // strip-X offsets. Profile inference uses the vehicle model + any
+        // user-saved override in UnifiedConfigManager.camera.cameraProfile.
+        app.wheelstop.android.camera.ResolvedCameraConfig resolvedCamera =
+            app.wheelstop.android.camera.CameraConfigResolver.resolve(getVehicleModel());
+        float[] quadrantStripOffsetX = resolvedCamera.getQuadrantStripOffsetX();
+        float[] quadrantCornerOffsetsXY = resolvedCamera.getQuadrantCornerOffsetsXY();
+        // FIX (audit R6): cache for reinitializeEncoder()'s recorder=null branch.
+        this.lastQuadrantStripOffsetX = quadrantStripOffsetX;
+
+        // 2. Create GPU mosaic recorder (shared) with profile-driven viewport
+        // and per-quadrant offsets. Tang gets 2560x1440 instead of 2560x1920.
+        recorder = new GpuMosaicRecorder(quadrantStripOffsetX, encoderWidth, encoderHeight);
+        // Note: recorder.init() will be called after EGL context is created by camera
+
+        // FIX (audit R1, RESIDUAL): stamp lastSegmentRotateMs on every
+        // segment close so RecordingModeManager's wedge ticker can grace-
+        // window the between-segments isRecording()=false flicker.
+        recorder.setSegmentRotatedListener(this::noteSegmentRotated);
+
+        // Wire up telemetry collector to new recorder if available
+        if (telemetryCollector != null) {
+            recorder.setTelemetryCollector(telemetryCollector);
+        }
+        // Apply persisted overlay enabled state to new recorder
+        recorder.setOverlayEnabled(overlayEnabledConfig);
+        // Apply the layout profile that matches the current mode (dashcam vs
+        // sentry) to the freshly-created recorder. IDLE/normal-recording use
+        // the dashcam profile; surveillance uses its own.
+        applyActiveLayoutProfile();
+
+        // 3. Create GPU downscaler with profile-driven offsets
+        downscaler = new GpuDownscaler(quadrantStripOffsetX);
+        // Note: downscaler.init() will be called after EGL context is created by camera
+
+        // 4. Create surveillance engine (uses shared recorder)
+        sentry = new SurveillanceEngineGpu();
+        sentry.init(eventOutputDir, downscaler, assetManager, context);  // Pass Context for Java TFLite
+        sentry.setRecorder(recorder);  // Share recorder with normal recording
+        // Per-vehicle camera-tile height for the foveated FOV scaling math
+        // in DistanceEstimator. Seal=960, Tang=720. Without this the
+        // foveated path uses a Seal-specific 0.66 ratio and reads ~30%
+        // long on Tang.
+        sentry.setCameraStripHeight(cameraHeight);
+        // Per-quadrant vertical FOV from the active camera profile.
+        // Without this, the engine uses uniform 110° for all four
+        // quadrants — which inflates side-camera distances by ~70%
+        // because side mirrors carry tighter optics than the
+        // front/rear ultra-wide fisheyes.
+        app.wheelstop.android.camera.CameraProfile profile = resolvedCamera.getProfile();
+        if (profile != null) {
+            sentry.setCameraVerticalFovDeg(new float[]{
+                    profile.getVerticalFovDeg(0),
+                    profile.getVerticalFovDeg(1),
+                    profile.getVerticalFovDeg(2),
+                    profile.getVerticalFovDeg(3),
+            });
+        }
+
+        // 4b. Apply saved config (use the pre-loaded one if available so we don't
+        // hit disk twice).
+        try {
+            if (preLoadedConfig == null) {
+                SurveillanceConfigManager configManager = new SurveillanceConfigManager();
+                if (configManager.configExists()) {
+                    preLoadedConfig = configManager.loadConfig();
+                }
+            }
+            if (preLoadedConfig != null) {
+                sentry.setConfig(preLoadedConfig);
+                logger.info("Loaded saved surveillance config");
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to load saved config, using defaults: " + e.getMessage());
+        }
+        
+        // 5. Create camera (this creates EGL context). Pass the profile's
+        // per-quadrant offsets so the foveated cropper + camera-side mosaic
+        // math agree with the recorder/downscaler/scaler.
+        if (cameraWidth != resolvedCamera.getPanoWidth()
+                || cameraHeight != resolvedCamera.getPanoHeight()) {
+            logger.warn("Pipeline geometry " + cameraWidth + "x" + cameraHeight
+                + " differs from resolved camera profile "
+                + resolvedCamera.getPanoWidth() + "x" + resolvedCamera.getPanoHeight()
+                + " — restart the daemon to apply the new profile dimensions");
+        }
+        camera = new PanoramicCameraGpu(cameraWidth, cameraHeight,
+            quadrantStripOffsetX, quadrantCornerOffsetsXY);
+        camera.setConsumers(recorder, downscaler, sentry);
+        // Apply the active layout profile's windshield-source preference to the
+        // new camera (dashcam profile at startup/IDLE; the surveillance profile
+        // is re-applied when enableSurveillance() runs).
+        applyActiveLayoutProfile();
+
+        // Camera FPS config — must match the encoder FPS used above (loadTargetFps())
+        // so that camera frame delivery rate matches the encoder's KEY_FRAME_RATE.
+        camera.setTargetFps(fps);
+        logger.info("Camera targetFps=" + fps + " (from config)");
+        logger.info("Resolved camera profile: " + resolvedCamera.getProfile().getDisplayName()
+            + " (panoCam=" + resolvedCamera.getPanoCameraId()
+            + ", size=" + resolvedCamera.getPanoWidth() + "x" + resolvedCamera.getPanoHeight()
+            + ", surfaceMode=" + resolvedCamera.getPanoSurfaceMode() + ")");
+
+        // Camera selection priority:
+        //   1. Validated/manual override saved in UnifiedConfigManager → use as-is.
+        //   2. BmmCameraInfo system hint → preferred over profile default if available.
+        //   3. Profile default (Seal=1, Tang=2).
+        if (resolvedCamera.isValidated() || resolvedCamera.isManualPanoOverride()) {
+            logger.info("Using saved panoramic config: id=" + resolvedCamera.getPanoCameraId()
+                + ", surfaceMode=" + resolvedCamera.getPanoSurfaceMode()
+                + (resolvedCamera.isManualPanoOverride() ? " (manual)" : " (validated)"));
+            camera.setCameraId(resolvedCamera.getPanoCameraId());
+            camera.setCameraSurfaceMode(resolvedCamera.getPanoSurfaceMode());
+            camera.setAutoProbeCameras(false);
+            // Skip frame validation for saved configs. Luma heuristic produces
+            // false negatives in low-light/uniform scenes.
+            camera.setSkipFrameValidation(true);
+        } else {
+            int discoveredId = app.wheelstop.android.camera.AvmCameraHelper.discoverPanoCameraId();
+            if (discoveredId >= 0) {
+                logger.info("Using BmmCameraInfo panoramic hint: camera ID " + discoveredId);
+                camera.setCameraId(discoveredId);
+            } else {
+                logger.info("Using profile default panoramic camera ID "
+                    + resolvedCamera.getPanoCameraId());
+                camera.setCameraId(resolvedCamera.getPanoCameraId());
+            }
+            camera.setCameraSurfaceMode(resolvedCamera.getPanoSurfaceMode());
+            camera.setAutoProbeCameras(false);
+            // ESCO-PARITY: dilink4 trusts the HAL camera-id resolution
+            // unconditionally — esco's gl/C5920a static-init resolves the
+            // camera ID via BmmCameraInfo and never re-probes. Frame-50
+            // black-pixel re-probe (PanoramicCameraGpu.java:2233-2251)
+            // would call closeCameraForPath + recreateCameraSurface on
+            // first-boot — the same close+reopen race we've eliminated
+            // everywhere else. Skip frame validation on dilink4.
+            boolean dilink4Cam = false;
+            try {
+                dilink4Cam = app.wheelstop.android.daemon.CameraDaemon.isDilink4ModeActiveStatic();
+            } catch (Throwable ignored) {}
+            camera.setSkipFrameValidation(dilink4Cam);
+            if (dilink4Cam) {
+                logger.info("dilink4: skipping frame-50 auto-probe re-validation (esco-parity)");
+            }
+        }
+
+        // Register probe callback — only used when manual probe is triggered via API
+        camera.setCameraProbeCallback((cameraId, surfaceMode) -> {
+            logger.info("Probe found working camera: id=" + cameraId + ", surfaceMode=" + surfaceMode);
+            try {
+                app.wheelstop.android.camera.CameraConfigResolver.persistPanoramicProbe(
+                    cameraId,
+                    surfaceMode,
+                    cameraWidth,
+                    cameraHeight,
+                    true,
+                    false);
+                logger.info("Saved camera config for next launch");
+            } catch (Exception ex) {
+                logger.warn("Failed to save camera config: " + ex.getMessage());
+            }
+            new Thread(() -> {
+                try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
+                checkPendingRecording();
+            }, "PendingRecCheck").start();
+        });
+        
+        // esco-parity: when the camera is using the SurfaceTexture path, the
+        // BYD HAL emits its final framing into the producer surface directly
+        // Layout 3 = DiLink 4 (HAL emits 2x2 natively but in non-canonical
+        // arrangement; recorder/stream/cropper rearrange via per-role corner
+        // remap below). Layout 0 = legacy 4-strip → 2x2 rearrangement. The
+        // camera class returns 3 whenever cameraMode=dilink4 is selected
+        // (USE_ESCO_SURFACE_TEXTURE_PATH path), 0 for every other car.
+        int layoutMode = camera != null ? camera.getCameraLayoutMode() : 0;
+        if (recorder != null) {
+            recorder.setCameraLayout(layoutMode);
+            // DiLink 4 layout is hardcoded to the only known-good arrangement
+            // for that HAL: Front=TL X-flipped, Rear=TR Y-flipped, Left=BL
+            // Y-flipped, Right=BR no flip. No user-tunable surface — every
+            // DiLink 4 trim seen so far emits this exact mosaic.
+            // Combined setter — single source of truth for the DiLink 4
+            // mosaic arrangement (Dilink4Constants). Recorder + stream
+            // scaler both reference this so they can never silently
+            // disagree.
+            recorder.setProducerLayout(
+                app.wheelstop.android.camera.Dilink4Constants.CORNER_FRONT,
+                app.wheelstop.android.camera.Dilink4Constants.CORNER_RIGHT,
+                app.wheelstop.android.camera.Dilink4Constants.CORNER_REAR,
+                app.wheelstop.android.camera.Dilink4Constants.CORNER_LEFT,
+                app.wheelstop.android.camera.Dilink4Constants.FLIP_FRONT,
+                app.wheelstop.android.camera.Dilink4Constants.FLIP_RIGHT,
+                app.wheelstop.android.camera.Dilink4Constants.FLIP_REAR,
+                app.wheelstop.android.camera.Dilink4Constants.FLIP_LEFT);
+            // Red-overlay mask (HAL 'calibration failed' chrome suppression).
+            // Off by default; user opts in when the car is uncalibrated and
+            // the chrome is in the way.
+            try {
+                org.json.JSONObject camCfg = app.wheelstop.android.config
+                    .UnifiedConfigManager.loadConfig().optJSONObject("camera");
+                if (camCfg != null) {
+                    recorder.setRedMaskEnabled(
+                        camCfg.optBoolean("dilink4RedMask", false));
+                    // APA center inset — esco APACropFilter parity. Default
+                    // 240/2560 = 0.09375 trims the chrome-painted seams on
+                    // byd_apa firmware. Only applied when cameraLayout=3
+                    // because the inset uniform is gated by uApaMode>2.5.
+                    if (layoutMode == 3) {
+                        recorder.setApaCenterInset(
+                            (float) camCfg.optDouble("dilink4ApaCenterInset", 0.09375));
+                    }
+                }
+            } catch (Throwable t) {
+                logger.warn("Failed to read dilink4RedMask from config: " + t.getMessage());
+            }
+            // Recording dewarp strength — shader gates on uApaMode==0, so
+            // pushing a non-zero value on dilink4 is a no-op (safe).
+            // We push regardless of layout so a layout flip later picks up
+            // the user's setting without a daemon restart.
+            try {
+                int rectifyStrength = app.wheelstop.android.config
+                    .UnifiedConfigManager.getRectifyStrength();
+                recorder.setRectifyStrength((float) rectifyStrength);
+                // Push tile aspect (tile_height / tile_width) from the
+                // active profile so the dewarp's radial math runs in true
+                // pixel space. Profile.panoHeight is the per-cam tile
+                // height; tile width is panoWidth/4 (4 cams across the
+                // strip). Seal 5120×960 → 960 / (5120/4) = 0.75. Tang
+                // 5120×720 → 0.5625. Identity-equivalent at slider 0.
+                app.wheelstop.android.camera.CameraProfile prof = profile;
+                if (prof != null) {
+                    float tileWidth = Math.max(1, prof.getPanoWidth() / 4f);
+                    float tileHeight = Math.max(1, prof.getPanoHeight());
+                    recorder.setRectifyAspect(tileHeight / tileWidth);
+                }
+            } catch (Throwable t) {
+                logger.warn("Failed to read rectifyStrength from config: " + t.getMessage());
+            }
+        }
+
+        // 6. Create adaptive bitrate controller
+        bitrateController = new AdaptiveBitrateController(encoder, 6_000_000);
+
+        // Register a single config-change listener that pushes rectifyStrength
+        // edits to the live recorder. Listener fires on ANY recording-section
+        // update (the listener API is section-granular, not field-granular);
+        // we re-read the rectifyStrength field and push, dedupe is handled by
+        // the recorder setter (no-op when the value didn't change).
+        // Idempotent registration: deregister any prior registration first so
+        // re-init paths (encoder reinit, profile change) don't stack listeners.
+        try {
+            if (rectifyConfigListener != null) {
+                app.wheelstop.android.config.UnifiedConfigManager
+                    .removeListener(rectifyConfigListener);
+            }
+            rectifyConfigListener = (section, sectionConfig) -> {
+                if (!"recording".equals(section)) return;
+                GpuMosaicRecorder activeRecorder = recorder;
+                if (activeRecorder == null) return;
+                int strength = sectionConfig.optInt("rectifyStrength", 0);
+                if (strength < 0) strength = 0;
+                if (strength > 100) strength = 100;
+                activeRecorder.setRectifyStrength((float) strength);
+            };
+            app.wheelstop.android.config.UnifiedConfigManager
+                .addListener(rectifyConfigListener);
+        } catch (Throwable t) {
+            logger.warn("Failed to register rectify config listener: " + t.getMessage());
+        }
+
+        initialized = true;
+        logger.info( "GPU surveillance pipeline initialized");
+    }
+    
+    /**
+     * Starts the GPU pipeline.
+     * 
+     * @throws Exception if start fails
+     */
+    public void start() throws Exception {
+        start(false);
+    }
+    
+    /**
+     * Starts the GPU pipeline.
+     * 
+     * @param autoStartRecording If true, automatically starts recording when recorder is ready
+     * @throws Exception if start fails
+     */
+    public void start(boolean autoStartRecording) throws Exception {
+        // CRITICAL: claim the start-in-progress slot to prevent race
+        // conditions. Multiple threads may call start() concurrently
+        // (HTTP + WebSocket). We use `starting` to block concurrent starts
+        // WITHOUT yet publishing running=true — that flag is only flipped
+        // once the camera GL-thread runnable confirms successful open.
+        // This way pipeline.isRunning() doesn't lie if camera open throws
+        // asynchronously and RecordingModeManager's `if (!isRunning())`
+        // gates correctly retry on the next trigger.
+        synchronized (this) {
+            if (running || starting) {
+                logger.warn( "Already running");
+                return;
+            }
+            if (stopping) {
+                // stop() is mid-teardown (encoders releasing, EGL tearing
+                // down). Refuse — caller (cold-start executor) can retry on
+                // its next 2-second tick when the lane has settled.
+                logger.warn("Refusing start() — pipeline is mid-stop");
+                return;
+            }
+            starting = true;  // Block concurrent starts; running stays false
+                              // until camera open is verified.
+            // FIX (audit R5): bump generation on start so a retry scheduled
+            // by a previous lifecycle that's still hanging around exits.
+            long newGen = pipelineGen.incrementAndGet();
+            logger.info("Pipeline generation bumped on start: " + newGen);
+        }
+        
+        try {
+            // Reinitialize if stopped (encoder/recorder were released)
+            if (!initialized) {
+                init();
+            }
+            
+            logger.info( "Starting GPU pipeline (autoRecord=" + autoStartRecording + ")...");
+            
+            // Re-resolve camera config before starting — user may have changed
+            // camera ID, profile, or role mappings via the app UI since init.
+            // Resolver picks profile-default if no probed/manual config exists,
+            // so this also covers "user cleared manual override → revert".
+            try {
+                app.wheelstop.android.camera.ResolvedCameraConfig refreshedCamera =
+                    app.wheelstop.android.camera.CameraConfigResolver.resolve(getVehicleModel());
+                int targetCameraId = refreshedCamera.getPanoCameraId();
+                int targetSurfaceMode = refreshedCamera.getPanoSurfaceMode();
+                int currentId = camera.getCameraId();
+                if (currentId != targetCameraId) {
+                    logger.info("Camera config changed since init: " + currentId + " → " + targetCameraId);
+                    camera.setCameraId(targetCameraId);
+                    camera.setCameraSurfaceMode(targetSurfaceMode);
+                    camera.setAutoProbeCameras(false);
+                    camera.setSkipFrameValidation(
+                        refreshedCamera.isValidated() || refreshedCamera.isManualPanoOverride());
+                }
+            } catch (Exception e) {
+                logger.debug("Camera config re-read failed: " + e.getMessage());
+            }
+            
+            // Start camera (this creates EGL context and initializes downscaler)
+            camera.start();
+            
+            // SOTA: Register yield listener for recording finalization during camera yield.
+            // When contention is detected and the camera must yield to the native AVM app,
+            // this ensures any active recording is properly finalized (moov atom written)
+            // before the camera closes, and recording resumes after re-acquisition.
+            camera.setCameraYieldListener(new PanoramicCameraGpu.CameraYieldListener() {
+                @Override
+                public void onPreYield() {
+                    logger.info("Pre-yield: finalizing active recording...");
+                    
+                    // Stop any active recording to finalize the MP4 file
+                    if (recorder != null && recorder.isRecording()) {
+                        recorder.stopRecording();
+                        logger.info("Pre-yield: recording stopped");
+                    }
+                    
+                    // Flush encoder to ensure all buffered frames are written
+                    if (encoder != null && encoder.isWritingToFile()) {
+                        encoder.flushAndClose();
+                        logger.info("Pre-yield: encoder flushed");
+                    }
+                }
+                
+                @Override
+                public void onPostReacquire() {
+                    logger.info("Post-reacquire: resuming recording and streaming...");
+                    
+                    // Restore streaming components if streaming was enabled.
+                    // yieldCameraInternal and restartCameraAfterError call clearStreamingComponents()
+                    // which nulls the camera's local refs. The pipeline still holds the actual objects.
+                    if (streamingEnabled && streamScaler != null && streamEncoder != null && camera != null) {
+                        camera.setStreamingComponents(streamScaler, streamEncoder);
+                        logger.info("Post-reacquire: streaming components restored");
+                    }
+                    
+                    // Resume recording in whatever mode was active before yield
+                    if (currentMode == Mode.SURVEILLANCE) {
+                        // Sentry mode — re-enable surveillance (it will start recording on motion)
+                        if (sentry != null && !sentry.isActive()) {
+                            sentry.enable();
+                        }
+                        logger.info("Post-reacquire: surveillance mode restored");
+                    } else if (currentMode == Mode.NORMAL_RECORDING || recordingMode) {
+                        // Normal recording mode — restart recording.
+                        // FIX (audit R3, Findings 3+6): re-enter the pipeline-level
+                        // entrypoint (which gates on encoder.isFormatAvailable(),
+                        // runs the storage probe, and schedules format-available /
+                        // cold-start retry on miss) instead of calling
+                        // recorder.startRecording() bare. A bare call silent-no-ops
+                        // when the encoder hasn't republished its output format
+                        // post-flushAndClose or when the volume returns transient
+                        // EBUSY, leaving the pipeline wedged for the rest of the
+                        // ACC=ON window. Prefer pendingRecordingPrefix (cold-start
+                        // deferred case) over the captured active session.
+                        if (recorder != null && !recorder.isRecording()) {
+                            java.io.File resumeDir;
+                            String resumePrefix;
+                            if (pendingRecordingPrefix != null) {
+                                resumeDir = pendingRecordingDir;
+                                resumePrefix = pendingRecordingPrefix;
+                                logger.info("Post-reacquire: resuming via pending request "
+                                    + "(prefix=" + resumePrefix + ")");
+                            } else if (activeRecordingPrefix != null) {
+                                resumeDir = activeRecordingDir;
+                                resumePrefix = activeRecordingPrefix;
+                                logger.info("Post-reacquire: resuming active session "
+                                    + "(prefix=" + resumePrefix + ", dir="
+                                    + (resumeDir != null ? resumeDir.getName() : "default") + ")");
+                            } else {
+                                resumeDir = null;
+                                resumePrefix = "cam";
+                                logger.warn("Post-reacquire: no captured session — "
+                                    + "falling back to default (prefix=cam)");
+                            }
+                            try {
+                                startRecording(resumeDir, resumePrefix);
+                                logger.info("Post-reacquire: normal recording resumed via pipeline.startRecording");
+                            } catch (Throwable t) {
+                                logger.warn("Post-reacquire: pipeline.startRecording threw — "
+                                    + t.getMessage());
+                            }
+                        }
+                    }
+                }
+
+                @Override
+                public void onHalRecoveryNeeded() {
+                    // ESCALATION (#3): bare close/reopen restarts have repeatedly
+                    // failed to revive frame delivery — the AVM HAL co-consumer
+                    // state is wedged and only a full teardown + com.byd.avc
+                    // warmup recovers it (the sole thing that ever broke the
+                    // sentry->drive blackout loop in field logs). Route through
+                    // RecordingModeManager's warmup-capable restart. Run on a
+                    // background thread: we're on the GL/watchdog path and the
+                    // recovery does a blocking 4s warmup + pipeline rebuild.
+                    logger.error("HAL recovery needed — bare reopen loop cannot recover. "
+                        + "Routing through warmup-restart (full teardown + com.byd.avc warmup).");
+                    final PanoramicCameraGpu cam = camera;
+                    new Thread(() -> {
+                        try {
+                            app.wheelstop.android.recording.RecordingModeManager rmm =
+                                app.wheelstop.android.daemon.CameraDaemon.getRecordingModeManager();
+                            if (rmm != null) {
+                                rmm.forceWarmupRestart("hal-zero-frame-escalation");
+                            } else {
+                                logger.warn("HAL recovery: RecordingModeManager unavailable — "
+                                    + "cannot route warmup restart; leaving stall watchdog to retry");
+                            }
+                        } catch (Throwable t) {
+                            logger.warn("HAL recovery routing failed: " + t.getMessage());
+                        } finally {
+                            // Always clear the escalation latch so the stall
+                            // watchdog can act again (bare restart or a fresh
+                            // escalation) if this recovery didn't take. Without
+                            // this, a failed recovery would permanently silence
+                            // the watchdog for the rest of the drive.
+                            if (cam != null) {
+                                cam.notePipelineRestarted();
+                            }
+                        }
+                    }, "HalRecoveryRestart").start();
+                }
+            });
+            
+            // Wait for camera to fully initialize and GL context to be ready.
+            // This isn't an esco-parity concern — the sleep gives MediaCodec
+            // time to consume the first encoder input frame so the
+            // INFO_OUTPUT_FORMAT_CHANGED callback fires and the encoder format
+            // is saved for reuse. Field log (camera_daemon_20260604_120145.log)
+            // showed every startRecording() returning formatAvailable=false
+            // when this sleep was skipped on dilink4 — recording never started.
+            Thread.sleep(1500);
+
+            // Verify the camera GL-thread runnable actually completed without
+            // throwing. PanoramicCameraGpu.start() posts initializeGl +
+            // startCamera onto the GL handler and returns immediately; if that
+            // runnable throws (camera open failure, EGL init failure), the
+            // camera's `running` field stays false. Without this gate, the
+            // pipeline would publish running=true and isRunning() would lie —
+            // every subsequent RecordingModeManager retry would see "already
+            // running" and skip, wedging recording for the rest of the drive.
+            if (camera == null || !camera.isRunning()) {
+                logger.warn("start(): camera.isRunning() false after warmup window — "
+                    + "treating start as failed");
+                try { if (camera != null) camera.stop(); } catch (Throwable ignored) {}
+                // running stays false; starting cleared in catch below.
+                throw new IllegalStateException(
+                    "Camera failed to reach running state within warmup window");
+            }
+
+            // Camera open verified — publish running=true so isRunning() is honest.
+            synchronized (this) {
+                running = true;
+            }
+
+            // Set callback to start recording when recorder is ready
+            if (autoStartRecording) {
+                recordingMode = true;
+                camera.setRecorderInitCallback(() -> {
+                    logger.info( "Recorder ready - starting recording automatically");
+                    recorder.startRecording();
+                    currentMode = Mode.NORMAL_RECORDING;
+                    
+                    // Enable overlay for auto-started recording
+                    recorder.setOverlayRecordingModeAllowed(true);
+                    if (telemetryCollector != null && recorder.isOverlayEnabled()) {
+                        telemetryCollector.setOverlayRecordingActive(true);
+                        telemetryCollector.startPolling();
+                    }
+                });
+            } else {
+                recordingMode = false;
+            }
+            
+            // Initialize recorder on GL thread (CRITICAL: must be on GL thread!)
+            if (camera.getEglCore() != null) {
+                camera.initRecorderOnGlThread(recorder, encoder);
+                logger.info( "Recorder initialization scheduled on GL thread");
+                // Wait for recorder GL bind to complete on the GL thread —
+                // initRecorderOnGlThread schedules the bind via glHandler.post,
+                // and a downstream startRecording() before the bind completes
+                // fails with formatAvailable=false. Removing this sleep on
+                // dilink4 broke recording in the field log.
+                Thread.sleep(500);
+            }
+            
+            // DON'T auto-enable streaming - enable on-demand when client requests
+            // Streaming will be enabled via enableStreaming() when HTTP client connects
+            // enableStreaming() already auto-starts the pipeline if not running.
+
+            // DON'T auto-enable surveillance - let caller decide
+            // Surveillance should only be enabled when explicitly requested
+            // sentry.enable();  // REMOVED - caller must explicitly enable
+
+            // FIX (audit R4, Finding 6): if a startRecording() request landed
+            // during the narrow window between a prior pipeline.stop() and
+            // this start() (recorder==null branch in startRecording), the
+            // intent is captured in pendingRecordingPrefix but no listener
+            // was registered against any encoder (none existed). Now that
+            // init()/start() has built a fresh encoder + recorder, rebind
+            // the orphan request: register a one-shot format-available
+            // listener so the new encoder's first frame triggers
+            // checkPendingRecording(). Without this, the wedge persists
+            // until either RMM's wedge ticker re-issues startRecording()
+            // (slow self-heal, may be >30s) or the caller invokes again.
+            if (pendingRecordingPrefix != null && encoder != null) {
+                logger.info("start(): rebinding orphan deferred-recording request "
+                    + "to fresh encoder (prefix=" + pendingRecordingPrefix + ")");
+                encoder.setFormatAvailableListener(() -> {
+                    new Thread(() -> {
+                        try {
+                            checkPendingRecording();
+                        } catch (Exception e) {
+                            logger.warn("Deferred recording start (post-start rebind) failed: "
+                                + e.getMessage());
+                        }
+                    }, "PendingRecKickoffStart").start();
+                });
+            }
+
+            logger.info( "GPU pipeline started (streaming on-demand, surveillance NOT auto-enabled)");
+
+            // OEM Dashcam re-sync on pano-ready. In the DashCam+Pano layout
+            // both AVMCamera clients race at ACC ON: if OEM's startPipeline()
+            // lost that race (AVM handle contention on a single-client HAL, or
+            // a transient open failure), nothing retried it — the OEM lifecycle
+            // is edge-driven, so the forward sensor stayed un-recorded until
+            // some later incidental edge (gear change, surveillance IPC) — the
+            // "started ~2km in" symptom. Now that pano is fully up
+            // (running=true), re-drive the OEM resolver: when OEM is NOT
+            // running it starts it fresh (and, because pano is now up, gets
+            // pano's shared EGL for the texture-share/streaming path); when OEM
+            // is already running it short-circuits to a no-op. NOTE: this does
+            // NOT restart an OEM that is already running on an independent EGL
+            // context — that only affects view-6 streaming (recording is
+            // unaffected) and the documented off/on workaround still applies
+            // for that narrow case. This is the recording-side half of the
+            // "defer/restart OEM when pano starts" fix flagged in
+            // OEM_DASHCAM_PROGRESS.md. Scheduled (not inline) so the OEM
+            // warmup+open doesn't block pano's start() return.
+            try {
+                if (app.wheelstop.android.config.UnifiedConfigManager
+                        .isAnyOemDashcamTriggerEnabled()) {
+                    logger.info("Pano start complete — scheduling OEM Dashcam lifecycle recalc "
+                        + "(DashCam+Pano re-sync)");
+                    app.wheelstop.android.server.OemDashcamApiHandler.scheduleLifecycleRecalc();
+                }
+            } catch (Throwable t) {
+                logger.warn("OEM Dashcam pano-ready recalc dispatch failed: " + t.getMessage());
+            }
+
+            // Blind-spot self-arm on pano-ready. Same edge-only-lifecycle class
+            // as OEM dashcam above: the app arms the BS lane only on the ACC_ON
+            // broadcast edge, which is missed on a hard reboot (ACC already on
+            // before the app receiver exists). Now that pano is running, re-drive
+            // the idempotent daemon-side resolver so the lane arms here instead of
+            // waiting for the 30s self-heal ticker. No-op when blindspot.enabled
+            // is false or the lane is already armed.
+            try {
+                app.wheelstop.android.server.StreamingApiHandler.resolveBlindSpotLifecycle();
+            } catch (Throwable t) {
+                logger.warn("Blind-spot pano-ready self-arm dispatch failed: " + t.getMessage());
+            }
+
+        } catch (Exception e) {
+            // Reset flags on failure so retry is possible. Both `running`
+            // and `starting` must be cleared — running may have been
+            // published just above (post-verify) before a later step threw,
+            // and starting was claimed at entry to block concurrent starts.
+            synchronized (this) {
+                running = false;
+                starting = false;
+            }
+            // FIX (audit R1): release ALL fields allocated by init() so the
+            // next start() retry runs init() against null refs and doesn't
+            // overwrite half-built encoder/recorder/downscaler/sentry/camera
+            // refs (memory leak + EGL leak). encoder has its own guard at
+            // init():894, but recorder/downscaler/sentry/camera get
+            // overwritten without releasing on the retry path.
+            logger.warn("start() failed — releasing partial init state for clean retry: "
+                + e.getMessage());
+            try {
+                if (camera != null) {
+                    try { camera.stop(); } catch (Throwable t) {
+                        logger.warn("start() rollback: camera.stop failed: " + t.getMessage());
+                    }
+                    camera = null;
+                }
+            } catch (Throwable ignored) {}
+            try {
+                if (sentry != null) {
+                    try { sentry.disable(); } catch (Throwable ignored) {}
+                    try { sentry.release(); } catch (Throwable t) {
+                        logger.warn("start() rollback: sentry.release failed: " + t.getMessage());
+                    }
+                    sentry = null;
+                }
+            } catch (Throwable ignored) {}
+            try {
+                if (downscaler != null) {
+                    try { downscaler.release(); } catch (Throwable t) {
+                        logger.warn("start() rollback: downscaler.release failed: " + t.getMessage());
+                    }
+                    downscaler = null;
+                }
+            } catch (Throwable ignored) {}
+            try {
+                if (recorder != null) {
+                    try { recorder.release(); } catch (Throwable t) {
+                        logger.warn("start() rollback: recorder.release failed: " + t.getMessage());
+                    }
+                    recorder = null;
+                }
+            } catch (Throwable ignored) {}
+            try {
+                if (encoder != null) {
+                    try { encoder.release(); } catch (Throwable t) {
+                        logger.warn("start() rollback: encoder.release failed: " + t.getMessage());
+                    }
+                    encoder = null;
+                }
+            } catch (Throwable ignored) {}
+            // FIX (audit R7): release the AdaptiveBitrateController that init()
+            // allocated at line 1489. Without this, every start()-failure cycle
+            // leaks the prior controller's handler thread, and the next init()
+            // overwrites the field reference. Self-healing today via repeated
+            // start failures, so logged as warn — explicit cleanup is cheap.
+            try {
+                if (bitrateController != null) {
+                    logger.warn("start() rollback: releasing bitrateController");
+                    try { bitrateController.release(); } catch (Throwable t) {
+                        logger.warn("start() rollback: bitrateController.release failed: " + t.getMessage());
+                    }
+                    bitrateController = null;
+                }
+            } catch (Throwable ignored) {}
+            initialized = false;
+            // FIX (audit R4, Finding 4): clear pending/active recording state
+            // so an orphan request doesn't survive into the next start() with
+            // no listener attached. The recorder/encoder allocated by the
+            // previous init() were just released above, so any format-
+            // available listener registered against the prior encoder is dead;
+            // a stale pendingRecordingPrefix would otherwise sit until either
+            // the camera-probe callback fires (skipped on validated configs)
+            // or RMM's wedge ticker eventually re-activates. Clearing here
+            // forces RMM's next tick to re-issue startRecording() against the
+            // freshly-built pipeline, which DOES register a fresh listener.
+            if (pendingRecordingPrefix != null || activeRecordingPrefix != null
+                    || recordingMode) {
+                logger.warn("start() rollback: clearing pending/active recording state "
+                    + "(pending=" + pendingRecordingPrefix
+                    + ", active=" + activeRecordingPrefix
+                    + ", recordingMode=" + recordingMode + ")");
+            }
+            pendingRecordingDir = null;
+            pendingRecordingPrefix = null;
+            activeRecordingDir = null;
+            activeRecordingPrefix = null;
+            recordingMode = false;
+            currentMode = Mode.IDLE;
+            throw e;
+        } finally {
+            // On the success path, clear `starting` once start() returns.
+            // (On the failure path the catch above already cleared it; this
+            // is idempotent.)
+            synchronized (this) {
+                starting = false;
+            }
+        }
+    }
+    
+    /**
+     * Stops the GPU pipeline.
+     *
+     * <p>Synchronized on the same monitor as {@link #start(boolean)} so a
+     * concurrent cold-start request (from {@code SurveillanceApiHandler}'s
+     * {@code requestColdStartAsync}) can't race in mid-teardown. Without this,
+     * stop() can set {@code running=false} early, and a sibling start() can
+     * re-enter init() while stop() is still draining encoders / releasing
+     * EGL — corrupting both lanes.
+     */
+    public void stop() {
+        synchronized (this) {
+            if (!running) {
+                return;
+            }
+            running = false;
+            stopping = true;
+            // FIX (audit R5): bump generation so any in-flight storage retry
+            // captured an older value and exits before touching torn-down state.
+            long newGen = pipelineGen.incrementAndGet();
+            logger.info("Pipeline generation bumped on stop: " + newGen);
+        }
+
+        try {
+            logger.info( "Stopping GPU pipeline...");
+
+            // Clear any pending deferred recording
+            pendingRecordingDir = null;
+            pendingRecordingPrefix = null;
+            // FIX (audit R3, Findings 3+6): drop active-session memory on full
+            // pipeline teardown; nothing to resume after this point.
+            activeRecordingDir = null;
+            activeRecordingPrefix = null;
+            recordingMode = false;
+            // Cancel the cold-start storage retry too. Without this, a
+            // RecStorageRetry thread can outlive a full pipeline teardown,
+            // call recorder.startRecording on a half-released encoder, and
+            // either crash the daemon or resurrect a phantom recording on a
+            // recorder that's about to be nulled.
+            try { cancelStorageReadyRetry(); }
+            catch (Throwable t) { logger.warn("stop: cancelStorageReadyRetry failed: " + t.getMessage()); }
+
+            // Reset mode so status API reflects that we're not in any active mode
+            currentMode = Mode.IDLE;
+
+            // FIX (audit R3): re-arm the one-shot enable-time mount-wait for the
+            // next pipeline lifecycle. A full teardown ends the lifecycle that
+            // already consumed the wait; the next cold start's first arm should
+            // again get the bounded window to let a fresh async SD mount land
+            // before its inaugural event-dir snapshot.
+            mountWaitConsumed = false;
+
+            // Stop recording first to finalize file
+            try {
+                if (recorder != null && recorder.isRecording()) {
+                    recorder.stopRecording();
+                }
+            } catch (Throwable t) {
+                logger.warn("stop: recorder.stopRecording failed: " + t.getMessage());
+            }
+
+            // Disable streaming — stream encoder/scaler hold EGL surfaces that will be
+            // destroyed when the camera stops. They must be released before camera.stop().
+            try {
+                if (streamingEnabled) {
+                    disableStreaming();
+                }
+            } catch (Throwable t) {
+                logger.warn("stop: disableStreaming failed: " + t.getMessage());
+            }
+
+            // Disable the dedicated blind-spot lane too — its scaler+encoder
+            // hold EGL surfaces on the same camera GL context.
+            // Always call disableBlindSpot() rather than gating on blindSpotEnabled
+            // here: this is an unsynchronized read of blindSpotEnabled, and a
+            // concurrent disableBlindSpot() (e.g. from the API thread) can flip it
+            // between the check and the call. disableBlindSpot() is idempotent —
+            // it acquires bsLifecycleLock and returns early when already disabled —
+            // so calling it unconditionally is both race-free and a no-op when off.
+            try {
+                disableBlindSpot();
+            } catch (Throwable t) {
+                logger.warn("stop: disableBlindSpot failed: " + t.getMessage());
+            }
+            // Disable the camera-view program too. disableBlindSpot() above only tears
+            // the shared lane down when camview is NOT active; a camview-only session
+            // (BS disabled) would otherwise survive a pipeline stop() with camViewActive
+            // stuck true and its "camview" sustained token still held (cluster
+            // projection pinned). disableCamView() is idempotent (returns early if not
+            // active), releases the token unconditionally, and tears the lane down when
+            // BS isn't using it — so the next pipeline lifecycle starts clean.
+            try {
+                disableCamView();
+            } catch (Throwable t) {
+                logger.warn("stop: disableCamView failed: " + t.getMessage());
+            }
+
+            // Disable surveillance
+            try {
+                if (sentry != null) {
+                    sentry.disable();
+                }
+            } catch (Throwable t) {
+                logger.warn("stop: sentry.disable failed: " + t.getMessage());
+            }
+
+            // OEM Dashcam pipeline shares pano's eglDisplay via EGLCore.createShared.
+            // Calling pano camera.stop() (which terminates the display) before OEM
+            // tears down would leave OEM's render loop sampling against a dead
+            // EGLDisplay — every subsequent eglMakeCurrent / eglSwapBuffers fails
+            // silently with EGL_BAD_DISPLAY and the OEM encoder produces black
+            // frames. Tear OEM down here so its EGL release runs against a still-
+            // valid parent display.
+            try {
+                app.wheelstop.android.camera.OemDashcamPipeline oem =
+                    app.wheelstop.android.daemon.CameraDaemon.getOemDashcamPipeline();
+                if (oem != null && oem.isRunning()) {
+                    logger.info("Stopping OEM Dashcam pipeline before pano camera tear-down "
+                        + "(shared eglDisplay)");
+                    try { oem.stopRecording(); } catch (Throwable ignored) {}
+                    try { oem.stop(); } catch (Throwable ignored) {}
+                    app.wheelstop.android.daemon.CameraDaemon.setOemDashcamPipeline(null);
+                }
+            } catch (Throwable t) {
+                logger.warn("OEM pre-pano-stop teardown failed: " + t.getMessage());
+            }
+
+            // Stop camera (this releases EGL context and surfaces)
+            try {
+                if (camera != null) {
+                    camera.stop();
+                }
+            } catch (Throwable t) {
+                logger.warn("stop: camera.stop failed: " + t.getMessage());
+            }
+
+            // CRITICAL: Release recorder and encoder since EGL context is gone
+            // They must be recreated on next start()
+            try {
+                if (recorder != null) {
+                    recorder.release();
+                }
+            } catch (Throwable t) {
+                logger.warn("stop: recorder.release failed: " + t.getMessage());
+            }
+
+            try {
+                if (encoder != null) {
+                    encoder.release();
+                }
+            } catch (Throwable t) {
+                logger.warn("stop: encoder.release failed: " + t.getMessage());
+            }
+
+            logger.info( "GPU pipeline stopped");
+        } finally {
+            // Guarantee the pipeline lands in a clean, fully-deinitialized
+            // state regardless of which teardown step threw — otherwise a
+            // partial throw leaves initialized=true with stale refs and
+            // every subsequent start() short-circuits past init() into a
+            // half-released encoder / recorder.
+            recorder = null;
+            encoder = null;
+            initialized = false;
+            // Clear stopping flag so concurrent start() can proceed.
+            synchronized (this) {
+                stopping = false;
+            }
+        }
+    }
+
+    /**
+     * Releases all resources.
+     */
+    public void release() {
+        stop();
+
+        // Deregister live-config listener BEFORE releasing the recorder so a
+        // racing UCM update can't fire into a half-released recorder.
+        if (rectifyConfigListener != null) {
+            try {
+                app.wheelstop.android.config.UnifiedConfigManager
+                    .removeListener(rectifyConfigListener);
+            } catch (Throwable ignored) {}
+            rectifyConfigListener = null;
+        }
+
+        if (bitrateController != null) {
+            bitrateController.release();
+            bitrateController = null;
+        }
+
+        if (recorder != null) {
+            recorder.release();
+            recorder = null;
+        }
+        
+        if (downscaler != null) {
+            downscaler.release();
+            downscaler = null;
+        }
+        
+        if (sentry != null) {
+            sentry.release();
+            sentry = null;
+        }
+        
+        if (encoder != null) {
+            encoder.release();
+            encoder = null;
+        }
+        
+        initialized = false;
+        logger.info( "GPU pipeline released");
+    }
+    
+    /**
+     * Starts recording.
+     * Stops surveillance if active (mutually exclusive).
+     */
+    public void startRecording() {
+        startRecording(null, "cam");
+    }
+    
+    /**
+     * Starts recording with custom output directory and filename prefix.
+     * Stops surveillance if active (mutually exclusive).
+     * 
+     * @param outputDir Custom output directory (null for default recordings dir)
+     * @param prefix Filename prefix (e.g., "cam", "proximity", "event")
+     */
+    public void startRecording(java.io.File outputDir, String prefix) {
+        // LANE SAFETY (lifecycle redesign): the recorder lane (PASS 1A) can be
+        // switched OFF when the camera is kept warm ONLY for blind-spot (BS has
+        // no encoder). ANY recording — RMM mode, manual /api/start, TCP start,
+        // ACC-off sentry, OEM dashcam, proximity event — funnels through this
+        // method, so re-assert the lane HERE, by construction, rather than
+        // relying on every external caller to remember. Without this, a record
+        // started while the camera is BS-only-warm draws zero frames into the
+        // encoder (renderLoop gates drawFrame on recorderLaneEnabled) → a
+        // false-GREEN "recording" that writes an empty/zero-byte clip. Idempotent
+        // volatile write; does NOT touch stride/bitrate/fps (proximity's own
+        // MONITORING/event profile and the per-mode applyFullRecordingProfile
+        // own those) — it only guarantees PASS 1A is not gated off. The global
+        // camera fps is restored by the per-mode activate (applyFullRecordingProfile)
+        // for RMM modes; for non-RMM record paths the camera was already at a
+        // recording-grade fps unless BS-only-warmed, which onPipelineStartedExternally
+        // / the caller handles — but the LANE is the silent-failure lever, so it
+        // is the one we harden universally here.
+        app.wheelstop.android.camera.PanoramicCameraGpu camLane = camera;
+        if (camLane != null && !camLane.isRecorderLaneEnabled()) {
+            logger.info("startRecording: recorder lane was OFF (BS-only keep-warm) — re-enabling for recording");
+            camLane.setRecorderLaneEnabled(true);
+            // Lane was off ONLY in the BS-only keep-warm state, which also drops
+            // the global camera fps to the BS idle/active rate (~1 fps). A record
+            // started from that state (manual /api/start, ACC-off sentry on
+            // dilink4) would otherwise capture at ~1 fps. Restore a recording-grade
+            // fps. RMM mode activations independently call applyFullRecordingProfile
+            // first; this is the safety net for non-RMM record paths. Idempotent
+            // (setTargetFps no-ops if already at this rate).
+            int recFps = loadTargetFps();
+            if (camLane.getTargetFps() < recFps) {
+                camLane.setTargetFps(recFps);
+            }
+        }
+
+        // DIAG (Finding A): log the exact recorder/encoder/format state on
+        // every start request so a silent no-op explains itself in the field
+        // log. If this line is ABSENT from a drive's log right after "Starting
+        // DRIVE_MODE recording", the running daemon is NOT this build.
+        {
+            boolean recReady = recorder != null;
+            boolean encReady = recReady && recorder.getEncoder() != null;
+            boolean fmtReady = encReady && recorder.getEncoder().isFormatAvailable();
+            logger.info("startRecording(prefix=" + prefix + ", dir="
+                + (outputDir != null ? outputDir.getName() : "default")
+                + "): recorder=" + recReady + " encoder=" + encReady
+                + " formatAvailable=" + fmtReady + " currentMode=" + currentMode);
+        }
+
+        // Stop surveillance if active (mutually exclusive)
+        if (currentMode == Mode.SURVEILLANCE) {
+            logger.info("Stopping surveillance to start normal recording (mutually exclusive)");
+            if (sentry != null) {
+                sentry.disable();
+            }
+        }
+
+        // SOTA: Ensure storage is ready (mount SD card if needed) for recordings.
+        // Done OUTSIDE the synchronized block below — ensureStorageReady can
+        // take seconds (mount + dir-walk) and we don't want to hold the
+        // pipeline monitor across that I/O.
+        if (outputDir == null) {  // Only check for default recordings dir
+            try {
+                // FIX (coldstart: ensureStorageReady unbounded on the activation
+                // critical path). This call runs under RecordingModeManager's
+                // activationLock with warmupInFlight=true. ensureStorageReady can
+                // block for MINUTES on a FUSE-bridged SD/USB at cold boot (mount
+                // retry loop + per-file dir-walk under binder contention) — and
+                // because it sits BEFORE the encoder-format branch below, a stall
+                // here means (a) activationLock + warmupInFlight stay pinned, so
+                // every 30s warmup/resync retry just coalesces and makes no
+                // progress, and (b) the deferred format-available listener that
+                // would actually start recording is never registered. Field log
+                // camera_daemon_20260610_155444 showed ACC-ON→first-frame take
+                // 4m28s for exactly this reason.
+                //
+                // Bound it like the isStorageWriteReady probe already does. On
+                // timeout we treat storage as "not confirmed ready" and fall
+                // through — which is the SAME path the method already takes on a
+                // false return: the bounded isStorageWriteReady probe just below
+                // verifies actual writability, and on a miss defers + schedules
+                // the 2s storage-ready retry. So recording still starts within
+                // seconds (once the encoder format lands / the volume settles)
+                // instead of stalling the whole activation for minutes. On a
+                // healthy mount (<500ms) this is byte-for-byte identical to before.
+                if (!ensureStorageReadyBounded(false)) {
+                    logger.warn("Storage not ready for recording, but continuing with fallback");
+                }
+            } catch (Exception e) {
+                logger.warn("Error checking storage readiness: " + e.getMessage());
+            }
+        }
+
+        // Snapshot the recorder under the pipeline monitor so a concurrent
+        // pipeline.stop() (called from CameraDaemon, SurveillanceApiHandler,
+        // SafeLocationManager, etc.) can't null the field between our checks.
+        // The snapshotted reference stays valid for the duration of this
+        // call; if stop() ran first, snapshotted is null and we early-return.
+        // If stop() runs concurrently AFTER snapshot, the encoder may still
+        // be released under us — but recorder.startRecording / triggerEvent
+        // hold their own locks (recordingLock + startStopLock) and a stop
+        // racing in returns its own clean failure path.
+        final GpuMosaicRecorder snapRecorder;
+        synchronized (this) {
+            snapRecorder = recorder;
+        }
+
+        if (snapRecorder != null) {
+            // Check if encoder is ready (has received at least one frame from camera).
+            final HardwareEventRecorderGpu enc = snapRecorder.getEncoder();
+            if (enc != null && enc.isFormatAvailable()) {
+                // Pre-flight write probe (timeout-bounded). On a half-mounted USB
+                // at cold start the deeper start path (ensureRecordingsSpace scan
+                // / new MediaMuxer open) can BLOCK INDEFINITELY with no return —
+                // which hangs this thread and defeats the isRecording()-based
+                // retry below (it never runs). Probing first lets us fail fast
+                // and defer + retry instead of hanging.
+                java.io.File probeDir = resolveProbeDirWithEnospcFallback(
+                        (outputDir != null) ? outputDir
+                                : StorageManager.getInstance().getRecordingsDir());
+                if (!isStorageWriteReady(probeDir)) {
+                    logger.warn("Recordings volume not write-ready (probe failed/timed out) — "
+                        + "deferring and scheduling retry");
+                    pendingRecordingDir = outputDir;
+                    pendingRecordingPrefix = prefix;
+                    recordingMode = true;
+                    scheduleStorageReadyRetry(outputDir, prefix);
+                    return;
+                }
+                snapRecorder.startRecording(outputDir, prefix);
+                if (snapRecorder.isRecording()) {
+                    currentMode = Mode.NORMAL_RECORDING;
+                    recordingMode = true;
+                    // FIX (audit R3, Findings 3+6): remember the active session so
+                    // onPostReacquire (camera-yield resume) can re-enter
+                    // pipeline.startRecording with the same dir/prefix instead of
+                    // calling recorder.startRecording() bare.
+                    activeRecordingDir = outputDir;
+                    activeRecordingPrefix = prefix;
+                    snapRecorder.setOverlayRecordingModeAllowed(true);
+                    if (telemetryCollector != null) {
+                        telemetryCollector.setOverlayRecordingActive(true);
+                        telemetryCollector.startPolling();
+                    }
+                    cancelStorageReadyRetry();
+                    logger.info("Normal recording started (dir=" + (outputDir != null ? outputDir.getName() : "default") + ", prefix=" + prefix + ")");
+                } else {
+                    // recorder.startRecording() returned WITHOUT starting — the
+                    // encoder's triggerEventRecording() failed, in the field
+                    // almost always because the USB volume was not write-ready
+                    // at this instant. This is the cold-start race: the daemon
+                    // boots straight into gear D and asks to record before the
+                    // USB has finished mounting, so mkdirs() on the recordings
+                    // dir fails ("Failed to create parent directory" /
+                    // "No writable USB drive found") and the WHOLE drive then
+                    // records nothing because the old code (a) logged a false
+                    // "Normal recording started" and (b) never retried.
+                    // Defer + retry until storage settles.
+                    logger.warn("Recording did not start — storage not write-ready "
+                        + "(USB still mounting?); deferring and scheduling retry");
+                    pendingRecordingDir = outputDir;
+                    pendingRecordingPrefix = prefix;
+                    recordingMode = true;
+                    scheduleStorageReadyRetry(outputDir, prefix);
+                }
+            } else {
+                // Encoder not ready yet (camera still warming up). Store the
+                // request and register a one-shot listener that fires the
+                // moment the encoder publishes its output format. Without
+                // this, cold-start CONTINUOUS recording never began until
+                // the next ACC OFF/ON cycle, because checkPendingRecording()
+                // was previously only called from the camera-probe callback —
+                // which is skipped when a validated camera config exists.
+                logger.info("Encoder not ready yet — recording will start when camera is ready");
+                pendingRecordingDir = outputDir;
+                pendingRecordingPrefix = prefix;
+                recordingMode = true;
+                if (enc != null) {
+                    enc.setFormatAvailableListener(() -> {
+                        // Posted off the encoder thread so we don't block dequeue.
+                        new Thread(() -> {
+                            try {
+                                checkPendingRecording();
+                            } catch (Exception e) {
+                                logger.warn("Deferred recording start failed: " + e.getMessage());
+                            }
+                        }, "PendingRecKickoff").start();
+                    });
+                }
+            }
+        } else {
+            // recorder == null: the GpuMosaicRecorder is created asynchronously
+            // on the GL thread by start(); a DRIVE_MODE/CONTINUOUS activation
+            // that reaches startRecording() before that completes would
+            // otherwise fall through this whole method and silently no-op —
+            // the daemon logs "Starting DRIVE_MODE recording" but no cam_*.mp4
+            // is ever written for the drive (Finding A: "no recordings while
+            // driving"). Defer instead: capture the intent so the
+            // format-available listener / checkPendingRecording() starts
+            // recording once the recorder + encoder are ready.
+            logger.info("Recorder not created yet — deferring recording start "
+                + "(will begin when pipeline is ready)");
+            pendingRecordingDir = outputDir;
+            pendingRecordingPrefix = prefix;
+            recordingMode = true;
+        }
+    }
+    
+    /**
+     * Called when the encoder format becomes available (probe complete, first frame encoded).
+     * Starts any pending recording that was deferred because the encoder wasn't ready.
+     */
+    void checkPendingRecording() {
+        if (pendingRecordingPrefix == null) return;
+        if (recorder == null || recorder.getEncoder() == null) return;
+        if (!recorder.getEncoder().isFormatAvailable()) return;
+
+        // FIX (audit R7): atomically capture pendingDir/prefix while holding
+        // the same monitor stopRecording uses. Without this, a concurrent
+        // stopRecording() (RMM mode change) can clear the fields between our
+        // null check above and the capture below — the listener thread reads
+        // a non-null value AFTER stopRecording has already called
+        // recorder.stopRecording(), then issues a fresh recorder.startRecording
+        // against the just-stopped recorder. The synchronized re-check + capture
+        // means stopRecording's clear is observed atomically.
+        java.io.File dir;
+        String prefix;
+        // FIX (audit MEDIUM): also snapshot recorder + encoder under the same
+        // monitor so a concurrent pipeline.stop() (idle-shutdown, ACC OFF, RMM
+        // OFF) that nulls the recorder/encoder fields in its finally-block
+        // can't NPE us between the capture below and the deferred
+        // recorder.startRecording / isRecording calls further down. Mirrors
+        // the snapshot pattern at :2173-2176 in startRecording's outer entry.
+        final GpuMosaicRecorder localRecorder;
+        final HardwareEventRecorderGpu localEncoder;
+        synchronized (this) {
+            if (pendingRecordingPrefix == null) {
+                logger.warn("checkPendingRecording: pending cleared between null-check and capture (concurrent stopRecording) — skipping");
+                return;
+            }
+            dir = pendingRecordingDir;
+            prefix = pendingRecordingPrefix;
+            localRecorder = recorder;
+            localEncoder = (recorder != null) ? recorder.getEncoder() : null;
+        }
+        if (localRecorder == null || localEncoder == null) {
+            logger.info("checkPendingRecording: recorder/encoder torn down before kickoff — skipping");
+            return;
+        }
+
+        // FIX (audit R6): probe storage write-readiness BEFORE the inner
+        // recorder.startRecording(), mirroring the synchronous startRecording()
+        // path's pre-flight probe at line 1954. The deferred path historically
+        // skipped this probe, inheriting the inner call's risk of blocking
+        // indefinitely on a half-mounted USB volume (mkdirs / ensureRecordingsSpace
+        // / new MediaMuxer can hang). On probe failure, re-arm pending state and
+        // schedule the storage-ready retry instead of pinning the
+        // PendingRecKickoff thread.
+        java.io.File probeDir = resolveProbeDirWithEnospcFallback(
+                (dir != null) ? dir : StorageManager.getInstance().getRecordingsDir());
+        if (!isStorageWriteReady(probeDir)) {
+            logger.warn("Deferred start: storage volume not write-ready (probe failed/timed out) — "
+                + "rescheduling retry instead of issuing inner recorder.startRecording");
+            // Keep pending state intact (do not null) so retry has the args.
+            pendingRecordingDir = dir;
+            pendingRecordingPrefix = prefix;
+            recordingMode = true;
+            scheduleStorageReadyRetry(dir, prefix);
+            return;
+        }
+
+        pendingRecordingDir = null;
+        pendingRecordingPrefix = null;
+
+        logger.info("Encoder now ready — starting deferred recording");
+        localRecorder.startRecording(dir, prefix);
+        if (localRecorder.isRecording()) {
+            currentMode = Mode.NORMAL_RECORDING;
+            recordingMode = true;
+            // FIX (audit R3, Findings 3+6): remember the active session so a
+            // subsequent camera yield can resume via pipeline.startRecording.
+            activeRecordingDir = dir;
+            activeRecordingPrefix = prefix;
+            localRecorder.setOverlayRecordingModeAllowed(true);
+            if (telemetryCollector != null) {
+                telemetryCollector.setOverlayRecordingActive(true);
+                telemetryCollector.startPolling();
+            }
+            cancelStorageReadyRetry();
+            logger.info("Deferred normal recording started (dir=" +
+                (dir != null ? dir.getName() : "default") + ", prefix=" + prefix + ")");
+        } else {
+            // Encoder ready but storage still not write-ready (cold-start USB
+            // mount race). Re-defer and retry until the volume settles, rather
+            // than silently dropping the whole drive's recording.
+            logger.warn("Deferred start: storage not write-ready yet — scheduling retry");
+            pendingRecordingDir = dir;
+            pendingRecordingPrefix = prefix;
+            recordingMode = true;
+            scheduleStorageReadyRetry(dir, prefix);
+        }
+    }
+
+    // --- Cold-start storage-ready retry -----------------------------------
+    // The daemon can boot straight into gear D and request a DRIVE_MODE /
+    // CONTINUOUS recording before the USB volume has finished mounting. The
+    // encoder's MediaMuxer/mkdirs then fails on the not-yet-writable volume
+    // ("Failed to create parent directory" / "No writable USB drive found"),
+    // and historically the entire drive recorded nothing because the start
+    // path logged a false success and never retried. This bounded background
+    // retry re-attempts the start once the volume becomes write-ready, then
+    // exits. It is cancelled by a successful start or by stopRecording()
+    // (e.g. gear D->P), so it can never resurrect a recording after the driver
+    // has parked.
+    private volatile Thread storageRetryThread;
+    private volatile Thread storageSlowRetryThread;
+    private volatile boolean slowRetryRunning = false;
+    private static final long STORAGE_RETRY_INTERVAL_MS = 2000L;
+    private static final long STORAGE_RETRY_TIMEOUT_MS = 60_000L;
+    private static final long STORAGE_SLOW_RETRY_INTERVAL_MS = 30_000L;
+    private static final long STORAGE_PROBE_TIMEOUT_MS = 1500L;
+    // Boot/ACC-on mount-race: bounded window enableSurveillance() waits for the
+    // configured external volume to finish mounting before snapshotting the
+    // event dir. 4s is inside the observed 2-15s window's lower band and well
+    // below any boot-wedge concern; the watchdog handles the longer tail for
+    // subsequent events. See StorageManager.waitForConfiguredExternalMount.
+    private static final long STORAGE_MOUNT_WAIT_MS = 4000L;
+    // FIX (audit R3): one-shot gate for the enable-time mount-wait. The wait is
+    // only load-bearing on the FIRST surveillance arm of a pipeline lifecycle —
+    // that's the inaugural eventOutputDir snapshot (line ~3307) and the only one
+    // that can pin the earliest event to the internal fallback before the async
+    // SD mount lands. On any RE-arm (e.g. a lock-gate force-arm after a grace-
+    // period disarm: surveillance was armed, then UNLOCK disarmed it to
+    // currentMode=IDLE without stopping the pipeline, then a fresh LOCK re-arms),
+    // the engine's per-trigger getLiveSurveillanceDir() refresh
+    // (SurveillanceEngineGpu Site A/B) already routes a late-landing mount to SD
+    // for every event, so the enable-time wait buys nothing there — and skipping
+    // it avoids holding the CameraDaemon.class monitor for up to STORAGE_MOUNT_
+    // WAIT_MS across the force-arm block (CameraDaemon.applyLockEvent is
+    // static-synchronized on the same monitor), which would otherwise delay a
+    // concurrent owner-return UNLOCK disarm by that long. NOTE: isRunning() can
+    // NOT be used to distinguish first-arm vs re-arm — CameraDaemon.enable
+    // Surveillance() calls gpuPipeline.start() (which sets running=true) BEFORE
+    // gpuPipeline.enableSurveillance(), so running is already true on the cold
+    // first arm. Reset in stop() so a fresh pipeline lifecycle re-arms the wait.
+    private volatile boolean mountWaitConsumed = false;
+
+    private synchronized void scheduleStorageReadyRetry(java.io.File outputDir, String prefix) {
+        if (storageRetryThread != null && storageRetryThread.isAlive()) {
+            return;  // a retry is already in flight
+        }
+        // FIX (audit R5): pin retry to current pipeline generation. Compound
+        // state checks (recorder snapshot + isFormatAvailable + storage probe)
+        // can straddle a stop()-then-start() and silently mutate the new
+        // pipeline. Generation gate is the single check that catches that.
+        final long capturedGen = pipelineGen.get();
+        storageRetryThread = new Thread(() -> {
+            long deadline = System.currentTimeMillis() + STORAGE_RETRY_TIMEOUT_MS;
+            int attempt = 0;
+            while (System.currentTimeMillis() < deadline) {
+                try {
+                    Thread.sleep(STORAGE_RETRY_INTERVAL_MS);
+                } catch (InterruptedException e) {
+                    return;  // cancelled (stopRecording / success)
+                }
+                // FIX (audit R5): generation gate — bail if pipeline cycled.
+                if (pipelineGen.get() != capturedGen) {
+                    logger.info("Storage-ready retry: pipeline generation rotated ("
+                        + capturedGen + "→" + pipelineGen.get() + ") — exiting");
+                    return;
+                }
+                // FIX (audit R1): re-check the pipeline lifecycle on every
+                // wake. The cancel path (cancelStorageReadyRetry) issues an
+                // interrupt, but the real stop signal arrives only after the
+                // 1500ms isStorageWriteReady probe finishes. By the time the
+                // loop body would dereference recorder/encoder, stop() may
+                // already have nulled them. Refuse to proceed if the pipeline
+                // is mid-stop or no longer running.
+                if (stopping || !running) {
+                    logger.info("Storage-ready retry: pipeline stopped — exiting");
+                    return;
+                }
+                // Bail if the request was cancelled (gear change) or already
+                // satisfied by another path.
+                if (pendingRecordingPrefix == null && !recordingMode) return;
+                if (recorder != null && recorder.isRecording()) return;
+                attempt++;
+                try {
+                    // Re-resolve/mount storage, then re-attempt — but ONLY once a
+                    // timeout-bounded write probe confirms the volume is actually
+                    // writable, so a retry attempt can never itself hang inside
+                    // the blocking start path on a still-half-mounted USB.
+                    StorageManager.getInstance().ensureStorageReady(false);
+                    // FIX (audit R4): route the retry-loop GATE probe through the same
+                    // ENOSPC redirect as the activation/checkPendingRecording sites. On a
+                    // mounted-but-FULL SD the raw probe ENOSPC-fails every iteration so the
+                    // gate never opens and startRecording (which DOES re-redirect per-segment
+                    // to internal) is never reached — re-wedging cold start in the unbounded
+                    // retry path. snapRec.startRecording still gets the ORIGINAL outputDir;
+                    // only the gate target is redirected (symmetric with the direct sites).
+                    java.io.File probeDir = resolveProbeDirWithEnospcFallback(
+                            (outputDir != null) ? outputDir
+                                    : StorageManager.getInstance().getRecordingsDir());
+                    // FIX (audit R1): snapshot recorder + re-verify pipeline is
+                    // running BEFORE startRecording so a concurrent stop() that
+                    // nulled recorder/encoder mid-probe can't drop us into
+                    // half-built muxer.tmp + zombie recording=true state.
+                    GpuMosaicRecorder snapRec = recorder;
+                    if (stopping || !running || snapRec == null) {
+                        logger.info("Storage-ready retry: pipeline torn down mid-probe — exiting");
+                        return;
+                    }
+                    if (snapRec.getEncoder() != null
+                            && snapRec.getEncoder().isFormatAvailable()
+                            && isStorageWriteReady(probeDir)) {
+                        snapRec.startRecording(outputDir, prefix);
+                        if (snapRec.isRecording()) {
+                            currentMode = Mode.NORMAL_RECORDING;
+                            recordingMode = true;
+                            // FIX (audit R4, Finding 5): mirror startRecording's
+                            // success path — capture active session so a later
+                            // camera-yield resume (onPostReacquire) can re-enter
+                            // pipeline.startRecording with the correct dir/prefix
+                            // instead of falling back to the default "cam"/null.
+                            activeRecordingDir = outputDir;
+                            activeRecordingPrefix = prefix;
+                            snapRec.setOverlayRecordingModeAllowed(true);
+                            if (telemetryCollector != null) {
+                                telemetryCollector.setOverlayRecordingActive(true);
+                                telemetryCollector.startPolling();
+                            }
+                            pendingRecordingDir = null;
+                            pendingRecordingPrefix = null;
+                            logger.info("Normal recording started on storage retry #" + attempt
+                                + " (dir=" + (outputDir != null ? outputDir.getName() : "default")
+                                + ", prefix=" + prefix + ", active session captured)");
+                            // FIX (audit R1): notify RMM so modeActive gets
+                            // re-evaluated. Without this, RMM still has
+                            // modeActive=false from the original cold-start
+                            // failure, so the next ticker fires
+                            // activateModeWithWarmup → pipeline.stopRecording
+                            // → kills the recording we just started.
+                            try {
+                                app.wheelstop.android.recording.RecordingModeManager rmm =
+                                    app.wheelstop.android.daemon.CameraDaemon.getRecordingModeManager();
+                                if (rmm != null) {
+                                    rmm.resyncFromHardware("storage-retry-success");
+                                    logger.info("RMM resynced after storage-retry success");
+                                }
+                            } catch (Throwable t) {
+                                logger.warn("RMM resync after storage-retry failed: "
+                                    + t.getMessage());
+                            }
+                            return;
+                        }
+                    }
+                    logger.info("Storage-ready retry #" + attempt
+                        + ": still not write-ready, will retry");
+                } catch (Exception e) {
+                    logger.warn("Storage-ready retry #" + attempt + " error: " + e.getMessage());
+                }
+            }
+            logger.warn("Storage retry hit " + (STORAGE_RETRY_TIMEOUT_MS / 1000)
+                + "s timeout — switching to slow-retry every "
+                + (STORAGE_SLOW_RETRY_INTERVAL_MS / 1000) + "s");
+            // Hand off to the slow-retry loop. Without this, the daemon would
+            // sit in a "modeActive=true, pipeline running, NOT recording"
+            // zombie state forever — pendingRecordingPrefix/recordingMode are
+            // still set, but no thread is checking storage anymore. The slow
+            // retry runs at a much lower cadence (30s) so it's effectively
+            // free, and auto-cancels on stop()/release()/stopRecording() via
+            // the slowRetryRunning flag.
+            scheduleStorageSlowRetry(outputDir, prefix);
+        }, "RecStorageRetry");
+        storageRetryThread.setDaemon(true);
+        storageRetryThread.start();
+    }
+
+    /**
+     * Slow-retry tail of the cold-start storage retry. Activates when the
+     * 60s fast-retry give-up fires, and re-checks storage every 30s. On
+     * success (storage ready AND pendingRecordingPrefix still set), it
+     * runs the same start-recording logic as the fast retry. Auto-cancels
+     * via {@link #slowRetryRunning} when:
+     *   - the user changes mode (pendingRecordingPrefix becomes null),
+     *   - recording starts via any path,
+     *   - the pipeline is stopped/released,
+     *   - {@link #cancelStorageReadyRetry()} is called.
+     *
+     * Bounded by the slowRetryRunning sentinel — there is no hard time
+     * cap because the wedge being recovered (USB never mounted, SD never
+     * came back, fs corruption that eventually heals) can persist for an
+     * arbitrary fraction of the drive. The cost of an idle 30s tick is
+     * a single ensureStorageReady(false) call and a write probe, which is
+     * a few ms on a healthy volume.
+     */
+    private synchronized void scheduleStorageSlowRetry(java.io.File outputDir, String prefix) {
+        if (storageSlowRetryThread != null && storageSlowRetryThread.isAlive()) {
+            return;  // a slow retry is already in flight
+        }
+        slowRetryRunning = true;
+        // FIX (audit R5): pin slow retry to current pipeline generation too.
+        final long capturedGen = pipelineGen.get();
+        storageSlowRetryThread = new Thread(() -> {
+            int attempt = 0;
+            while (slowRetryRunning) {
+                try {
+                    Thread.sleep(STORAGE_SLOW_RETRY_INTERVAL_MS);
+                } catch (InterruptedException e) {
+                    return;  // cancelled (stop / release / stopRecording / success)
+                }
+                if (!slowRetryRunning) return;
+                // FIX (audit R5): generation gate.
+                if (pipelineGen.get() != capturedGen) {
+                    logger.info("Slow-retry: pipeline generation rotated ("
+                        + capturedGen + "→" + pipelineGen.get() + ") — exiting");
+                    return;
+                }
+                // FIX (audit R1): re-check pipeline lifecycle on every wake.
+                if (stopping || !running) {
+                    logger.info("Slow-retry: pipeline stopped — exiting");
+                    return;
+                }
+                // Bail if the request was cancelled (gear change / mode
+                // change cleared the pending intent) or already satisfied.
+                if (pendingRecordingPrefix == null && !recordingMode) {
+                    logger.info("Slow-retry: pending intent cleared — exiting");
+                    return;
+                }
+                if (recorder != null && recorder.isRecording()) {
+                    logger.info("Slow-retry: recording already started — exiting");
+                    return;
+                }
+                attempt++;
+                try {
+                    StorageManager.getInstance().ensureStorageReady(false);
+                    // FIX (audit R4): same ENOSPC gate redirect as the fast loop /
+                    // direct sites — a mounted-but-full SD must not wedge the slow
+                    // retry forever. startRecording still gets the ORIGINAL outputDir.
+                    java.io.File probeDir = resolveProbeDirWithEnospcFallback(
+                            (outputDir != null) ? outputDir
+                                    : StorageManager.getInstance().getRecordingsDir());
+                    // FIX (audit R1): snapshot recorder + re-verify pipeline
+                    // is running before startRecording (concurrent-stop NPE
+                    // / zombie-recording guard).
+                    GpuMosaicRecorder snapRec = recorder;
+                    if (stopping || !running || snapRec == null) {
+                        logger.info("Slow-retry: pipeline torn down mid-probe — exiting");
+                        return;
+                    }
+                    if (snapRec.getEncoder() != null
+                            && snapRec.getEncoder().isFormatAvailable()
+                            && isStorageWriteReady(probeDir)) {
+                        snapRec.startRecording(outputDir, prefix);
+                        if (snapRec.isRecording()) {
+                            currentMode = Mode.NORMAL_RECORDING;
+                            recordingMode = true;
+                            // FIX (audit R4, Finding 5): mirror startRecording's
+                            // success path — capture active session so a later
+                            // camera-yield resume can re-enter pipeline.start
+                            // Recording with the correct dir/prefix instead of
+                            // falling back to default.
+                            activeRecordingDir = outputDir;
+                            activeRecordingPrefix = prefix;
+                            snapRec.setOverlayRecordingModeAllowed(true);
+                            if (telemetryCollector != null) {
+                                telemetryCollector.setOverlayRecordingActive(true);
+                                telemetryCollector.startPolling();
+                            }
+                            pendingRecordingDir = null;
+                            pendingRecordingPrefix = null;
+                            logger.info("Normal recording started on storage SLOW-retry #"
+                                + attempt
+                                + " (dir=" + (outputDir != null ? outputDir.getName() : "default")
+                                + ", prefix=" + prefix + ", active session captured)");
+                            // FIX (audit R1): notify RMM after slow-retry success
+                            // so modeActive gets re-evaluated and the resync
+                            // ticker doesn't tear down the just-started recording.
+                            try {
+                                app.wheelstop.android.recording.RecordingModeManager rmm =
+                                    app.wheelstop.android.daemon.CameraDaemon.getRecordingModeManager();
+                                if (rmm != null) {
+                                    rmm.resyncFromHardware("storage-slow-retry-success");
+                                    logger.info("RMM resynced after slow-retry success");
+                                }
+                            } catch (Throwable t) {
+                                logger.warn("RMM resync after slow-retry failed: "
+                                    + t.getMessage());
+                            }
+                            slowRetryRunning = false;
+                            return;
+                        }
+                    }
+                    logger.info("Storage slow-retry #" + attempt
+                        + ": still not write-ready, will retry in "
+                        + (STORAGE_SLOW_RETRY_INTERVAL_MS / 1000) + "s");
+                } catch (Exception e) {
+                    logger.warn("Storage slow-retry #" + attempt + " error: " + e.getMessage());
+                }
+            }
+        }, "RecStorageSlowRetry");
+        storageSlowRetryThread.setDaemon(true);
+        storageSlowRetryThread.start();
+    }
+
+    private synchronized void cancelStorageReadyRetry() {
+        // Cancel both the fast retry and the slow-retry tail. Either or
+        // both may be alive depending on how far through the cold-start
+        // recovery we are. Setting slowRetryRunning=false is the primary
+        // exit signal for the slow loop; the interrupt below additionally
+        // unblocks a sleeping slow-retry thread so the cancel returns
+        // promptly rather than after the next 30s tick.
+        slowRetryRunning = false;
+        Thread t = storageRetryThread;
+        if (t != null) {
+            t.interrupt();
+            storageRetryThread = null;
+        }
+        Thread st = storageSlowRetryThread;
+        if (st != null) {
+            st.interrupt();
+            storageSlowRetryThread = null;
+        }
+    }
+
+    /**
+     * Timeout-bounded write probe for the target recordings volume. Creates the
+     * dir if needed, then writes + deletes a tiny temp file on a worker thread
+     * joined with a short timeout.
+     *
+     * <p>Returns false if the volume can't be written OR — the key case — the
+     * probe doesn't finish in time. On a half-mounted USB at cold start,
+     * filesystem ops (mkdirs / ensureRecordingsSpace's scan / {@code new
+     * MediaMuxer()}'s open) can block indefinitely with no return, which would
+     * otherwise hang the recording-start thread and defeat the retry above (the
+     * isRecording() check never runs). Gating the real start on this cheap probe
+     * turns that indefinite hang into a fast, recoverable "not ready → retry".
+     * The probe thread is a daemon and holds no pipeline locks, so even if it
+     * does hang on a wedged volume it is harmless and reaped when the process or
+     * the volume recovers.
+     */
+    /**
+     * Resolve the recordings write-probe target through the ENOSPC fallback so a
+     * mounted-but-FULL external card doesn't wedge recording for the whole drive.
+     *
+     * <p>The write probe ({@link #isStorageWriteReady}) does a real {@code write()}
+     * on the target. When the configured external volume (SD/USB) is mounted but
+     * physically full, that {@code write()} ENOSPC-fails on EVERY tick while StatFs
+     * keeps reporting the volume mounted — so the probe never passes, the deferred
+     * retry re-probes the SAME dead path, and recording never starts even though
+     * internal has tens of GB free (observed: full 14-min wedge after a cold-start
+     * restart onto a full card). The running recorder already sidesteps this with
+     * a per-segment {@link StorageManager#resolveTargetWithEnospcFallback}; this
+     * applies the SAME redirect on the activation/deferred probe so the probe — and
+     * the segment it gates — lands on internal when the card is full. No-op when the
+     * target is internal, has room, or is genuinely unmounted (left to the mount
+     * watchdog). {@code trackState=false}: the recorder's own per-segment call owns
+     * the UI fallback banner; this probe must not flap the latch on a transient miss.
+     */
+    private java.io.File resolveProbeDirWithEnospcFallback(java.io.File probeDir) {
+        if (probeDir == null) return null;
+        try {
+            java.io.File enospcSafe = StorageManager.getInstance()
+                .resolveTargetWithEnospcFallback(probeDir, 100 * 1024 * 1024, false);
+            if (enospcSafe != null && enospcSafe != probeDir) {
+                logger.warn("Recordings volume full — pre-flight redirecting write probe to internal fallback: "
+                    + enospcSafe.getAbsolutePath());
+                return enospcSafe;
+            }
+        } catch (Throwable t) {
+            logger.warn("ENOSPC pre-flight resolve threw, probing configured dir: " + t.getMessage());
+        }
+        return probeDir;
+    }
+
+    private boolean isStorageWriteReady(java.io.File dir) {
+        if (dir == null) return false;
+        final java.io.File target = dir;
+        final boolean[] ok = {false};
+        Thread probe = new Thread(() -> {
+            try {
+                if (!target.exists()) {
+                    target.mkdirs();
+                }
+                if (!target.isDirectory()) return;
+                java.io.File t = new java.io.File(target,
+                    ".wrprobe_" + android.os.Process.myPid());
+                java.io.FileOutputStream fos = new java.io.FileOutputStream(t);
+                try {
+                    fos.write(0);
+                    fos.flush();
+                } finally {
+                    try { fos.close(); } catch (Exception ignored) {}
+                }
+                t.delete();
+                ok[0] = true;
+            } catch (Throwable ignored) {
+                // ok stays false — volume not write-ready
+            }
+        }, "RecWriteProbe");
+        probe.setDaemon(true);
+        probe.start();
+        try {
+            probe.join(STORAGE_PROBE_TIMEOUT_MS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+        return ok[0];  // false if the probe timed out (still running) or failed
+    }
+
+    /**
+     * Timeout-bounded wrapper around {@link StorageManager#ensureStorageReady}
+     * for the recording-start critical path. {@code ensureStorageReady} can
+     * block for minutes on a cold-boot FUSE-bridged SD/USB (mount retry loop +
+     * dir-walk under binder contention); when it does, {@link #startRecording}
+     * stalls BEFORE the encoder-format branch while holding
+     * RecordingModeManager's activationLock + warmupInFlight, wedging recording
+     * activation for the entire stall (field log
+     * camera_daemon_20260610_155444: 4m28s ACC-ON→first-frame).
+     *
+     * <p>Same daemon-thread + bounded-join idiom as {@link #isStorageWriteReady}.
+     * The worker holds no pipeline locks, so if it hangs on a wedged volume it is
+     * harmless and reaped when the volume/process recovers. A {@code true} return
+     * means {@code ensureStorageReady} completed and returned true within the
+     * budget; ANY other outcome (timeout, false, or throw) returns {@code false},
+     * which the caller already handles by continuing to the bounded
+     * {@code isStorageWriteReady} probe + deferred-retry machinery.
+     *
+     * <p>Budget: {@link #ENSURE_STORAGE_READY_TIMEOUT_MS}. A healthy mount
+     * resolves in well under this, so the common path is unchanged; the budget
+     * only caps the pathological cold-boot stall.
+     */
+    private boolean ensureStorageReadyBounded(boolean forSurveillance) {
+        final boolean[] ready = {false};
+        Thread probe = new Thread(() -> {
+            try {
+                ready[0] = StorageManager.getInstance().ensureStorageReady(forSurveillance);
+            } catch (Throwable t) {
+                logger.warn("ensureStorageReadyBounded: ensureStorageReady threw: " + t.getMessage());
+                // ready stays false — caller falls through to the write probe.
+            }
+        }, "EnsureStorageReady");
+        probe.setDaemon(true);
+        probe.start();
+        try {
+            probe.join(ENSURE_STORAGE_READY_TIMEOUT_MS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+        if (probe.isAlive()) {
+            logger.warn("ensureStorageReady did not return within "
+                + ENSURE_STORAGE_READY_TIMEOUT_MS + "ms (storage mount likely wedged) — "
+                + "proceeding to bounded write probe + deferred retry instead of "
+                + "blocking activation");
+            return false;
+        }
+        return ready[0];
+    }
+
+    // Budget for the recording-start ensureStorageReady call. Generous relative
+    // to a healthy mount (sub-second) but well under the activation watchdog's
+    // 30s stuck-warmup threshold, so a wedged mount surfaces as a fast deferred
+    // retry rather than a multi-minute activation stall.
+    private static final long ENSURE_STORAGE_READY_TIMEOUT_MS = 4_000L;
+
+    /**
+     * Stops recording.
+     */
+    public void stopRecording() {
+        // CRITICAL: Clear any pending (deferred) recording request FIRST.
+        // During cold start, startRecording() defers to checkPendingRecording() if the
+        // encoder isn't ready yet. If a gear change (D→N/P) triggers stopRecording()
+        // before the encoder is ready, the pending request survives and fires later —
+        // starting recording in the wrong gear state. Clearing it here prevents that.
+        // FIX (audit R7): clear under `synchronized (this)` so a concurrent
+        // checkPendingRecording (encoder format-available listener thread) sees
+        // the clear atomically — without this, the listener can capture a
+        // non-null prefix AFTER recorder.stopRecording has run and start a
+        // ghost recording against the freshly-stopped recorder.
+        synchronized (this) {
+            pendingRecordingDir = null;
+            pendingRecordingPrefix = null;
+            // FIX (audit R3, Findings 3+6): drop active-session memory; a yield
+            // after this point should NOT auto-resume because the user/RMM has
+            // explicitly stopped.
+            activeRecordingDir = null;
+            activeRecordingPrefix = null;
+            recordingMode = false;
+        }
+        cancelStorageReadyRetry();
+
+        if (recorder != null) {
+            recorder.stopRecording();
+
+            // Disable overlay compositing when recording stops
+            recorder.setOverlayRecordingModeAllowed(false);
+            if (telemetryCollector != null) {
+                telemetryCollector.setOverlayRecordingActive(false);
+                telemetryCollector.stopPolling();
+            }
+
+            // FIX (sentry-mode desync, root cause): this is a NORMAL/continuous
+            // recording stop, but the recorder is SHARED with surveillance event
+            // clips — so the SD-card watchdog (StorageManager remount branches) and
+            // setRecordingsStorageType() call pipeline.stopRecording() while sentry
+            // is armed and mid-event (recorder.isRecording()==true). Those callers
+            // are gated on recordingsStorageType==SD_CARD, which is exactly why the
+            // bug only reproduces with recordings on SD. Unconditionally forcing
+            // currentMode=IDLE there desynced the pipeline: sentry.isActive() stayed
+            // true but the mode read IDLE, which made isSurveillanceMode()/status API
+            // lie AND let the live-view WS-idle auto-stop tear the whole pipeline
+            // down out from under running surveillance. If the sentry engine is still
+            // armed, the pipeline IS conceptually still in surveillance — keep the
+            // mode SURVEILLANCE; only fall back to IDLE when nothing is armed. During
+            // ACC-on normal recording sentry is never active, so this is a no-op there.
+            SurveillanceEngineGpu sen = sentry;
+            if (sen != null && sen.isActive()) {
+                currentMode = Mode.SURVEILLANCE;
+                logger.info("Normal recording stopped (sentry still armed — mode stays SURVEILLANCE)");
+            } else {
+                currentMode = Mode.IDLE;
+                logger.info("Normal recording stopped");
+            }
+        }
+    }
+    
+    /**
+     * Enables surveillance mode (motion detection + event recording).
+     * Stops normal recording if active (mutually exclusive).
+     * SOTA: Ensures SD card is mounted if SD card storage is selected.
+     */
+    public void enableSurveillance() {
+        // Stop normal recording if active (mutually exclusive)
+        if (currentMode == Mode.NORMAL_RECORDING) {
+            logger.info("Stopping normal recording to enable surveillance (mutually exclusive)");
+            if (recorder != null) {
+                recorder.stopRecording();
+            }
+        }
+        
+        // SOTA: Ensure storage is ready (mount SD card if needed)
+        try {
+            StorageManager storage = StorageManager.getInstance();
+            if (!storage.ensureStorageReady(true)) {
+                logger.warn("Storage not ready for surveillance, but continuing with fallback");
+            }
+
+            // Boot/ACC-on mount-race: ensureStorageReady only ATTEMPTS the mount;
+            // the real mount may still be in flight on the background
+            // StorageMountInit thread. Give the configured external volume a short
+            // bounded window to land BEFORE we snapshot the event dir below, so the
+            // first 1-2 events don't get pinned to the internal fallback. No-op for
+            // INTERNAL config / already-mounted volume / physically-absent SD.
+            //
+            // FIRST-ARM-OF-LIFECYCLE ONLY (mountWaitConsumed one-shot): the wait is
+            // only load-bearing on the very first arm after pipeline start — the
+            // inaugural eventOutputDir snapshot below. On any re-arm (notably the
+            // lock-gate force-arm AFTER a grace-period UNLOCK disarm: surveillance
+            // was armed, then disarmed to currentMode=IDLE without stopping the
+            // pipeline, then a fresh LOCK re-arms) currentMode is IDLE / sentry is
+            // inactive again, so the mode-based guard alone would re-enter the wait.
+            // That re-entry is the audit-R3 coupling: CameraDaemon's force-arm holds
+            // the static CameraDaemon.class monitor across enableSurveillance(), and
+            // applyLockEvent() is static-synchronized on the same monitor, so a
+            // concurrent owner-return UNLOCK disarm would block for up to
+            // STORAGE_MOUNT_WAIT_MS. We skip the wait on re-arm because the engine's
+            // per-trigger getLiveSurveillanceDir() refresh (SurveillanceEngineGpu
+            // Site A/B) already routes a late-landing mount to SD on every event, so
+            // the enable-time wait buys nothing there. NOTE: isRunning() can NOT
+            // gate this — CameraDaemon.enableSurveillance() calls start()
+            // (running=true) BEFORE gpuPipeline.enableSurveillance(), so running is
+            // already true on the cold first arm. mountWaitConsumed is reset in
+            // stop() so a fresh pipeline lifecycle re-arms the wait.
+            if (!mountWaitConsumed
+                    && (currentMode != Mode.SURVEILLANCE || sentry == null || !sentry.isActive())) {
+                mountWaitConsumed = true;
+                try {
+                    storage.waitForConfiguredExternalMount(STORAGE_MOUNT_WAIT_MS);
+                } catch (Throwable ignored) {
+                    // Defensive: never let the boot-race guard break the enable path.
+                }
+            }
+
+            // SOTA: Update sentry's event output directory to current surveillance path
+            // This handles storage type changes (internal <-> SD card) at runtime
+            if (sentry != null) {
+                File currentSurveillanceDir = storage.getSurveillanceDir();
+                sentry.setEventOutputDir(currentSurveillanceDir);
+                logger.info("Surveillance output directory: " + currentSurveillanceDir.getAbsolutePath());
+            }
+        } catch (Exception e) {
+            logger.warn("Error checking storage readiness: " + e.getMessage());
+        }
+        
+        if (sentry != null) {
+            sentry.enable();
+            currentMode = Mode.SURVEILLANCE;
+            logger.info("Surveillance mode enabled (sentry.active=" + sentry.isActive() + ")");
+            // Assert the ACC-off surveillance fps/bitrate NOW that the mode is
+            // SURVEILLANCE. setRecordingMode(SENTRY) only fires on the direct
+            // ACC-off (door-lock) path; the schedule-window-open and
+            // safe-zone-exit arm paths reach enableSurveillance() WITHOUT it, so
+            // without this call those paths would arm at the ACC-ON recording
+            // tier until RMM's 30s reconcile self-healed — mis-tiering any event
+            // clip captured in that window. Funnels through the same
+            // reconfigLock-guarded body as every other surveillance-profile push.
+            // No-op-equivalent on a pre-split config (resolves to the recording
+            // tier). Skip while a live encoder reconfig is mid-flight (running/
+            // stopping gate) — that path re-asserts on its own completion.
+            synchronized (reconfigLock) {
+                if (running && !stopping) {
+                    applySurveillanceProfileLocked("arm");
+                }
+            }
+        } else {
+            logger.error("Cannot enable surveillance: sentry is null!");
+        }
+        
+        // Disable overlay compositing in surveillance mode
+        if (recorder != null) {
+            recorder.setOverlayRecordingModeAllowed(false);
+        }
+        if (telemetryCollector != null) {
+            telemetryCollector.setOverlayRecordingActive(false);
+            telemetryCollector.stopPolling();
+        }
+
+        // Now that the mode is SURVEILLANCE, switch the recorder + windshield
+        // to sentry's own layout profile. applyActiveLayoutProfile() reads
+        // currentMode, so if sentry was null (mode unchanged) this harmlessly
+        // re-applies the dashcam profile instead.
+        applyActiveLayoutProfile();
+    }
+
+    /**
+     * Disables surveillance mode.
+     */
+    public void disableSurveillance() {
+        if (sentry != null) {
+            sentry.disable();
+            currentMode = Mode.IDLE;
+            logger.info( "Surveillance mode disabled");
+            // Back to IDLE → restore the dashcam layout profile so the next
+            // normal/continuous recording uses the dashcam setting, not the
+            // sentry one we may have switched to in enableSurveillance().
+            applyActiveLayoutProfile();
+        }
+    }
+    
+    /**
+     * Called when ACC turns ON - stops surveillance recording.
+     * This ensures sentry recordings are properly finalized when car starts.
+     * 
+     * CRITICAL: Must synchronously close any active recording to prevent file corruption.
+     */
+    public void onAccOn() {
+        logger.info("ACC ON detected - stopping surveillance and finalizing recordings");
+
+        try {
+            // First, stop any active recording immediately (synchronous)
+            if (recorder != null && recorder.isRecording()) {
+                logger.info("Stopping active recording before ACC transition");
+                recorder.stopRecording();
+            }
+
+            // Also flush and close the encoder to ensure file is finalized
+            if (encoder != null && encoder.isWritingToFile()) {
+                logger.info("Flushing encoder before ACC transition");
+                encoder.flushAndClose();
+            }
+
+            // Now disable surveillance mode
+            if (currentMode == Mode.SURVEILLANCE) {
+                disableSurveillance();
+                // FIX (audit R5): a surveillance trigger that landed between
+                // the initial recorder.stopRecording above and sentry.disable
+                // here can re-arm the recorder. disableSurveillance only
+                // tears down the sentry listener; an event that already
+                // crossed the threshold and called recorder.startRecording
+                // is still alive. Drain it now, before camera.reopenCamera —
+                // otherwise reopenCamera nukes the producer surface mid-write
+                // and the segment finalizes corrupted.
+                if (recorder != null && recorder.isRecording()) {
+                    logger.warn("onAccOn: surveillance re-armed recorder during stop window — "
+                        + "draining before camera reopen");
+                    try { recorder.stopRecording(); }
+                    catch (Throwable t) { logger.warn("onAccOn: post-disable drain failed: " + t.getMessage()); }
+                }
+            }
+
+            // Also stop normal recording if active
+            if (currentMode == Mode.NORMAL_RECORDING) {
+                stopRecording();
+            }
+
+            // FIX (audit R5): clear deferred-recording state unconditionally.
+            // currentMode could be SURVEILLANCE or IDLE here (above branches
+            // only handle NORMAL_RECORDING via stopRecording — which clears
+            // these — and SURVEILLANCE via disableSurveillance — which does
+            // NOT). A pending intent left over from cold-start could
+            // otherwise resurrect a recording after camera reopen, against
+            // RMM's intent. RMM re-issues post-ACC if the new mode demands.
+            if (pendingRecordingDir != null || pendingRecordingPrefix != null
+                    || recordingMode) {
+                logger.info("onAccOn: clearing residual deferred-recording state "
+                    + "(pending=" + pendingRecordingPrefix
+                    + ", recordingMode=" + recordingMode + ")");
+                pendingRecordingDir = null;
+                pendingRecordingPrefix = null;
+                recordingMode = false;
+            }
+            try { cancelStorageReadyRetry(); }
+            catch (Throwable t) { logger.warn("onAccOn: cancelStorageReadyRetry failed: " + t.getMessage()); }
+
+            // Reset config-side recording mode back to NORMAL so the next
+            // startRecording() doesn't apply SENTRY-tier bitrate left over
+            // from a prior surveillance session. Done before camera reopen
+            // so the transition lands in a fully consistent state.
+            try {
+                config.setRecordingMode(GpuPipelineConfig.RecordingMode.NORMAL);
+            } catch (Throwable t) {
+                logger.warn("onAccOn: config.setRecordingMode(NORMAL) failed: " + t.getMessage());
+            }
+
+            // ESCO-PARITY: dilink4 never closes the AVMCamera handle. esco's
+            // PanoCameraRecord stays alive across ACC ON; the BYD native AVC app
+            // attaches as a co-consumer of the AVM HAL daemon (gl/C5920a.java
+            // observerSet) and shares the producer surface naturally.
+            // reopenCamera() does a full close+reopen of our AVMCamera handle,
+            // which on byd_apa firmware drops mosaic mode and leaves the next
+            // open with all-zero frames — exactly what the user reports.
+            //
+            // Legacy fleet keeps the original "release and reopen as secondary
+            // consumer" behaviour because that's how non-byd_apa HALs share.
+            boolean dilink4 = false;
+            try {
+                dilink4 = app.wheelstop.android.daemon.CameraDaemon.isDilink4ModeActiveStatic();
+            } catch (Throwable ignored) {}
+            if (camera != null && running && !dilink4) {
+                camera.reopenCamera();
+                logger.info("ACC ON transition complete - all recordings finalized, camera reopened");
+            } else if (dilink4) {
+                logger.info("ACC ON transition complete - dilink4 keeps camera alive (esco-parity, no reopen)");
+            } else {
+                logger.info("ACC ON transition complete - all recordings finalized");
+            }
+        } catch (Throwable t) {
+            // Any failure mid-transition leaves the pipeline in a half-mutated
+            // state (currentMode flipped, running=true, dead camera handle).
+            // Force a full stop so the next caller sees a clean slate and can
+            // do a fresh start() — better to drop a few frames than to wedge
+            // recording for the rest of the drive.
+            logger.error("onAccOn failed mid-transition — forcing full stop to recover: "
+                + t.getMessage());
+            try { stop(); } catch (Throwable t2) {
+                logger.warn("Recovery stop also failed: " + t2.getMessage());
+            }
+            throw t instanceof RuntimeException ? (RuntimeException) t : new RuntimeException(t);
+        }
+    }
+    
+    /**
+     * Enables H.264 streaming with separate encoder.
+     * 
+     * @param streamWidth Stream width (e.g., 1280)
+     * @param streamHeight Stream height (e.g., 960)
+     * @param streamFps Stream FPS (e.g., 10)
+     * @param streamBitrate Stream bitrate (e.g., 2 Mbps)
+     */
+    public void enableStreaming(int streamWidth, int streamHeight, int streamFps,
+                               int streamBitrate) throws Exception {
+        streamLifecycleLock.lock();
+        try {
+            if (streamingEnabled) {
+                logger.warn("Streaming already enabled");
+                return;
+            }
+
+            // Auto-start pipeline if not running (e.g., DRIVE_MODE in gear P, user opens stream)
+            if (!running) {
+                logger.info("Pipeline not running — auto-starting for streaming (view-only)");
+                start(false);  // Start without auto-recording
+            }
+
+            // Verify camera GL thread is ready after start
+            if (camera == null || camera.getGlHandler() == null) {
+                logger.error("Cannot enable streaming - camera GL thread not ready");
+                throw new IllegalStateException("Camera GL thread not initialized");
+            }
+            try {
+                enableStreamingInternal(streamWidth, streamHeight, streamFps, streamBitrate);
+            } catch (Throwable t) {
+            // On any failure during init, mirror disableStreaming's
+            // teardown order:
+            //   1. clear camera-side refs FIRST so the GL render loop
+            //      stops dereferencing the about-to-be-released scaler
+            //      / encoder. enableStreamingInternal calls
+            //      camera.setStreamingComponents BEFORE wsStreamServer
+            //      starts, so by the time we reach this catch the
+            //      camera may already hold them.
+            //   2. snapshot + null pipeline fields.
+            //   3. shutdown ws server.
+            //   4. post scaler.release on the GL handler; encoder.release
+            //      goes through STREAM_ENCODER_RELEASE_EXEC so the 3s
+            //      waitForFinalizers doesn't pin the GL handler.
+            // Without #1 the camera GL render loop calls drawFrame on a
+            // released GL program after this catch returns.
+            try {
+                if (camera != null) camera.clearStreamingComponents();
+            } catch (Throwable ignored) {}
+            final HardwareEventRecorderGpu encLocal = streamEncoder;
+            final app.wheelstop.android.streaming.GpuStreamScaler scLocal = streamScaler;
+            final app.wheelstop.android.streaming.WebSocketStreamServer wsLocal = wsStreamServer;
+            streamEncoder = null;
+            streamScaler = null;
+            wsStreamServer = null;
+            try { if (wsLocal != null) wsLocal.shutdown(); } catch (Throwable ignored) {}
+            android.os.Handler glH = (camera != null) ? camera.getGlHandler() : null;
+            boolean glPostAccepted = false;
+            if (glH != null && scLocal != null) {
+                glPostAccepted = glH.post(() -> {
+                    try { scLocal.unbindOemSource(); scLocal.release(); }
+                    catch (Throwable ignored) {}
+                    // Encoder release dispatched AFTER scaler.release runs
+                    // (still on GL thread), so the BufferQueue tear-down
+                    // can't race the EGLWindowSurface destroy.
+                    if (encLocal != null) submitEncoderRelease(encLocal);
+                });
+            }
+            if (!glPostAccepted) {
+                // Either no GL handler available, or post() returned false
+                // (Looper.quit() ran concurrently on a competing stop). In
+                // either case the GL Runnable will never execute, so
+                // scaler + encoder must be released here or both leak. The
+                // Adreno EGLWindowSurface-destroy race the GL ordering
+                // protects against can't trip if there's no GL thread to
+                // race with — fall back to direct release for both.
+                try { if (scLocal != null) { scLocal.unbindOemSource(); scLocal.release(); } }
+                catch (Throwable ignored) {}
+                if (encLocal != null) submitEncoderRelease(encLocal);
+            }
+            if (t instanceof Exception) throw (Exception) t;
+            throw new RuntimeException(t);
+        }
+        } finally {
+            streamLifecycleLock.unlock();
+        }
+    }
+
+    private void enableStreamingInternal(int streamWidth, int streamHeight, int streamFps,
+                                         int streamBitrate) throws Exception {
+        // R8-A #18: defensively reset externalStreamSourceActive on every
+        // enable. The disable path resets it at line ~1999 — but a disable
+        // that threw before reaching that line could leave the flag stuck
+        // at true, causing the next reattachOwnStreamCallback to try
+        // unbinding an OEM source that this fresh enable never bound.
+        externalStreamSourceActive = false;
+
+        logger.info(String.format("Enabling H.264 streaming: %dx%d @ %dfps, %d Mbps",
+                streamWidth, streamHeight, streamFps, streamBitrate / 1_000_000));
+        
+        // Create stream encoder
+        logger.info("Creating stream encoder...");
+        streamEncoder = new HardwareEventRecorderGpu(streamWidth, streamHeight, streamFps, streamBitrate);
+        streamEncoder.setUsePreRecordBuffer(false);  // Stream-only, no pre-record needed
+        // Do NOT pin KEY_OPERATING_RATE on this SECONDARY encoder. The primary
+        // recording encoder already pins it at fps to hold the Venus clock; if
+        // the live-view stream encoder ALSO pins, both double-claim the single
+        // SDM665 Venus block's firmware frequency budget — over-subscribing it
+        // and producing the exact eglSwap stalls the pin was meant to prevent
+        // (two encoders on one HW block). Only the primary encoder should claim
+        // the frequency lock. Mirrors OemDashcamPipeline.java:1039, which sets
+        // this on its own secondary encoder for the same reason.
+        streamEncoder.setPinOperatingRate(false);
+        streamEncoder.init();
+        logger.info("Stream encoder initialized");
+        
+        // Create stream scaler
+        logger.info("Creating stream scaler...");
+        // Stream scaler picks the same per-role offsets used by the
+        // recorder so user-mapped role-to-slice mappings affect
+        // single-direction streaming too. We pass BOTH 4-strip offsets and
+        // 2x2 corners; the shader picks based on uApaMode (cameraLayout).
+        app.wheelstop.android.camera.ResolvedCameraConfig streamCfg =
+            app.wheelstop.android.camera.CameraConfigResolver.resolve(getVehicleModel());
+        float[] streamQuadrantStripOffsetX = streamCfg.getQuadrantStripOffsetX();
+        streamScaler = new app.wheelstop.android.streaming.GpuStreamScaler(
+            streamWidth, streamHeight, streamQuadrantStripOffsetX);
+
+        try {
+            android.content.Context odCtx = savedContext;
+            if (odCtx == null) odCtx = app.wheelstop.android.daemon.CameraDaemon.getAppContext();
+            if (odCtx != null) {
+                app.wheelstop.android.blindspot.BsCoefficients.authorize(odCtx);
+            } else {
+                logger.error("od authorize skipped: no context available");
+            }
+        } catch (Throwable t) {
+            logger.warn("od init failed: " + t.getMessage());
+        }
+
+        // Match the recorder's layout choice. esco-parity passthrough (3)
+        // when SurfaceTexture path is active; legacy 4-cam mosaic (0)
+        // otherwise.
+        boolean streamUsingEscoPath =
+            (camera != null && camera.isUsingEscoSurfaceTexturePath());
+        streamScaler.setCameraLayout(streamUsingEscoPath ? 3 : 0);
+
+        // Hardcoded Variant A corner+flip constants on DiLink 4. Mirrors
+        // GpuMosaicRecorder so live stream and recording stay aligned. On
+        // legacy cars the uniforms are unused (uApaMode != 3 path).
+        if (streamUsingEscoPath) {
+            // Single combined call referencing the shared Dilink4Constants
+            // so the stream scaler can never silently diverge from the
+            // recorder's mosaic arrangement.
+            streamScaler.setProducerLayout(
+                app.wheelstop.android.camera.Dilink4Constants.CORNER_FRONT,
+                app.wheelstop.android.camera.Dilink4Constants.CORNER_RIGHT,
+                app.wheelstop.android.camera.Dilink4Constants.CORNER_REAR,
+                app.wheelstop.android.camera.Dilink4Constants.CORNER_LEFT,
+                app.wheelstop.android.camera.Dilink4Constants.FLIP_FRONT,
+                app.wheelstop.android.camera.Dilink4Constants.FLIP_RIGHT,
+                app.wheelstop.android.camera.Dilink4Constants.FLIP_REAR,
+                app.wheelstop.android.camera.Dilink4Constants.FLIP_LEFT);
+            // Red-overlay suppression follows the recorder. Read the same
+            // unified-config flag so the live preview matches the MP4.
+            try {
+                org.json.JSONObject camCfgStream = app.wheelstop.android.config
+                    .UnifiedConfigManager.loadConfig().optJSONObject("camera");
+                if (camCfgStream != null) {
+                    streamScaler.setRedMaskEnabled(
+                        camCfgStream.optBoolean("dilink4RedMask", false));
+                    streamScaler.setApaCenterInset(
+                        (float) camCfgStream.optDouble("dilink4ApaCenterInset", 0.09375));
+                }
+            } catch (Throwable t) {
+                logger.warn("Stream scaler red-mask flag read failed: " + t.getMessage());
+            }
+        }
+        
+        // Initialize on GL thread and WAIT for completion.
+        // Captured locals (NOT the instance fields) — so if the wait
+        // times out and the catch path nulls this.streamScaler /
+        // this.streamEncoder, the queued init lambda still has a
+        // coherent view of the objects to operate on. Without this,
+        // a 2-second timeout with the GL thread mid-shader-compile
+        // would null the fields, then the eventually-running lambda
+        // would NPE on `streamScaler.init` and the partially-built
+        // GL program would leak (caught lambda swallowed the NPE).
+        final app.wheelstop.android.streaming.GpuStreamScaler scalerLocal = streamScaler;
+        final HardwareEventRecorderGpu encoderLocal = streamEncoder;
+        final app.wheelstop.android.camera.EGLCore eglCoreLocal = camera.getEglCore();
+        final Object initLock = new Object();
+        final boolean[] initDone = {false};
+        final Exception[] initError = {null};
+
+        camera.getGlHandler().post(() -> {
+            try {
+                scalerLocal.init(eglCoreLocal, encoderLocal);
+                logger.info("Stream scaler initialized on GL thread");
+            } catch (Exception e) {
+                logger.error("Failed to initialize stream scaler on GL thread", e);
+                initError[0] = e;
+            } finally {
+                synchronized (initLock) {
+                    initDone[0] = true;
+                    initLock.notify();
+                }
+            }
+        });
+
+        // Wait for GL thread initialization (max 2 seconds). Release the
+        // streamLifecycleLock around the wait so concurrent disable /
+        // attach / stop callers don't pin for the full 2 seconds — the
+        // pre-fix synchronized(this) held the monitor across this wait
+        // and starved every peer. The components aren't published to the
+        // camera yet (camera.setStreamingComponents happens AFTER this
+        // wait), so a concurrent disableStreaming will see streamingEnabled
+        // == false and bail; a concurrent attachExternalStreamCallback
+        // will see streamScaler == null and refuse. Both safe.
+        boolean lockHeld = streamLifecycleLock.isHeldByCurrentThread();
+        if (lockHeld) streamLifecycleLock.unlock();
+        try {
+            synchronized (initLock) {
+                if (!initDone[0]) {
+                    initLock.wait(2000);
+                }
+            }
+        } finally {
+            if (lockHeld) streamLifecycleLock.lock();
+        }
+
+        if (!initDone[0]) {
+            throw new RuntimeException("Stream scaler initialization timed out");
+        }
+
+        if (initError[0] != null) {
+            throw new RuntimeException("Stream scaler initialization failed: " + initError[0].getMessage(), initError[0]);
+        }
+
+        // R8-A #9: a concurrent stop() running on the pipeline-level
+        // monitor (different from streamLifecycleLock) could have torn
+        // down `camera` during the unlocked GL-init wait. Check pipeline
+        // viability BEFORE publishing components onto the camera —
+        // otherwise camera.setStreamingComponents would write into a
+        // released camera object whose eglCore + glHandler are dead, and
+        // subsequent draws against streamScaler / streamEncoder would
+        // NPE or render to a destroyed context. The catch path in the
+        // caller will release the just-allocated scaler+encoder.
+        if (!running || camera == null || camera.getGlHandler() == null) {
+            throw new IllegalStateException(
+                "Pipeline torn down during stream init wait — abandoning enable");
+        }
+
+        // Now set components on camera (scaler is guaranteed initialized)
+        logger.info("Setting streaming components on camera...");
+        camera.setStreamingComponents(streamScaler, streamEncoder);
+        
+        // Create WebSocket stream server (port 8887)
+        // WebSocket has zero buffering delay vs HTTP Chunked (64KB+ buffer)
+        logger.info("Starting WebSocket stream server...");
+        wsStreamServer = new app.wheelstop.android.streaming.WebSocketStreamServer();
+        
+        // Set idle shutdown callback - auto-stop pipeline when no clients for
+        // WebSocketStreamServer.IDLE_TIMEOUT_MS (30 seconds; was mis-documented as 15s)
+        final GpuSurveillancePipeline self = this;
+        wsStreamServer.setIdleShutdownCallback(new Runnable() {
+            @Override
+            public void run() {
+                logger.info("WebSocket idle timeout - stopping streaming");
+                // Run on separate thread to avoid blocking timer thread
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            self.disableStreaming();
+                            // The WS pipe just went dark — view 6 is no longer
+                            // a "keep warm" reason for OEM. Re-evaluate so OEM
+                            // tears down if no recording mode is asking for it.
+                            try {
+                                app.wheelstop.android.server.OemDashcamApiHandler
+                                    .scheduleLifecycleRecalc();
+                            } catch (Throwable ignored) {}
+                            // Snapshot every cross-thread field once. Without this, a
+                            // concurrent stop() can null `recorder` between the null
+                            // check and the isRecording() call, NPEing into the
+                            // outer catch and leaving streaming half-released.
+                            GpuMosaicRecorder rec = recorder;
+                            boolean recordingActive = rec != null && rec.isRecording();
+                            Mode mode = currentMode;
+                            // FIX (sentry-teardown, primary): armed surveillance is a
+                            // keep-alive consumer in its OWN right, independent of
+                            // currentMode. Between motion events sentry does no
+                            // recording (recordingActive=false) and RMM's keepAlive
+                            // predicate has no SURVEILLANCE case, so historically the
+                            // ONLY thing protecting a live sentry from this WS-idle
+                            // auto-stop was mode==SURVEILLANCE. But stopRecording()
+                            // (and the SD-watchdog / storage-type-switch callers that
+                            // invoke it) could desync currentMode to IDLE while the
+                            // engine stayed active — after which a live-view stream's
+                            // 30s idle timeout tore down the whole pipeline out from
+                            // under running surveillance (field log: sentry frame
+                            // arrives 7s before "No recording consumers active").
+                            // Consult the engine's authoritative `active` flag so the
+                            // teardown can never stop an armed sentry regardless of
+                            // what currentMode says.
+                            SurveillanceEngineGpu sen = sentry;
+                            boolean sentryActive = sen != null && sen.isActive();
+                            boolean keepAlive = false;
+                            try {
+                                java.util.concurrent.Callable<Boolean> hook = keepAlivePredicate;
+                                if (hook != null) keepAlive = Boolean.TRUE.equals(hook.call());
+                            } catch (Exception e) {
+                                logger.warn("keepAlive predicate threw: " + e.getMessage());
+                            }
+                            // Keep pipeline running if ANY consumer still needs the camera/encoder:
+                            //   - SURVEILLANCE: motion-triggered recording
+                            //   - NORMAL_RECORDING: continuous / drive-mode recording
+                            //   - active recorder: event recording in flight (proximity, manual)
+                            //   - pending deferred recording: startRecording() before encoder ready
+                            //   - keepAlive hook: PROXIMITY_GUARD MONITORING (radar armed, no
+                            //     recording yet) — without this the pipeline would tear
+                            //     down between trigger windows and the next event would
+                            //     silently no-op against a null recorder.
+                            // FIX (audit R1): use pendingRecordingPrefix, not
+                            // pendingRecordingDir. startRecording(null, "cam") is
+                            // the default-dir CONTINUOUS path — it sets prefix
+                            // but leaves dir null, so the old guard always
+                            // evaluated false and the WS-idle teardown would
+                            // tear the pipeline down out from under a deferred
+                            // recording that hadn't yet landed.
+                            boolean pendingRec = pendingRecordingPrefix != null;
+                            // ESCO-PARITY: dilink4 keeps the pipeline alive
+                            // unconditionally — esco's PanoCameraRecord is
+                            // started at boot and never stopped on stream-
+                            // client idle. The auto-stop here is a legacy
+                            // resource-saving optimisation that breaks the
+                            // "always-on camera for parked preview" model.
+                            boolean dilink4Persistent = false;
+                            try {
+                                dilink4Persistent = app.wheelstop.android.daemon.CameraDaemon
+                                    .isDilink4ModeActiveStatic();
+                            } catch (Throwable ignored) {}
+                            if (dilink4Persistent) {
+                                logger.info("Pipeline kept alive (dilink4 esco-parity — never auto-stop on WS idle)");
+                            } else if (mode == Mode.IDLE && !recordingActive && !pendingRec && !keepAlive && !sentryActive && running) {
+                                logger.info("No recording consumers active - stopping pipeline to save resources");
+                                self.stop();
+                            } else {
+                                logger.info("Pipeline kept alive (mode=" + mode
+                                    + ", recording=" + recordingActive
+                                    + ", pending=" + pendingRec
+                                    + ", keepAlive=" + keepAlive
+                                    + ", sentryActive=" + sentryActive + ")");
+                            }
+                        } catch (Exception e) {
+                            logger.error("Error during idle shutdown", e);
+                        }
+                    }
+                }, "IdleShutdown").start();
+            }
+        });
+        
+        wsStreamServer.start();
+        logger.info("WebSocket server started, setting stream callback...");
+        streamEncoder.setStreamCallback(wsStreamServer);
+
+        // Force an IDR keyframe at session start so the first packet sent to
+        // any WebSocket client is decodable on its own. Without this, the
+        // first NAL after a fresh stream encoder is often a P-frame
+        // referencing an I-frame the client never received → decoders show
+        // one frame and stall until the next GOP boundary (~2 s later).
+        // Field-reported as "subsequent stream sessions show single frame"
+        // after the prior session's stream encoder was torn down by the
+        // WS-idle path.
+        streamEncoder.requestSyncFrame();
+
+        streamingEnabled = true;
+        logger.info("H.264 streaming enabled (WebSocket port 8887)");
+        // Live-view stream now needs the shared camera at >= stream fps. Notify
+        // RMM to floor the global camera fps (covers ALL enable callers — HTTP,
+        // OEM-dashcam, view-mode switches — not just the HTTP handler that also
+        // calls reconcileForExternalConsumerChange).
+        fireStreamStateChanged();
+    }
+    
+    /**
+     * Disables H.264 streaming and releases stream encoder.
+     */
+    public void disableStreaming() {
+        streamLifecycleLock.lock();
+        try {
+            disableStreamingLocked();
+        } finally {
+            streamLifecycleLock.unlock();
+        }
+    }
+
+    private void disableStreamingLocked() {
+        // Held under streamLifecycleLock to prevent two concurrent
+        // disable callers (idle-shutdown thread vs HTTP DELETE /stream
+        // vs stop()) from both passing the gate and double-releasing
+        // scaler/encoder. ReentrantLock semantics keep nesting safe.
+        if (!streamingEnabled) {
+            return;
+        }
+
+        logger.info("Disabling H.264 streaming...");
+        streamingEnabled = false;
+        // Reset the external-source flag here so a future re-enableStreaming
+        // followed by view 0..4 doesn't trip the SPS/PPS-resend storm path
+        // in reattachOwnStreamCallback (the flag was added precisely to
+        // avoid that storm; leaving it stale survives the disable cycle).
+        externalStreamSourceActive = false;
+        
+        // CRITICAL: Clear streaming components from camera FIRST
+        // This prevents render loop from using released surfaces
+        if (camera != null) {
+            camera.clearStreamingComponents();
+        }
+        
+        // Clear stream callback
+        if (streamEncoder != null) {
+            streamEncoder.clearStreamCallback();
+        }
+        
+        // Stop WebSocket server
+        if (wsStreamServer != null) {
+            wsStreamServer.shutdown();
+            wsStreamServer = null;
+        }
+
+        // R8-A #4 ORDERING: null streamScaler/streamEncoder fields FIRST
+        // so a concurrent attachExternalStreamCallbackLocked observes
+        // streamScaler == null (post-CAS) and refuses to install the OEM
+        // publish ref. Pre-fix, we cleared the OEM publish ref BEFORE
+        // nulling the field — that left a TOCTOU window where attach
+        // could pass `streamScaler != liveScaler` (still equal!) and
+        // re-install the publish ref into the about-to-be-released
+        // scaler. Field-null first, publish-clear second, then the GL
+        // Runnable does belt-and-braces re-clear inside the GL thread.
+        final app.wheelstop.android.streaming.GpuStreamScaler scalerRef = streamScaler;
+        final HardwareEventRecorderGpu encoderRef = streamEncoder;
+        streamScaler = null;        // field-null visible to render loop + attach NOW
+        streamEncoder = null;
+
+        // OEM publish ref clear runs AFTER the field-null so any concurrent
+        // attach that captured a non-null scaler reference observes the
+        // streamScaler==null on its re-check and unbinds. Done on the
+        // caller thread because OEM's render loop reads the volatile
+        // reference; once it sees null, no more publishOemTexMatrix calls
+        // touch our scaler.
+        try {
+            app.wheelstop.android.camera.OemDashcamPipeline oem =
+                app.wheelstop.android.daemon.CameraDaemon.getOemDashcamPipeline();
+            if (oem != null) oem.setStreamScalerForOemPublish(null);
+        } catch (Throwable ignored) {}
+
+        // Stream encoder + scaler MUST be torn down ON the GL thread, in
+        // order: scaler.unbindOemSource → scaler.release → encoder.release.
+        // Reasoning: pano's drawFrame on the GL thread reads streamScaler
+        // and pumps frames into streamEncoder.getInputSurface(). If we
+        // released the encoder on the HTTP worker first (the pre-fix
+        // sequence), an in-flight scaler.drawFrame would race against
+        // inputSurface.release() — Adreno would either silently swallow
+        // the swap or crash on EGL_BAD_NATIVE_WINDOW. Folding both into a
+        // single posted Runnable serializes them between two render
+        // iterations.
+        android.os.Handler glHandler = (camera != null) ? camera.getGlHandler() : null;
+        // GL-bound teardown — scaler.unbindOemSource + scaler.release ONLY.
+        // encoder.release is offloaded to the dedicated stream-encoder
+        // executor below so a 3s waitForFinalizers can't pin pano's GL
+        // thread (and therefore frame production) post-disable.
+        if (scalerRef != null && glHandler != null) {
+            final java.util.concurrent.CountDownLatch latch =
+                new java.util.concurrent.CountDownLatch(1);
+            boolean posted = glHandler.post(() -> {
+                try {
+                    // Belt-and-braces: a racy attach that landed between
+                    // pre-post null and this Runnable's run could have
+                    // re-installed the OEM publish ref. Clear it here so
+                    // the OEM render loop can't keep writing into the
+                    // about-to-be-released scaler.
+                    try {
+                        app.wheelstop.android.camera.OemDashcamPipeline oem2 =
+                            app.wheelstop.android.daemon.CameraDaemon.getOemDashcamPipeline();
+                        if (oem2 != null) oem2.setStreamScalerForOemPublish(null);
+                    } catch (Throwable ignored) {}
+                    try { scalerRef.unbindOemSource(); } catch (Throwable ignored) {}
+                    try { scalerRef.release(); } catch (Throwable t) {
+                        logger.warn("scaler release on GL thread: " + t.getMessage());
+                    }
+                    // CRITICAL ORDERING: encoder.release MUST happen AFTER
+                    // scaler.release. The scaler's encoderSurface wraps
+                    // encoder.getInputSurface(); destroying the BufferQueue
+                    // (encoder.release → inputSurface.release) before
+                    // eglDestroySurface on the EGLWindowSurface that
+                    // wrapped it crashes Adreno with EGL_BAD_NATIVE_WINDOW.
+                    // Dispatch the encoder release HERE (inside the GL
+                    // Runnable's finally, after scaler.release returned)
+                    // so order is preserved without pinning the GL thread
+                    // for the 3s waitForFinalizers.
+                    if (encoderRef != null) {
+                        submitEncoderRelease(encoderRef);
+                    }
+                } finally {
+                    latch.countDown();
+                }
+            });
+            if (!posted) {
+                logger.warn("scaler release: GL handler post() rejected; falling back");
+                try { scalerRef.unbindOemSource(); } catch (Throwable ignored) {}
+                try { scalerRef.release(); } catch (Throwable ignored) {}
+                if (encoderRef != null) submitEncoderRelease(encoderRef);
+            } else {
+                try {
+                    // 1000ms ceiling: scaler.release does eglCore.makeCurrent +
+                    // glDeleteProgram + destroySurface + makeNothingCurrent and
+                    // queues encoder.release on the offload exec — all of which
+                    // need to complete on the GL thread before the next
+                    // enableStreaming's init Runnable runs, otherwise the new
+                    // init lands queued behind the old release and the user
+                    // sees a black flash on rapid disable→enable. 200ms was
+                    // shorter than worst-case GL frame stalls observed in V19
+                    // stage timings (~207ms outlier).
+                    if (!latch.await(1000, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                        logger.warn("scaler release on GL thread did not complete within 1000ms");
+                    }
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        } else if (scalerRef != null) {
+            try { scalerRef.unbindOemSource(); } catch (Throwable ignored) {}
+            try { scalerRef.release(); } catch (Throwable ignored) {}
+            if (encoderRef != null) submitEncoderRelease(encoderRef);
+        } else if (encoderRef != null) {
+            // Scaler-less path (initialization aborted before scaler).
+            submitEncoderRelease(encoderRef);
+        }
+
+        logger.info("H.264 streaming disabled");
+
+        // The live-view stream just went away. If it was the only reason the
+        // global camera fps was held up (e.g. above the BS idle rate), the camera
+        // can now drop back. Notify RMM to re-reconcile the profile. This fires on
+        // EVERY disable path — HTTP DELETE /stream AND the WS idle-shutdown
+        // auto-close — so the fps doesn't get stranded at the stream rate when the
+        // HTTP handler isn't the one that closed it. Best-effort, off-thread-safe
+        // (reconcile self-serializes on its own lock).
+        fireStreamStateChanged();
+    }
+
+    /** Notify the registered stream-state listener (RMM camera-profile reconcile)
+     *  that streaming was enabled/disabled, so the global camera fps floor is
+     *  recomputed. Fires from ALL stream enable/disable paths. Never throws into
+     *  the caller. */
+    private void fireStreamStateChanged() {
+        Runnable l = streamStateListener;
+        if (l != null) {
+            try {
+                l.run();
+            } catch (Throwable t) {
+                logger.warn("streamStateListener failed: " + t.getMessage());
+            }
+        }
+    }
+
+    // ── Dedicated blind-spot lane (views 7/8) ────────────────────────────────
+
+    /**
+     * Whether the blind-spot lane is GENUINELY armed — i.e. the {@code
+     * blindSpotEnabled} flag is set AND the SurfaceControl layer it represents is
+     * actually live ({@code bsLayer != null && isCreated()}).
+     *
+     * BLIND_SPOT_004 (false-success): the bare {@code blindSpotEnabled} flag can
+     * transiently lag the layer state — e.g. a SurfaceControl handle lost on a
+     * pano teardown/race can leave the flag {@code true} with a dead/null
+     * {@code bsLayer}. This method is what {@code handleBsStatus} reports as
+     * {@code enabled} and what {@code handleBsView}'s "lane armed?" gate consults.
+     * If it returned the bare flag, the daemon would tell the overlay the lane is
+     * up while no live SurfaceControl layer exists: the overlay commits the view,
+     * STOPS re-driving the warm loop, and its WsH264Client reconnect-storms a dead
+     * port forever (the observed NO-VIDEO flap). Gating on the LIVE layer — the
+     * same liveness predicate enableBlindSpot()'s idempotent fast-path uses — makes
+     * status truthful, so the overlay keeps re-POSTing /api/bs/enable until the
+     * lane genuinely arms. Convergent: no false success, no dead-port loop.
+     */
+    public boolean isBlindSpotEnabled() {
+        app.wheelstop.android.surveillance.BsNativeLayer layer = bsLayer;
+        return blindSpotEnabled && layer != null && layer.isCreated();
+    }
+    public int getBlindSpotViewMode() { return bsViewMode; }
+    /** Whether the BS SurfaceControl layer is currently SHOWN on screen (turn
+     *  signal active / debug preview) and thus PASS 1C is drawing. Distinct from
+     *  isBlindSpotEnabled() (lane armed but possibly hidden). Drives the BS
+     *  idle↔active global-fps ramp in RecordingModeManager. */
+    public boolean isBlindSpotLayerVisible() { return bsLayerVisible; }
+    /** Current on-screen BS layer rect [x,y,w,h] (panel px); -1s if unresolved. */
+    public int[] getBsGeometry() { int[] r = bsGeomRect; return new int[]{r[0], r[1], r[2], r[3]}; }
+
+    /**
+     * Thrown by {@link #enableBlindSpot(int)} when the BS lane cannot arm yet
+     * because the pano pipeline isn't running. This is a TRANSIENT condition
+     * (the API layer is cold-starting pano on a worker thread and the overlay
+     * re-polls), NOT a hard failure — but it MUST surface as a failure to the
+     * caller rather than a silent {@code void} return.
+     *
+     * BLIND_SPOT_004: handleBsEnable() reports {success:true,wsPort:8889}
+     * immediately after enableBlindSpot() returns. Pre-fix, the "pano not
+     * running yet" branch returned void, so the daemon told the overlay the
+     * lane was up while blindSpotEnabled stayed false. The overlay then
+     * committed the view (handleBsView also reported success), stopped
+     * re-driving the warm, and its WsH264Client reconnect-stormed a port 8889
+     * that was never opened. Making this a checked throw routes it into
+     * handleBsEnable()'s {@code catch (Exception e)} → success:false, so the
+     * overlay's confirm loop keeps re-posting /api/bs/enable (re-kicking the
+     * async pano cold-start) until the lane is genuinely live — convergent,
+     * no flap, no false success.
+     */
+    public static class BlindSpotNotReadyException extends Exception {
+        public BlindSpotNotReadyException(String message) { super(message); }
+    }
+
+    /**
+     * Switch the blind-spot lane between view 7 (Rear+Left) and 8 (Right+Rear).
+     * Cheap: just flips the scaler's side sign + view mode; no encoder restart.
+     * Re-applies the saved stitch calibration so the new side looks right.
+     */
+    public void setBlindSpotViewMode(int mode) {
+        if (mode != 7 && mode != 8) return;
+        bsViewMode = mode;
+        // Serialize the bsScaler snapshot + use under bsLifecycleLock so a
+        // concurrent disableBlindSpot() (which holds the same lock while it nulls
+        // bsScaler and posts scalerRef.release()) can't release the scaler between
+        // our snapshot and the setViewMode/calibration calls — that would be a
+        // use-after-release. ReentrantLock makes the enableBlindSpot() caller (which
+        // already holds the lock at the bsViewMode dispatch) re-entrant-safe. These
+        // are CPU-side uniform setters (not GL-thread ops, same as setStreamViewMode),
+        // so holding the lock briefly here can't deadlock against the GL thread.
+        bsLifecycleLock.lock();
+        try {
+            app.wheelstop.android.streaming.GpuStreamScaler s = bsScaler;
+            if (s != null) {
+                s.setViewMode(mode);          // sets side sign internally (7→-1, 8→+1)
+                applyBlindSpotCalibration(s);
+            }
+        } finally {
+            bsLifecycleLock.unlock();
+        }
+    }
+
+    /** Apply the persisted 'blindspot' UCM calibration to a BS scaler. */
+    private void applyBlindSpotCalibration(app.wheelstop.android.streaming.GpuStreamScaler s) {
+        try {
+            app.wheelstop.android.config.UnifiedConfigManager.forceReload();
+            org.json.JSONObject bs = app.wheelstop.android.config.UnifiedConfigManager.getBlindSpot();
+            if (bs != null && bs.length() > 0) {
+                s.setBlindSpotParams(
+                    (float) bs.optDouble("rearFov", 1.66),
+                    (float) bs.optDouble("sideFov", 1.98),
+                    (float) bs.optDouble("yaw",     1.23),
+                    (float) bs.optDouble("roll",    0.25),
+                    (float) bs.optDouble("feather", 0.38),
+                    (float) bs.optDouble("projExp", 1.0), 1.0f,
+                    (float) bs.optDouble("pitch",  -0.275),
+                    (float) bs.optDouble("rearRoll",  0.0),
+                    (float) bs.optDouble("rearPitch", 0.0));
+                // Merge mode (both/side/rear) — re-applied here so it survives an
+                // enable or a side switch, same lifecycle as the stitch calibration.
+                s.setBlindSpotMergeMode(bsMergeModeCode(bs.optString("mergeMode", "both")));
+                // Card clarity (contrast/sharpen) — same lifecycle as the stitch
+                // calibration/merge mode above: re-applied on every enable/resync/
+                // side switch so a config change lands without an ACC cycle.
+                s.setBlindSpotClarity(
+                    app.wheelstop.android.config.UnifiedConfigManager.getBlindSpotContrast(),
+                    app.wheelstop.android.config.UnifiedConfigManager.getBlindSpotSharpen());
+            }
+        } catch (Throwable t) {
+            logger.warn("blindspot calib apply failed: " + t.getMessage());
+        }
+    }
+
+    /**
+     * Enable the dedicated blind-spot lane: a second scaler+encoder (1280×960 @
+     * 15fps) locked to view {@code mode} (7/8), published to the camera render
+     * loop's PASS 1C, streaming H.264 over its own WS server (port {@link #BS_WS_PORT}).
+     * Independent of the live-view stream — does NOT touch streamingEnabled,
+     * streamScaler, streamEncoder, or wsStreamServer. Auto-starts the pipeline
+     * if needed. Idempotent.
+     */
+    public void enableBlindSpot(int mode) throws Exception {
+        bsLifecycleLock.lock();
+        try {
+            if (mode == 7 || mode == 8) bsViewMode = mode;
+            // Double-check locking: a concurrent enableBlindSpot() may have already
+            // finished (blindSpotEnabled) or be mid-flight (bsEnabling) — its
+            // internal init releases this lock around its GL-init wait, so reaching
+            // here under the lock does NOT guarantee no enable is in progress.
+            // Bail in either case so we never double-allocate the lane / re-bind 8889.
+            //
+            // Idempotent fast-path: lane already armed (layer created + scaler
+            // published). Native path has no WS server to go stale, so gate on the
+            // SurfaceControl layer being live.
+            if (blindSpotEnabled && bsLayer != null && bsLayer.isCreated()) {
+                setBlindSpotViewMode(bsViewMode);
+                return;
+            }
+            // BLIND_SPOT_004 (orphan self-heal): blindSpotEnabled is set but the
+            // SurfaceControl layer is dead/null (lost on a pano teardown/race, or a
+            // partial arm that never reached a live layer). The fast-path above
+            // didn't fire because the layer isn't live, but the stale flag would
+            // (a) make isBlindSpotEnabled() lie → false-success masking, and
+            // (b) short-circuit enableBlindSpotInternal()'s top-of-init bail
+            //     (`if (blindSpotEnabled) return;`), so the lane could NEVER rebuild.
+            // Tear the orphan down so this enable proceeds to a clean re-arm.
+            // disableBlindSpot() is idempotent and re-acquires this re-entrant lock.
+            if (blindSpotEnabled && (bsLayer == null || !bsLayer.isCreated())) {
+                logger.warn("BS: stale blindSpotEnabled with dead layer — "
+                    + "tearing down orphan before re-arm");
+                disableBlindSpot();
+            }
+            if (bsEnabling) {
+                logger.info("BS: enable already in flight — skipping duplicate enable");
+                return;
+            }
+            // Symmetric to enableCamView's defer: if a CAMERA-VIEW build is in flight
+            // (camViewEnabling, lock released around its GL-init wait), do NOT ride it.
+            // If that camview build fails, BS adopting its half-built unpublished
+            // scaler would leave blindSpotEnabled=true with a dead lane (black BS card).
+            // Defer via the NotReady throw so handleBsEnable re-polls; by then the
+            // camview build has resolved (published → adopt cleanly, or failed →
+            // released) and this enable takes a deterministic path.
+            if (camViewEnabling) {
+                logger.info("BS: camera-view lane build in flight — deferring (caller re-polls)");
+                throw new BlindSpotNotReadyException(
+                    "blind-spot deferred — a camera-view lane build is in flight");
+            }
+            // Do NOT cold-start the pano pipeline from here. The BS lane is a
+            // CONSUMER of an already-running pano (it fans a 2nd scaler+encoder off
+            // pano's camera texture). Starting pano here — while the daemon is
+            // booting and the overlay POSTs /api/bs/enable every 250ms — raced a
+            // 2nd encoder creation against pano's own encoder init and crashed the
+            // daemon at startup ("recursive attempt to load libmedia_jni.so").
+            // handleBsEnable() owns cold-start via ensurePanoStartedNonBlocking();
+            // we just defer until pano is genuinely up, and the overlay re-polls.
+            //
+            // BLIND_SPOT_004: this MUST throw, not return void. A void return is
+            // indistinguishable from success to handleBsEnable() (it only catches
+            // exceptions), so the daemon would report {success:true,wsPort:8889}
+            // while blindSpotEnabled stays false — the overlay then commits the
+            // view, stops re-warming, and its WsH264Client reconnect-storms a
+            // port 8889 that was never opened. Throwing routes this into
+            // handleBsEnable()'s catch → success:false, so the overlay's confirm
+            // loop keeps re-posting /api/bs/enable (re-kicking pano cold-start)
+            // until the lane is live. Convergent: no flap, no false success.
+            if (!running || camera == null || camera.getGlHandler() == null) {
+                logger.warn("BS: pano not running yet — enable deferred (caller must re-poll)");
+                throw new BlindSpotNotReadyException(
+                    "blind-spot lane cannot arm — pano pipeline not running yet");
+            }
+            bsEnabling = true;
+            try {
+                enableBlindSpotInternal();
+            } finally {
+                bsEnabling = false;
+            }
+            // Gate success on the lane ACTUALLY being armed. enableBlindSpotInternal()
+            // sets blindSpotEnabled=true only on full success (encoder+scaler+WS 8889
+            // up); its concurrent-already-enabled bail also leaves blindSpotEnabled
+            // true. So if it's still false here, the lane did NOT come up — surface
+            // that as a failure rather than letting handleBsEnable() report
+            // success:true against a dead 8889 (BLIND_SPOT_004 again, from the
+            // internal-init side). The overlay re-polls until it's genuinely live.
+            if (!blindSpotEnabled) {
+                logger.warn("BS: enableBlindSpotInternal returned but lane not armed "
+                    + "(blindSpotEnabled=false) — reporting failure so caller re-polls");
+                throw new BlindSpotNotReadyException(
+                    "blind-spot lane not running after enable attempt");
+            }
+        } finally {
+            bsLifecycleLock.unlock();
+        }
+    }
+
+    private void enableBlindSpotInternal() throws Exception {
+        logger.info(String.format("BS: enabling NATIVE blind-spot lane %dx%d, view=%d",
+            BS_WIDTH, BS_HEIGHT, bsViewMode));
+
+        // Build (or reuse) the single shared native lane. buildSharedLaneLocked returns
+        // false when the lane already exists — which now has TWO causes:
+        //   (a) a concurrent enableBlindSpot already armed BS (blindSpotEnabled==true), OR
+        //   (b) the CAMERA-VIEW program built the lane first (blindSpotEnabled==false).
+        // Only (a) is a genuine duplicate-init to bail on. In case (b) we MUST still
+        // ADOPT the lane for blind-spot — configure the BS program + set blindSpotEnabled
+        // — otherwise BS could never arm while a camera-view holds the lane, silently
+        // defeating blind-spot PRIORITY. So bail ONLY when BS is already enabled; a
+        // false return with blindSpotEnabled==false means "lane reused, proceed".
+        buildSharedLaneLocked();
+        if (blindSpotEnabled) {
+            logger.info("BS: already enabled by concurrent call — skipping duplicate init");
+            return;
+        }
+        if (bsScaler == null || bsLayer == null || !bsLayer.isCreated()) {
+            // Defensive: build neither created nor found a live lane (should have thrown).
+            throw new IllegalStateException("BS: shared lane not live after build");
+        }
+
+        // Lock the scaler to the blind-spot view + apply calibration.
+        bsScaler.setViewMode(bsViewMode);
+        applyBlindSpotCalibration(bsScaler);
+
+        // Resolve on-screen geometry (config or default) and position the layer.
+        // It stays HIDDEN until the turn-trigger / debug-preview shows it.
+        // BS-ENABLE-004: position WITHOUT showing (single hidden-arm transaction)
+        // to avoid a show-then-hide one-frame flash of an unrendered SC layer.
+        resolveBsGeometry();
+        if (bsLayer != null) {
+            int[] g0 = bsGeomRect;
+            if (bsLayerVisible) bsLayer.setGeometry(g0[0], g0[1], g0[2], g0[3]);
+            else bsLayer.setGeometryHidden(g0[0], g0[1], g0[2], g0[3]);
+        }
+
+        // Blind-spot PRIORITY: if a camera-view was using the lane, BS now takes full
+        // ownership. Release camview's sustained "camview" cluster token here (BS
+        // manages the projection via its own transient path) and clear camViewActive —
+        // otherwise, because we set laneProgram=PROG_BS directly below, the arbiter's
+        // laneProgram!=PROG_BS releaseSustained("camview") block never runs and the
+        // "camview" token would orphan (projection pinned, gauges blanked, max-cap
+        // disarmed) while camview sits masked behind BS priority. Idempotent no-ops
+        // when camview was never active. camViewActive=false means a later
+        // disableBlindSpot won't wrongly "retain the lane for camview"; the user
+        // re-issues /api/camview/show if they still want it after BS turns off.
+        if (camViewActive) {
+            try { app.wheelstop.android.surveillance.ClusterProjectionController.getInstance().releaseSustained("camview"); } catch (Throwable ignored) {}
+            camViewActive = false;
+            camViewHideAtMs = 0L;
+            logger.info("BS: took lane ownership from camera-view (priority)");
+            // The camera view is gone (BS stole the lane) but this path does NOT go
+            // through disableCamView(), so tell the app-side ✕ overlay it's closed —
+            // otherwise the floating close button would sit orphaned over the blind-spot
+            // view. emitCamViewState only spawns a detached `am broadcast` (no lock, no
+            // block), so it's safe to call inline here under bsLifecycleLock.
+            emitCamViewState(false, null);
+        }
+
+        blindSpotEnabled = true;
+        // The lane is now configured for the blind-spot program (view 7/8 + calib).
+        laneProgram = PROG_BS;
+        startBsTurnLoop();   // daemon-side show/hide + side-switch (no app process)
+        logger.info("BS: NATIVE blind-spot lane enabled (SurfaceControl layer)");
+    }
+
+    /**
+     * Build the single shared native on-screen lane (SurfaceControl layer + scaler
+     * + EGLSurface wrapping the layer's Surface + PASS-1C publish) IF it is not
+     * already up. Idempotent and shared by BOTH the blind-spot and camera-view
+     * programs (Option A: one lane, two programs). Extracted verbatim from the
+     * former enableBlindSpotInternal body so the shipping blind-spot path is
+     * byte-identical — the ONLY change is that program-specific config (view mode,
+     * calibration, geometry) moved to the callers, and the "already built" bail is
+     * generalized from `blindSpotEnabled` to "the lane's SurfaceControl layer is
+     * live" so whichever program armed first is respected.
+     *
+     * <p>MUST be called holding {@link #bsLifecycleLock}. Releases the lock only
+     * around the GL-init wait (restored before returning), exactly as before.
+     *
+     * @return true if the lane is now built and this caller should proceed to
+     *         configure its program; false if a concurrent call already built it
+     *         (the caller should bail its init — the lane is shared, not rebuilt).
+     * @throws Exception on a genuine build failure (layer create / GL init).
+     */
+    private boolean buildSharedLaneLocked() throws Exception {
+        // Fast path: the lane already exists (built by the other program or a prior
+        // enable). Reuse it — never allocate a second scaler/layer/EGLSurface.
+        if (bsLayer != null && bsLayer.isCreated() && bsScaler != null) {
+            return false;
+        }
+
+        // Own SurfaceControl layer (GPU → screen, no encoder/WS/decoder).
+        bsLayer = new app.wheelstop.android.surveillance.BsNativeLayer(BS_WIDTH, BS_HEIGHT);
+        if (!bsLayer.create()) {
+            bsLayer = null;
+            throw new RuntimeException("BS: SurfaceControl layer create failed");
+        }
+
+        // Own scaler — same per-role offsets as the live stream so the stitch
+        // matches the recorder's camera arrangement.
+        app.wheelstop.android.camera.ResolvedCameraConfig cfg =
+            app.wheelstop.android.camera.CameraConfigResolver.resolve(getVehicleModel());
+        bsScaler = new app.wheelstop.android.streaming.GpuStreamScaler(
+            BS_WIDTH, BS_HEIGHT, cfg.getQuadrantStripOffsetX());
+
+        // BS-LIFECYCLE-1: from here on, bsScaler+bsLayer are assigned to the
+        // instance fields and a GL EGLWindowSurface gets created wrapping the SC
+        // layer Surface. Any failure/race below (GL-init timeout/throw, or a
+        // concurrent stop() flipping running=false during the lock-released wait)
+        // must NOT leak them — disableBlindSpot returns early on !blindSpotEnabled
+        // and a subsequent enable overwrites the fields, orphaning the old layer +
+        // dangling EGLSurface. Wrap the rest in try/catch → releasePartialBsLane.
+        try {
+        // libod host-authorization (same context fallback as the stream lane).
+        try {
+            android.content.Context odCtx = savedContext;
+            if (odCtx == null) odCtx = app.wheelstop.android.daemon.CameraDaemon.getAppContext();
+            if (odCtx != null) app.wheelstop.android.blindspot.BsCoefficients.authorize(odCtx);
+        } catch (Throwable t) {
+            logger.warn("BS: od init failed: " + t.getMessage());
+        }
+
+        boolean escoPath = (camera != null && camera.isUsingEscoSurfaceTexturePath());
+        bsScaler.setCameraLayout(escoPath ? 3 : 0);
+        if (escoPath) {
+            bsScaler.setProducerLayout(
+                app.wheelstop.android.camera.Dilink4Constants.CORNER_FRONT,
+                app.wheelstop.android.camera.Dilink4Constants.CORNER_RIGHT,
+                app.wheelstop.android.camera.Dilink4Constants.CORNER_REAR,
+                app.wheelstop.android.camera.Dilink4Constants.CORNER_LEFT,
+                app.wheelstop.android.camera.Dilink4Constants.FLIP_FRONT,
+                app.wheelstop.android.camera.Dilink4Constants.FLIP_RIGHT,
+                app.wheelstop.android.camera.Dilink4Constants.FLIP_REAR,
+                app.wheelstop.android.camera.Dilink4Constants.FLIP_LEFT);
+        }
+
+        // GL-thread init + WAIT (captured locals, same rationale as the stream lane).
+        // The scaler renders into the SurfaceControl layer's Surface (wrapped in an
+        // EGLSurface on the GL thread) instead of an encoder input surface.
+        final app.wheelstop.android.streaming.GpuStreamScaler scalerLocal = bsScaler;
+        final android.view.Surface layerSurfaceLocal = bsLayer.getSurface();
+        final app.wheelstop.android.camera.EGLCore eglCoreLocal = camera.getEglCore();
+        final Object initLock = new Object();
+        final boolean[] initDone = {false};
+        final Exception[] initError = {null};
+        camera.getGlHandler().post(() -> {
+            try {
+                scalerLocal.initWithSurface(eglCoreLocal, layerSurfaceLocal);
+            } catch (Exception e) {
+                initError[0] = e;
+            } finally {
+                synchronized (initLock) { initDone[0] = true; initLock.notify(); }
+            }
+        });
+        boolean lockHeld = bsLifecycleLock.isHeldByCurrentThread();
+        if (lockHeld) bsLifecycleLock.unlock();
+        try {
+            synchronized (initLock) { if (!initDone[0]) initLock.wait(2000); }
+        } finally {
+            if (lockHeld) bsLifecycleLock.lock();
+        }
+        if (!initDone[0]) throw new RuntimeException("BS: scaler init timed out");
+        if (initError[0] != null) throw new RuntimeException("BS: scaler init failed", initError[0]);
+        // Post-wait viability re-check: bsLifecycleLock was released around the
+        // GL-init wait above. The bsEnabling/camViewEnabling guards set by the enable
+        // callers under the lock bar any concurrent enable from entering here while we
+        // wait, so simultaneous in-flight double-init can no longer happen. If a
+        // concurrent call nonetheless already published a live lane, bail idempotently
+        // on reacquire (do NOT release our scalerLocal — the fields may already point
+        // at the published objects; teardown belongs to the single owning lifecycle).
+        if (bsLayer != null && bsLayer.isCreated() && bsScaler != null && (blindSpotEnabled || camViewActive)) {
+            // Another program finished arming during our wait — but only bail if OUR
+            // freshly-built objects were superseded. Since we assigned bsLayer/bsScaler
+            // at the top of THIS call, they are the live ones unless overwritten; the
+            // enable guards prevent that, so proceeding is safe. Kept as belt-and-braces
+            // parity with the former BS-only recheck.
+        }
+        if (!running || camera == null || camera.getGlHandler() == null) {
+            throw new IllegalStateException("BS: pipeline torn down during init wait");
+        }
+
+        // Publish to the render loop's PASS 1C (no encoder on the native path —
+        // PASS 1C skips drainEncoder when the encoder is null).
+        camera.setBsStreamingComponents(bsScaler, null);
+        return true;
+        } catch (Throwable t) {
+            // BS-LIFECYCLE-1: release the partially-built lane in the correct
+            // order (scaler.release destroys the EGLSurface on the GL thread
+            // BEFORE the SC layer's backing Surface is released) so a failed/raced
+            // enable never orphans a SurfaceControl handle + dangling EGLSurface.
+            // Only release if NEITHER program is live (a concurrent success must not
+            // have its lane freed underneath it).
+            if (!blindSpotEnabled && !camViewActive) releasePartialBsLane();
+            if (t instanceof Exception) throw (Exception) t;
+            throw new RuntimeException(t);
+        }
+    }
+
+    /** Release a partially-built BS lane (scaler EGLSurface first on the GL
+     *  thread, then the SC layer) — used by enableBlindSpotInternal's failure
+     *  path so a throw/race never leaks GL/SurfaceControl resources. */
+    private void releasePartialBsLane() {
+        final app.wheelstop.android.streaming.GpuStreamScaler scalerRef = bsScaler;
+        final app.wheelstop.android.surveillance.BsNativeLayer layerRef = bsLayer;
+        bsScaler = null;
+        bsLayer = null;
+        try { if (camera != null) camera.clearBsStreamingComponents(); } catch (Throwable ignored) {}
+        android.os.Handler glHandler = (camera != null) ? camera.getGlHandler() : null;
+        if (scalerRef != null && glHandler != null) {
+            final java.util.concurrent.CountDownLatch latch =
+                new java.util.concurrent.CountDownLatch(1);
+            boolean posted = glHandler.post(() -> {
+                try { scalerRef.release(); } catch (Throwable ignored) {} finally { latch.countDown(); }
+            });
+            if (posted) {
+                try { latch.await(1000, java.util.concurrent.TimeUnit.MILLISECONDS); }
+                catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+            } else {
+                try { scalerRef.release(); } catch (Throwable ignored) {}
+            }
+        } else if (scalerRef != null) {
+            try { scalerRef.release(); } catch (Throwable ignored) {}
+        }
+        if (layerRef != null) { try { layerRef.release(); } catch (Throwable ignored) {} }
+    }
+
+    /** Resolve the on-screen rect for the BS layer against the LIVE panel.
+     *  Prefers the orientation-safe preset (sizePct + corner) so the card is
+     *  recomputed correctly for whatever orientation the panel is in right now;
+     *  falls back to a legacy absolute {x,y,w,h} if that's what's stored, then to
+     *  a default top-right card. Records the panel size for rotation detection. */
+    private void resolveBsGeometry() {
+        try {
+            android.content.Context ctx = savedContext;
+            if (ctx == null) ctx = app.wheelstop.android.daemon.CameraDaemon.getAppContext();
+
+            org.json.JSONObject bs = app.wheelstop.android.config.UnifiedConfigManager.getBlindSpot();
+            // Resolve the display target FIRST so panel + geometry-key pick the
+            // right display. Default head_unit = byte-for-byte the shipping path.
+            bsTarget = (bs != null) ? bs.optString("target", "head_unit") : "head_unit";
+            // Resolve the on-screen card rotation. Only the single-view modes
+            // (side/rear) may rotate; the merged panorama stays landscape. This makes
+            // the effective rotation self-correcting when the user switches back to
+            // "both" without having to clear the stored angle.
+            bsRotationDeg = resolveBsRotation(bs);
+
+            android.graphics.Point panel = (ctx != null)
+                ? panelForTarget(ctx)
+                : new android.graphics.Point(1920, isClusterTarget() ? 720 : 1080);
+            bsLastPanelW = panel.x; bsLastPanelH = panel.y;
+
+            // Per-target geometry: head_unit reads the existing "geometry" key
+            // unchanged; cluster reads its own "geometryCluster" sibling key.
+            String geomKey = isClusterTarget() ? "geometryCluster" : "geometry";
+            org.json.JSONObject g = (bs != null) ? bs.optJSONObject(geomKey) : null;
+
+            // BS-GEO-1/5: decide preset-vs-absolute by WHAT IS PERSISTED, not by
+            // the bsSizePct field default (which is always >0, making presetRect
+            // never-null and the absolute branch dead — silently snapping a user's
+            // absolute /api/bs/geometry back to the 40%/tr preset on every re-enable).
+            int[] r;
+            if (g != null && g.has("sizePct")) {
+                // Preset form (orientation-safe): recompute px from the live panel.
+                bsSizePct = g.optInt("sizePct", bsSizePct);
+                if (g.has("corner")) bsCorner = g.optString("corner", bsCorner);
+                r = presetRect(panel);
+            } else if (g != null && g.has("x") && g.has("w")) {
+                // Absolute form: honour the stored rect, clamped to the live panel.
+                r = clampBsRect(g.optInt("x"), g.optInt("y"), g.optInt("w"), g.optInt("h"));
+            } else {
+                // Nothing persisted → target-aware default card, 4:3, top-right.
+                // Cluster default = 0.80 (matches web bsSizePctCluster=80; the short
+                // 1920×720 cluster is why the head-unit 0.40 is widened). clampBsRect
+                // keeps 4:3 + fits the panel height, so an 80% cluster card is safely
+                // height-limited rather than overflowing.
+                double defFrac = isClusterTarget() ? 0.80 : 0.40;
+                int defW = Math.max(320, (int) (panel.x * defFrac));
+                int defH = (int) (defW * (double) BS_HEIGHT / BS_WIDTH);
+                r = clampBsRect(panel.x - defW - 24, 24, defW, defH);
+            }
+            if (r == null) {   // presetRect defensive null
+                double defFrac = isClusterTarget() ? 0.80 : 0.40;
+                int defW = Math.max(320, (int) (panel.x * defFrac));
+                int defH = (int) (defW * (double) BS_HEIGHT / BS_WIDTH);
+                r = clampBsRect(panel.x - defW - 24, 24, defW, defH);
+            } else {
+                r = clampBsRect(r[0], r[1], r[2], r[3]);
+            }
+            bsGeomRect = new int[]{r[0], r[1], r[2], r[3]};   // atomic publish
+            // Push the resolved rotation onto the layer so the setGeometry calls that
+            // follow (enable / show / retarget) composite the buffer at the right
+            // angle. Cheap store; the rect above already matches the rotated aspect.
+            app.wheelstop.android.surveillance.BsNativeLayer layer = bsLayer;
+            if (layer != null) layer.setBufferRotation(bsRotationDeg);
+        } catch (Throwable t) {
+            logger.warn("resolveBsGeometry failed: " + t.getMessage());
+            if (bsGeomRect[2] <= 0) bsGeomRect = new int[]{24, 24, 640, 480};
+        }
+    }
+
+    /** Resolve the effective on-screen card rotation from the blindspot config.
+     *  Rotation is honoured ONLY for the single-view merge modes (side/rear); the
+     *  merged "both" panorama is inherently landscape and always renders upright.
+     *
+     *  <p>The stored {@code rotation} is either a fixed quarter turn (int
+     *  0/90/180/270) or the string {@code "auto"}. In AUTO mode the on-screen angle
+     *  tracks the DIRECTION OF TRAVEL: it holds the configured base angle
+     *  ({@code rotationBase}) while moving forward and flips 180° in reverse gear,
+     *  so the view reads naturally when backing up. Gear is read live from the
+     *  daemon-local {@link app.wheelstop.android.monitor.GearMonitor} (5 Hz), so no
+     *  cross-process hop is involved. Any non-multiple-of-90 value is snapped to the
+     *  nearest quarter turn. */
+    private int resolveBsRotation(org.json.JSONObject bs) {
+        if (bs == null) return 0;
+        String merge = bs.optString("mergeMode", "both");
+        if (!"side".equals(merge) && !"rear".equals(merge)) return 0;
+        Object rotVal = bs.opt("rotation");
+        if (rotVal instanceof String && "auto".equalsIgnoreCase((String) rotVal)) {
+            int base = snapDeg(bs.optInt("rotationBase", 0));
+            boolean reverse = false;
+            try {
+                reverse = app.wheelstop.android.monitor.GearMonitor.getInstance().getCurrentGear()
+                        == app.wheelstop.android.monitor.GearMonitor.GEAR_R;
+            } catch (Throwable ignored) {}
+            return reverse ? (base + 180) % 360 : base;
+        }
+        return snapDeg(bs.optInt("rotation", 0));
+    }
+
+    /** Normalise an angle into {0,90,180,270} (mod 360, nearest quarter turn). */
+    private static int snapDeg(int deg) {
+        deg = ((deg % 360) + 360) % 360;
+        return (Math.round(deg / 90f) * 90) % 360;
+    }
+
+    /** Update the on-screen geometry live (from /api/bs/geometry / settings UI).
+     *  Resize is a pure SurfaceControl scale transaction (the 1280×960 buffer is
+     *  scaled into the dest rect) — no GL re-init, no reallocation, stable. Clamps
+     *  into the panel + a sane min size so any caller is safe. Applied live only
+     *  when shown; a hidden layer picks up the new rect on its next show. */
+    public void setBsGeometry(int x, int y, int w, int h) {
+        int[] r = clampBsRect(x, y, w, h);
+        bsGeomRect = new int[]{r[0], r[1], r[2], r[3]};   // atomic publish
+        app.wheelstop.android.surveillance.BsNativeLayer layer = bsLayer;
+        if (layer != null && layer.isCreated() && bsLayerVisible) {
+            layer.setGeometry(r[0], r[1], r[2], r[3]);
+        }
+    }
+
+    /** Set on-screen geometry from a size%+corner preset for the CURRENT target. */
+    public void setBsGeometryPreset(int pct, String corner) {
+        setBsGeometryPreset(pct, corner, bsTarget);
+    }
+
+    /** Set on-screen geometry from a size%+corner preset (the daemon does the
+     *  panel math — the web UI doesn't know the real panel size). Width = pct% of
+     *  panel width, height keeps the BS 4:3 aspect, inset 24px from the chosen
+     *  corner (tl/tr/bl/br). Persists to the TARGET's geometry key (geometry vs
+     *  geometryCluster) + applies live only when that target is active. */
+    public void setBsGeometryPreset(int pct, String corner, String target) {
+        try {
+            boolean cluster = "cluster".equals(target);
+            android.content.Context ctx = savedContext;
+            if (ctx == null) ctx = app.wheelstop.android.daemon.CameraDaemon.getAppContext();
+            android.graphics.Point panel = (ctx != null)
+                ? (cluster ? app.wheelstop.android.surveillance.BsNativeLayer.clusterDisplaySize(ctx)
+                           : app.wheelstop.android.surveillance.BsNativeLayer.displaySize(ctx))
+                : new android.graphics.Point(1920, cluster ? 720 : 1080);
+            int p = Math.max(15, Math.min(pct, 90));
+            int w = (int) (panel.x * (p / 100.0));
+            int h = (int) (w * (double) BS_HEIGHT / BS_WIDTH);
+            int inset = 24;
+            int x, y;
+            if ("center".equals(corner)) {
+                x = (panel.x - w) / 2; y = (panel.y - h) / 2;
+            } else {
+                boolean right = corner == null || corner.endsWith("r");
+                boolean bottom = corner != null && corner.startsWith("b");
+                x = right ? panel.x - w - inset : inset;
+                y = bottom ? panel.y - h - inset : inset;
+            }
+            // Persist the PRESET (sizePct + corner) under the target's key — NOT
+            // absolute px — so it stays correct across rotation. resolveBsGeometry()
+            // recomputes the px rect from the LIVE target panel on enable + rotation.
+            // updateSection is a shallow per-key merge, so writing one geometry key
+            // never clobbers the other target's key.
+            String geomKey = cluster ? "geometryCluster" : "geometry";
+            org.json.JSONObject g = new org.json.JSONObject();
+            g.put("sizePct", p); g.put("corner", (corner != null) ? corner : "tr");
+            app.wheelstop.android.config.UnifiedConfigManager.updateSection("blindspot",
+                new org.json.JSONObject().put(geomKey, g));
+            // Apply live only if editing the active target; otherwise it's persisted
+            // for when that target is next selected.
+            if (cluster == isClusterTarget()) {
+                bsSizePct = p;
+                bsCorner = (corner != null) ? corner : "tr";
+                setBsGeometry(x, y, w, h);
+            }
+        } catch (Throwable t) {
+            logger.warn("setBsGeometryPreset failed: " + t.getMessage());
+        }
+    }
+
+    /** True when the blind-spot display target is the driver cluster. */
+    private boolean isClusterTarget() { return "cluster".equals(bsTarget); }
+
+    /** The panel size of the active target (head-unit vs cluster). The cluster
+     *  metrics are only valid while an OEM projection is open; otherwise
+     *  clusterDisplaySize falls back to the fixed 1920×720. */
+    private android.graphics.Point panelForTarget(android.content.Context ctx) {
+        return isClusterTarget()
+            ? app.wheelstop.android.surveillance.BsNativeLayer.clusterDisplaySize(ctx)
+            : app.wheelstop.android.surveillance.BsNativeLayer.displaySize(ctx);
+    }
+
+    /** Recompute the px rect from the current size%/corner preset + LIVE panel.
+     *  Called on enable and on orientation change so the card stays correctly
+     *  placed in both portrait and landscape. Returns [x,y,w,h] or null. */
+    private int[] presetRect(android.graphics.Point panel) {
+        if (bsSizePct <= 0) return null;
+        int p = Math.max(15, Math.min(bsSizePct, 90));
+        int w = (int) (panel.x * (p / 100.0));
+        // The dest rect handed to setGeometry must keep the SOURCE buffer's 4:3 aspect
+        // for EVERY rotation. Android's Transaction.setGeometry computes the scale from
+        // the UN-swapped source dims (xScale=dstW/1280, yScale=dstH/960) and rotates the
+        // result AFTER scaling, so square (undistorted) pixels require dstW/dstH ==
+        // 1280/960. A 3:4 dst at a quarter turn makes xScale != yScale (~1.78x) => the
+        // anamorphic stretch that was the "distorted when rotated" half of issue #164.
+        // (Native then rotates the 4:3-scaled buffer; the card's VISIBLE footprint is
+        // portrait — that is the post-scale rotation, not the scale reference.)
+        int h = (int) (w * (double) BS_HEIGHT / BS_WIDTH);
+        int inset = 24;
+        String corner = (bsCorner != null) ? bsCorner : "tr";
+        if ("center".equals(corner)) {
+            return new int[]{ (panel.x - w) / 2, (panel.y - h) / 2, w, h };
+        }
+        boolean right = corner.endsWith("r");
+        boolean bottom = corner.startsWith("b");
+        int x = right ? panel.x - w - inset : inset;
+        int y = bottom ? panel.y - h - inset : inset;
+        return new int[]{x, y, w, h};
+    }
+
+    /** Clamp a requested rect into the current TARGET panel with a min card size. */
+    private int[] clampBsRect(int x, int y, int w, int h) {
+        try {
+            android.content.Context ctx = savedContext;
+            if (ctx == null) ctx = app.wheelstop.android.daemon.CameraDaemon.getAppContext();
+            android.graphics.Point panel = (ctx != null)
+                ? panelForTarget(ctx)
+                : new android.graphics.Point(1920, isClusterTarget() ? 720 : 1080);
+            w = Math.max(160, Math.min(w, panel.x));
+            h = Math.max(120, Math.min(h, panel.y));
+            // BS-GEO-4: keep the dest rect at the BS buffer's baked 4:3 aspect for ALL
+            // rotations so the SurfaceControl scale stays UNIFORM — the rounded corners
+            // are baked into the fixed 1280×960 buffer at 4:3, so a mismatched dest
+            // scales the circular corners into ellipses. Android's setGeometry computes
+            // the scale from the UN-swapped source dims and rotates AFTER scaling, so a
+            // uniform (undistorted) rotation needs dstW/dstH == 1280/960 REGARDLESS of
+            // the angle — a 3:4 dest at 90/270 gives xScale != yScale (~1.78x squish),
+            // the distortion half of issue #164. So NO per-angle aspect swap here.
+            double want = (double) BS_WIDTH / BS_HEIGHT;   // 4:3, all rotations
+            if ((double) w / h > want) w = (int) (h * want);
+            else                       h = (int) (w / want);
+            x = Math.max(0, Math.min(x, panel.x - w));
+            y = Math.max(0, Math.min(y, panel.y - h));
+        } catch (Throwable ignored) {
+            w = Math.max(160, w); h = Math.max(120, h);
+            x = Math.max(0, x); y = Math.max(0, y);
+        }
+        return new int[]{x, y, w, h};
+    }
+
+    /** Show/hide the BS layer (turn-trigger / debug-preview gate). */
+    public void setBlindSpotVisible(boolean visible) {
+        bsLayerVisible = visible;
+        app.wheelstop.android.camera.PanoramicCameraGpu cam = camera;
+        if (cam != null) cam.setBsLayerVisible(visible);
+        // Ramp global camera fps when BS is the sole consumer (edge-detected).
+        fireBsVisibilityChanged();
+        app.wheelstop.android.surveillance.BsNativeLayer layer = bsLayer;
+        if (layer == null || !layer.isCreated()) return;
+        if (visible) {
+            // Retarget to the cluster's layerStack before showing (no-op if already
+            // there). Head-unit keeps layerStack 0 (never calls setLayerStack with a
+            // changed value → identical transaction). The show only happens via the
+            // gated path in bsTurnTick when the cluster display is actually present.
+            layer.setLayerStack(isClusterTarget() ? bsClusterStack : 0);
+            int[] g = bsGeomRect; layer.setGeometry(g[0], g[1], g[2], g[3]);
+        } else {
+            layer.hide();
+        }
+    }
+
+    /** Current BS display target string for API/status ("head_unit"|"cluster"). */
+    public String getBsTargetString() { return bsTarget; }
+
+    /** Invoked by ClusterProjectionController when the cluster projection CLOSES
+     *  (linger / max-cap / disarm / any forceClose). Hide the BS layer + drop the
+     *  render gate so PASS 1C stops drawing — otherwise the gate stays ON after the
+     *  projection's display is gone and the GL pipeline keeps rendering at full rate
+     *  into an orphaned layer (the "GPU stays high after the turn signal stops" bug).
+     *  No-op for head-unit (this is only wired to the cluster lifecycle). */
+    public void onClusterProjectionClosed() {
+        // SHOW-AFTER-CLOSE GUARD (I6/I7): serialize the hide against the show
+        // (clusterShowWhenReady / onClusterProjectionReady) on bsLifecycleLock so the
+        // close-hide and a racing present-edge show are MUTUALLY EXCLUSIVE — they can
+        // no longer interleave (hide landing between the show's isOpen() re-check and
+        // its setGeometry, which would strand the layer shown after close). Whichever
+        // wins the lock, the loser observes the authoritative state. Reentrant with
+        // disableBlindSpot (holds this lock when it calls forceClose→notifyPipelineClosed).
+        bsLifecycleLock.lock();
+        try {
+            // GPU fix ONLY: drop the render gate so PASS 1C stops drawing once the
+            // projection's display is gone. Do the SAME as a turn-off: hide the layer
+            // + clear the visible intent. (setBlindSpotVisible(false) is just
+            // layer.hide() + gate off — no teardown, pipeline stays warm.)
+            bsLayerVisible = false;
+            app.wheelstop.android.camera.PanoramicCameraGpu cam = camera;
+            if (cam != null) cam.setBsLayerVisible(false);
+            fireBsVisibilityChanged();   // drop global fps if BS is sole consumer
+            // INCREMENTING-STACK FIX: the fission VirtualDisplay is destroyed on this
+            // close; its layerStack is now dead and the NEXT open gets a new (higher)
+            // one. Clear the cached stack so clusterLayerStack(bsClusterStack)'s
+            // fallback path (fission block seen but stack unparsed) can never carry a
+            // value from a destroyed lower stack into the next open — it returns
+            // STACK_UNRESOLVED instead, so clusterShowWhenReady defers rather than
+            // tagging the layer onto a dead stack. The next onClusterProjectionReady
+            // re-resolves the live stack fresh. Guarded by bsLifecycleLock (same lock
+            // serializing the show path); bsClusterStack is volatile.
+            bsClusterStack = app.wheelstop.android.surveillance.BsNativeLayer.STACK_UNRESOLVED;
+            app.wheelstop.android.surveillance.BsNativeLayer layer = bsLayer;
+            if (layer != null && layer.isCreated()) layer.hide();
+        } catch (Throwable t) {
+            logger.warn("onClusterProjectionClosed failed: " + t.getMessage());
+        } finally {
+            bsLifecycleLock.unlock();
+        }
+    }
+
+    /** Invoked by ClusterProjectionController once the OEM cluster projection is
+     *  open AND the cluster VirtualDisplay is present. Resolve the live layerStack
+     *  (changes per size profile: 30→stack 1, 31→stack 2) + geometry against the
+     *  real cluster panel, then show the card if a signal is currently active.
+     *  SIMPLE direct show (the known-working path) — accepts a brief stale-frame on
+     *  re-show as a minor cosmetic issue rather than the warm-reveal indirection
+     *  that regressed to no-video. */
+    /** Drive the cluster card to VISIBLE while a projection is open. Idempotent +
+     *  desync-proof: it unconditionally asserts the camera render gate ON (cheap
+     *  volatile write — fixes the "gate stuck off after a close, layer shown=true,
+     *  nothing draws = no video" desync) and applies geometry only when not already
+     *  shown (the one expensive transaction). Called every tick while intent=visible
+     *  AND the projection is ready. Cluster-only. */
+    private void clusterShowWhenReady() {
+        // USE-AFTER-RELEASE FIX: serialize the whole bsLayer snapshot + use against
+        // disableBlindSpot's teardown (which nulls + releases bsLayer under this same
+        // lock). Without it, a present-edge re-notify on projThread can read bsLayer
+        // non-null here, then disableBlindSpot can null + release it on another thread
+        // before this method reaches setLayerStack/setGeometry — operating on (and
+        // re-showing) a torn/released layer (violates I6/I7: no show-after-disable).
+        // bsLifecycleLock is reentrant, so onClusterProjectionReady can hold it across
+        // this call. The fireBsVisibilityChanged listener (RMM.reconcileCameraProfile)
+        // takes only its own reconcileLock AFTER bsLifecycleLock — the same order
+        // disableBlindSpot already uses — so no lock-inversion/deadlock.
+        bsLifecycleLock.lock();
+        try {
+            bsLayerVisible = true;
+            app.wheelstop.android.camera.PanoramicCameraGpu cam = camera;
+            if (cam != null) cam.setBsLayerVisible(true);   // unconditional — re-arm gate
+            // Edge-detected: only the first show-tick of a signal session reaches the
+            // listener (per-250ms re-asserts no-op via bsLastNotifiedVisible).
+            fireBsVisibilityChanged();
+            app.wheelstop.android.surveillance.BsNativeLayer layer = bsLayer;
+            if (layer == null || !layer.isCreated()) return;
+            if (!layer.isShown()) {
+                // I9 GUARD: resolving the live layerStack below spawns a `dumpsys
+                // display` (clusterLayerStack → resolveFissionDisplay). That MUST run
+                // ONLY on projThread, NEVER on the 250ms BsTurnTrigger loop. When this
+                // method is reached from bsTurnTick (BsTurnTrigger thread) with the layer
+                // hidden, defer the dumpsys-driven show to projThread via a re-drive —
+                // onClusterProjectionReady → clusterShowWhenReady then re-runs HERE on
+                // projThread (isOnProjThread()==true), resolves the stack, and shows. The
+                // cheap render-gate re-arm above (volatile writes + fireBsVisibilityChanged)
+                // already ran on this tick, so the GL lane stays armed in the meantime.
+                app.wheelstop.android.surveillance.ClusterProjectionController ctrl =
+                    app.wheelstop.android.surveillance.ClusterProjectionController.getInstance();
+                if (!ctrl.isOnProjThread()) {
+                    ctrl.requestShowRedrive();   // I9-safe: dumpsys re-runs on projThread
+                    return;
+                }
+                // Re-resolve the live cluster layerStack on each hidden→shown edge — the
+                // fission display may have materialised AFTER the projection-ready commit
+                // (READY_SETTLE_MS=900ms is shorter than the ~1-3s materialise on some
+                // models), so a single resolve at onClusterProjectionReady can be stale.
+                int live = app.wheelstop.android.surveillance.BsNativeLayer.clusterLayerStack(bsClusterStack);
+                // STACK_UNRESOLVED (-1) = no fission display found → DO NOT SHOW. Tagging
+                // the layer with a wrong/sentinel stack composites it onto a dead stack =
+                // BLACK (the model-dependent bug). Keep it hidden; bsTurnTick re-enters
+                // every poll within the linger/cap window and retries once the display
+                // appears. Never pass a negative stack to setLayerStack/setGeometry.
+                if (live == app.wheelstop.android.surveillance.BsNativeLayer.STACK_UNRESOLVED) {
+                    logger.warn("clusterShowWhenReady: fission display unresolved — deferring show");
+                    return;
+                }
+                // SHOW-AFTER-CLOSE GUARD (I6/I7): re-read the projection state as the
+                // FINAL gate before the show transaction. A forceClose/shutdown on
+                // another thread flips projState ST_OPEN→ST_CLOSING (under its monitor)
+                // BEFORE it hides the layer (notifyPipelineClosed → onClusterProjectionClosed,
+                // which serializes on this same bsLifecycleLock). So if a present-edge
+                // re-notify on projThread passed pollPresentEdge's guards but a close
+                // raced in, isOpen() is now false → DECLINE the show. Whichever of the
+                // show/close-hide wins this lock, the loser sees the authoritative state:
+                // close-first → show declines here; show-first → close-hide hides it.
+                // No-op for the bsTurnTick callers (they only enter on c.isReady(), i.e.
+                // projState==ST_OPEN). The dumpsys above already ran on projThread (I9).
+                if (!app.wheelstop.android.surveillance.ClusterProjectionController
+                        .getInstance().isOpen()) {
+                    logger.warn("clusterShowWhenReady: projection no longer open — declining show");
+                    return;
+                }
+                bsClusterStack = live;
+                layer.setLayerStack(bsClusterStack);
+                int[] g = bsGeomRect; layer.setGeometry(g[0], g[1], g[2], g[3]);   // shows it
+            }
+        } finally {
+            bsLifecycleLock.unlock();
+        }
+    }
+
+    public void onClusterProjectionReady() {
+        // USE-AFTER-RELEASE FIX: hold bsLifecycleLock across the bsLayer read + the
+        // clusterShowWhenReady() call so a concurrent disableBlindSpot (which nulls +
+        // releases bsLayer under the same lock) cannot release the layer between the
+        // null-check here and the show. Reentrant with clusterShowWhenReady's own
+        // acquire. Invoked only on projThread (the dumpsys-owning thread, per I9), so
+        // running clusterLayerStack/resolveBsGeometry under the lock is legal here.
+        bsLifecycleLock.lock();
+        try {
+            // Accept the ready callback for EITHER a blind-spot cluster session
+            // (bsTarget==cluster) OR a camera-view cluster session (camViewTarget==cluster).
+            // Without the camview arm, a camview-only cold open was skipped here — worse,
+            // resolveBsGeometry() below resets bsTarget to head_unit, so every subsequent
+            // re-notify then short-circuited on isClusterTarget() and the camview card never
+            // showed on the cluster at all.
+            boolean camViewCluster = camViewActive && !blindSpotEnabled && isCamViewClusterTarget();
+            if (!isClusterTarget() && !camViewCluster) return;
+            app.wheelstop.android.surveillance.BsNativeLayer layer = bsLayer;
+            if (layer == null || !layer.isCreated()) return;
+            int live = app.wheelstop.android.surveillance.BsNativeLayer.clusterLayerStack(bsClusterStack);
+            // Only adopt a positively-resolved stack; keep last-known-good on a miss
+            // (don't poison bsClusterStack with the -1 sentinel — clusterShowWhenReady
+            // re-resolves and defers the show until the display is actually present).
+            if (live != app.wheelstop.android.surveillance.BsNativeLayer.STACK_UNRESOLVED) {
+                bsClusterStack = live;
+                // INCREMENTING-STACK FIX ("no video after 3-4 attempts"): SurfaceFlinger
+                // assigns a NEW, higher layerStack each time the fission VirtualDisplay
+                // is destroyed (linger close) + recreated (next open) — observed 1→2→3→4→5
+                // across cycles. The BS layer is created ONCE and kept warm, so it stays
+                // tagged to whatever stack it was last given. clusterShowWhenReady only
+                // re-tags on the hidden→shown EDGE, so an already-shown warm layer (or one
+                // shown on a now-destroyed lower stack) composites onto a DEAD stack =
+                // black. This hook runs ONCE per open on projThread (dumpsys-legal, unlike
+                // the 250ms bsTurnTick path — I9), so re-assert the freshly-resolved live
+                // stack on the layer NOW, regardless of shown-state. setLayerStack is a
+                // cheap transaction that no-ops internally when the stack is unchanged
+                // (BsNativeLayer.setLayerStack early-returns on ==), so this adds no churn
+                // on a warm reopen onto the SAME stack and never passes a negative stack.
+                if (layer.isShown()) layer.setLayerStack(live);
+            }
+            logger.info("onClusterProjectionReady: cluster layerStack=" + bsClusterStack
+                    + " (resolved=" + live + ")");
+            // Recompute geometry against the live cluster panel — but PROGRAM-AWARE. When
+            // camera-view owns the lane, resolveBsGeometry() would read the BLIND-SPOT config
+            // section, reset bsTarget to blindspot.target (head_unit by default) and overwrite
+            // the camview cluster rect with a head-unit-sized BS rect — discarding the
+            // automation's chosen size/position and (via the bsTarget reset) breaking the
+            // isClusterTarget() guard for later re-notifies. Route to the camview resolver,
+            // which keeps camViewTarget=cluster and sizes against clusterDisplaySize, exactly
+            // as camViewTick's own reconfig block does. A BS-cluster session (blindSpotEnabled)
+            // still takes resolveBsGeometry() unchanged.
+            if (camViewCluster) {
+                bsTarget = camViewTarget;          // stays "cluster" — keep the guard true
+                resolveCamViewGeometry();
+                bsGeomRect = camViewGeomRect;
+            } else {
+                resolveBsGeometry();
+            }
+            // COLD-OPEN no-show fix: do NOT gate the show on the instantaneous
+            // bsLayerVisible. On a cold open the fission display materializes
+            // 1-3.5s AFTER commitReady, and the turn signal commonly clears in
+            // that gap (BS_OFF_DEBOUNCE_MS=800ms): bsTurnTick then runs
+            // setBlindSpotVisible(false) → bsLayerVisible=false BEFORE the
+            // present-edge re-notify lands here. Gating on bsLayerVisible would
+            // skip the show forever even though the projection is still up and
+            // LINGERING for exactly this card (gauges stay blanked the whole
+            // linger). During a transient (BS-driven) open the projection is up
+            // ONLY because a BS turn session occurred, so the card must show for
+            // the linger. We still HONOR the sustained-map hold (I5/I7): when the
+            // projection is held by the nav map and no BS signal is active
+            // (bsLayerVisible==false), do NOT spuriously paint the BS card over
+            // the map — that case only ever cold-opens for the map + speed badge.
+            // clusterShowWhenReady() still re-checks isOpen()/stack/lock itself.
+            boolean sustained;
+            try {
+                sustained = app.wheelstop.android.surveillance.ClusterProjectionController
+                        .getInstance().isSustainedHeld();
+            } catch (Throwable t) {
+                sustained = false;
+            }
+            if (bsLayerVisible || !sustained) clusterShowWhenReady();
+        } catch (Throwable t) {
+            logger.warn("onClusterProjectionReady failed: " + t.getMessage());
+        } finally {
+            bsLifecycleLock.unlock();
+        }
+    }
+
+    /** Re-read the display target (after a UI/API target change) and re-apply.
+     *  Flipping to head_unit force-closes any open cluster projection (restoring
+     *  the gauges) and moves the layer back to layerStack 0. Flipping to cluster
+     *  just re-resolves geometry; the projection opens lazily on the next signal. */
+    public void retargetBlindSpot() {
+        try {
+            app.wheelstop.android.config.UnifiedConfigManager.forceReload();
+            org.json.JSONObject bs = app.wheelstop.android.config.UnifiedConfigManager.getBlindSpot();
+            String newTarget = (bs != null) ? bs.optString("target", "head_unit") : "head_unit";
+            boolean wasCluster = isClusterTarget();
+            bsTarget = newTarget;
+            app.wheelstop.android.surveillance.BsNativeLayer layer = bsLayer;
+            if (wasCluster && !isClusterTarget()) {
+                // Leaving the cluster — restore gauges and move the card home.
+                try { app.wheelstop.android.surveillance.ClusterProjectionController.getInstance().forceClose("retarget-headunit"); } catch (Throwable ignored) {}
+                if (layer != null) layer.setLayerStack(0);
+            }
+            resolveBsGeometry();
+            if (layer != null && layer.isCreated() && bsLayerVisible && !isClusterTarget()) {
+                int[] g = bsGeomRect; layer.setGeometry(g[0], g[1], g[2], g[3]);
+            }
+        } catch (Throwable t) {
+            logger.warn("retargetBlindSpot failed: " + t.getMessage());
+        }
+    }
+
+    /** Apply a changed cluster layout (size profile) LIVE. The daemon re-reads the
+     *  profile from config on the next projection open, so to make a UI change take
+     *  effect now we force-close any open projection + hide the card; the next turn
+     *  signal reopens with the new profile (and onClusterProjectionReady re-resolves
+     *  the stack/geometry). No-op when not on the cluster target. */
+    public void relayoutCluster() {
+        try {
+            if (!isClusterTarget()) return;
+            setBlindSpotVisible(false);
+            app.wheelstop.android.surveillance.ClusterProjectionController.getInstance().forceClose("relayout");
+        } catch (Throwable t) {
+            logger.warn("relayoutCluster failed: " + t.getMessage());
+        }
+    }
+
+    /** Clear navMap.clusterMapActive so any ORPHANED parked cluster-map Activity
+     *  self-finishes (it polls this flag). Called from the BS-open path when no
+     *  sustained map holds the projection — a missed ClusterMapProjector.stop()
+     *  finish would otherwise let the parked map paint under the partial BS card.
+     *  Idempotent; safe no-op when no map Activity exists. Off the GL/turn loop's
+     *  critical path is unnecessary (this is the 250ms turn thread, not GL). */
+    private void dismissOrphanClusterMap() {
+        try {
+            java.util.Map<String, Object> m = new java.util.HashMap<>();
+            m.put("clusterMapActive", false);
+            app.wheelstop.android.config.UnifiedConfigManager.updateValues("navMap", m);
+            logger.info("BS open (no sustained map): dismissed any orphaned cluster-map Activity");
+        } catch (Throwable t) {
+            logger.debug("dismissOrphanClusterMap failed: " + t.getMessage());
+        }
+    }
+
+    /** Start the daemon-side turn-trigger loop (idempotent). Reads turn lamps +
+     *  debugPreview every BS_TURN_POLL_MS and drives the SurfaceControl layer:
+     *  debugPreview → always show (calibration); else left/right indicator →
+     *  view 7/8 + show, hidden after BS_OFF_DEBOUNCE_MS of no signal. */
+    private void startBsTurnLoop() {
+        if (bsTurnExec != null) return;
+        bsTurnExec = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "BsTurnTrigger");
+            t.setDaemon(true);
+            return t;
+        });
+        bsTurnExec.scheduleWithFixedDelay(this::bsTurnTick, 0, BS_TURN_POLL_MS,
+            java.util.concurrent.TimeUnit.MILLISECONDS);
+        logger.info("BS: turn-trigger loop started");
+    }
+
+    private void stopBsTurnLoop() {
+        if (bsTurnExec != null) {
+            bsTurnExec.shutdownNow();
+            bsTurnExec = null;
+        }
+        bsLastTurnOnMs = 0L;
+    }
+
+    /**
+     * Camera-view program driver, run from the shared arbiter tick when blind-spot
+     * is NOT enabled. Applies the camview view mode (0-4, no blind-spot warp) +
+     * geometry + target to the shared lane, shows it, and honours auto-hide. Mirrors
+     * the BS show path (incl. the cluster-projection open + ACC-off safety gate) but
+     * with camview's own program config. Called under NO lock (like bsTurnTick); the
+     * scaler/layer snapshots are null-checked.
+     */
+    private void camViewTick() {
+        try {
+            if (!camViewActive) return;
+            // Auto-hide: if a deadline was set and passed, disable the camera view.
+            // CRITICAL: disableCamView() may call stopBsTurnLoop() → bsTurnExec
+            // .shutdownNow(), which would interrupt THIS very thread (camViewTick runs
+            // on bsTurnExec) and make teardownSharedLaneLocked's GL-quiesce/scaler-
+            // release latch.await() calls throw immediately — bypassing the EGL
+            // ordering barrier (EGL_BAD_NATIVE_WINDOW / use-after-release risk). So
+            // run the disable on a SEPARATE short-lived thread, never inline.
+            long hideAt = camViewHideAtMs;
+            if (hideAt > 0 && android.os.SystemClock.elapsedRealtime() >= hideAt) {
+                camViewHideAtMs = 0L;   // one-shot: don't re-dispatch every tick
+                Thread t = new Thread(this::disableCamView, "CamViewAutoHide");
+                t.setDaemon(true);
+                t.start();
+                return;
+            }
+            // LOCK-FOR-ACQUIRE (round-3 TOCTOU fix): the "camview" sustained-token
+            // ACQUIRE below MUST be mutually exclusive with the locked RELEASE paths
+            // (enableCamView retarget, disableCamView, arbiter BS-takeover). Without
+            // the lock, a release could land between this tick's stale-snapshot read
+            // and its acquire, and the tick would immediately re-acquire an orphaned
+            // token (projection pinned, gauges blanked). Hold bsLifecycleLock across
+            // the whole decide+acquire+show. tryLock (not lock) so the 250ms tick never
+            // blocks behind a teardown — it just skips this tick and retries in 250ms.
+            // Lock is reentrant + only wraps cheap CPU-side ops + clusterShowWhenReady
+            // (which re-enters the same lock), so no GL-block / deadlock.
+            if (!bsLifecycleLock.tryLock()) return;
+            try {
+                // Re-check under the lock: a concurrent disableCamView may have flipped
+                // camViewActive false (and released the token) since the top-of-tick read.
+                if (!camViewActive) return;
+                boolean cluster = isCamViewClusterTarget();
+
+                // Configure the shared scaler for the camview program on first entry /
+                // after a program handover (transition-only, not every tick).
+                if (laneProgram != PROG_CAMVIEW) {
+                    app.wheelstop.android.streaming.GpuStreamScaler s = bsScaler;
+                    if (s != null) {
+                        // Plain camera view: modes 0-4 do NOT sample the blind-spot stitch
+                        // path, so no calibration/warp is applied (clean single-cam/mosaic).
+                        s.setViewMode(camViewMode);
+                    }
+                    // Point the shared geometry fields at the camview rect + target so the
+                    // existing show helpers (setBlindSpotVisible / clusterShowWhenReady)
+                    // place the layer where camview wants it.
+                    bsTarget = camViewTarget;
+                    resolveCamViewGeometry();
+                    bsGeomRect = camViewGeomRect;
+                    laneProgram = PROG_CAMVIEW;
+                }
+
+                if (cluster) {
+                    // Same ACC-off safety gate as BS: never (re)open the projection while
+                    // ACC is authoritatively off (the ACC-off edge force-closed it to
+                    // restore the gauges; re-opening here would blank them again).
+                    if (app.wheelstop.android.monitor.AccMonitor.isAccStateAuthoritative()
+                            && !app.wheelstop.android.monitor.AccMonitor.isAccOn()) {
+                        return;
+                    }
+                    app.wheelstop.android.surveillance.ClusterProjectionController c =
+                        app.wheelstop.android.surveillance.ClusterProjectionController.getInstance();
+                    // Camera-view is a SUSTAINED consumer (stays until hidden), unlike the
+                    // transient turn-signal session. acquireSustained("camview") holds the
+                    // projection open under its OWN token (independent of the nav map's
+                    // "map" token) AND cancels the 90s max-cap. Idempotent: re-arms the hold
+                    // each tick (cheap no-op once held). Released in disableCamView / arbiter.
+                    c.acquireSustained("camview");
+                    bsLayerVisible = true;   // intent
+                    if (c.isReady()) clusterShowWhenReady();
+                } else {
+                    if (!bsLayerVisible) setBlindSpotVisible(true);
+                }
+            } finally {
+                bsLifecycleLock.unlock();
+            }
+        } catch (Throwable t) {
+            logger.debug("camViewTick: " + t.getMessage());
+        }
+    }
+
+    private void bsTurnTick() {
+        try {
+            // ── Arbiter (Option A, blind-spot priority) ──────────────────────────
+            // The single shared lane serves whichever program is active. Blind-spot
+            // wins whenever it is enabled: its turn-signal / debug-preview logic runs
+            // below unchanged, and it OWNS the layer while enabled. The camera-view
+            // program only drives the lane when blind-spot is NOT enabled. (When BS is
+            // enabled but its card is hidden — no turn signal — the lane simply stays
+            // hidden rather than showing camview, so a turn signal is never masked and
+            // there is no 250ms tug-of-war over viewMode/geometry.)
+            if (!blindSpotEnabled) {
+                if (camViewActive) { camViewTick(); }
+                return;
+            }
+            // Blind-spot is enabled and owns the lane. If it was just handed the lane
+            // back from camview (laneProgram != PROG_BS), re-assert the BS program.
+            if (laneProgram != PROG_BS) {
+                app.wheelstop.android.streaming.GpuStreamScaler s = bsScaler;
+                if (s != null) { s.setViewMode(bsViewMode); applyBlindSpotCalibration(s); }
+                // Blind-spot has priority and now OWNS the lane + projection lifecycle.
+                // If camera-view was holding a sustained cluster projection, release its
+                // token so it can't keep the projection pinned open (max-cap disarmed)
+                // while masked — BS manages the projection via its own transient path
+                // from here. Idempotent (no-op if camview never held). This closes the
+                // "camview stuck sustained → BS transient gauge-restore disarmed" gap.
+                try { app.wheelstop.android.surveillance.ClusterProjectionController.getInstance().releaseSustained("camview"); } catch (Throwable ignored) {}
+                laneProgram = PROG_BS;
+            }
+            boolean cluster = isClusterTarget();
+            // Orientation change (head-unit only — the cluster is a fixed 1920×720
+            // and never rotates). If the panel rotated (1920×1080 ↔ 1080×1920), the
+            // px rect from the old orientation is wrong. Recompute from the preset
+            // against the live panel and re-apply. Cheap check (one displaySize).
+            // For the cluster target this is skipped (panel is constant), and the
+            // cluster metrics aren't valid until the projection is open anyway.
+            if (!cluster) {
+                try {
+                    android.content.Context ctx = savedContext;
+                    if (ctx == null) ctx = app.wheelstop.android.daemon.CameraDaemon.getAppContext();
+                    if (ctx != null) {
+                        android.graphics.Point panel =
+                            app.wheelstop.android.surveillance.BsNativeLayer.displaySize(ctx);
+                        if (panel.x != bsLastPanelW || panel.y != bsLastPanelH) {
+                            resolveBsGeometry();   // updates bsGeomRect + bsLastPanel*
+                            if (bsLayerVisible && bsLayer != null) {
+                                int[] g = bsGeomRect;
+                                bsLayer.setGeometry(g[0], g[1], g[2], g[3]);
+                            }
+                        }
+                    }
+                } catch (Throwable ignored) {}
+            }
+
+            org.json.JSONObject bs = app.wheelstop.android.config.UnifiedConfigManager.getBlindSpot();
+            // AUTO rotation (direction-of-travel): when rotation="auto" the effective
+            // angle depends on gear (forward=base, reverse=base+180), so it must be
+            // re-evaluated live rather than only on a settings write. Re-resolve
+            // cheaply each tick and re-apply only on change. AUTO flips by 180° only,
+            // so base↔base+180 keeps the same 4:3/3:4 aspect parity — the dest rect is
+            // unchanged, so we skip the panel query entirely (no resolveBsGeometry).
+            // That also keeps this cluster-safe: unlike the orientation-change branch
+            // above, it never touches clusterDisplaySize/dumpsys on the 250ms loop.
+            // No-op churn for fixed rotations (want == bsRotationDeg in steady state).
+            {
+                int wantRot = resolveBsRotation(bs);
+                if (wantRot != bsRotationDeg) {
+                    bsRotationDeg = wantRot;
+                    app.wheelstop.android.surveillance.BsNativeLayer rl = bsLayer;
+                    if (rl != null) {
+                        rl.setBufferRotation(wantRot);
+                        if (bsLayerVisible && rl.isCreated()) {
+                            int[] g = bsGeomRect;
+                            rl.setGeometry(g[0], g[1], g[2], g[3]);
+                        }
+                    }
+                }
+            }
+            boolean debugPreview = bs.optBoolean("debugPreview", false);
+            if (debugPreview) {
+                int want = bs.optInt("debugView", 7) == 8 ? 8 : 7;
+                if (want != bsViewMode) setBlindSpotViewMode(want);
+                if (cluster) {
+                    // ACC-off gate (same as the turn-signal branch): never (re)open the
+                    // cluster projection while ACC is authoritatively off, so the ACC-off
+                    // force-close that restored the gauges isn't undone by a left-on
+                    // calibration preview on the next tick.
+                    if (app.wheelstop.android.monitor.AccMonitor.isAccStateAuthoritative()
+                            && !app.wheelstop.android.monitor.AccMonitor.isAccOn()) {
+                        return;
+                    }
+                    // Calibration on the cluster: keep the projection open while
+                    // previewing; show only once the cluster display is present
+                    // (onClusterProjectionReady also shows it on the ready edge).
+                    app.wheelstop.android.surveillance.ClusterProjectionController c =
+                        app.wheelstop.android.surveillance.ClusterProjectionController.getInstance();
+                    c.requestOpen(); c.noteSignal(); c.requestCloseLingered();
+                    bsLayerVisible = true;   // intent
+                    if (c.isReady()) clusterShowWhenReady();   // desync-proof show
+                } else {
+                    if (!bsLayerVisible) setBlindSpotVisible(true);
+                }
+                return;
+            }
+            // Turn-gated: daemon owns the light HAL. readTurnNow packs bit0=L,bit1=R.
+            int packed = app.wheelstop.android.byd.BydDataCollector.getInstance().readTurnNow();
+            boolean leftOn = packed > 0 && (packed & 0x1) != 0;
+            boolean rightOn = packed > 0 && (packed & 0x2) != 0;
+            int side = (leftOn && !rightOn) ? 7 : (rightOn && !leftOn) ? 8 : 0;  // both/none → hide
+            long now = android.os.SystemClock.elapsedRealtime();
+            if (side != 0) {
+                bsLastTurnOnMs = now;
+                if (side != bsViewMode) setBlindSpotViewMode(side);
+                if (cluster) {
+                    // ACC-off gate: when ACC is AUTHORITATIVELY off, do NOT (re)open the
+                    // cluster projection. The ACC-off edge (AccMonitor.notifyAccEdge)
+                    // force-closes it to restore the gauges immediately; without this
+                    // guard the still-running 250ms loop would re-open it on the very
+                    // next tick if the indicator is mid-blink at ACC-off — FLASHING the
+                    // gauges. Gated on isAccStateAuthoritative() so an unknown/default
+                    // state (daemon just restarted) never wrongly suppresses projection.
+                    if (app.wheelstop.android.monitor.AccMonitor.isAccStateAuthoritative()
+                            && !app.wheelstop.android.monitor.AccMonitor.isAccOn()) {
+                        return;
+                    }
+                    // Lazy-open the OEM cluster projection on the first signal; keep it
+                    // open across the blink phase. Show the layer only once the cluster
+                    // display is present (never composite stack-1 onto nothing).
+                    app.wheelstop.android.surveillance.ClusterProjectionController c =
+                        app.wheelstop.android.surveillance.ClusterProjectionController.getInstance();
+                    // Belt-and-braces for the map-leak fix: if NO sustained map holds
+                    // the projection, this BS open must not re-surface an orphaned
+                    // parked cluster-map Activity. Dismiss it once per signal session
+                    // (idempotent UCM write; gated on !sustained so a legitimate
+                    // map-on-cluster session — which holds the projection — is never
+                    // dismissed). The Activity self-finishes on its ~500ms poll.
+                    if (!bsDismissedOrphanMap && !c.isSustainedHeld()) {
+                        bsDismissedOrphanMap = true;
+                        dismissOrphanClusterMap();
+                    }
+                    c.requestOpen(); c.noteSignal(); c.requestCloseLingered();
+                    bsLayerVisible = true;   // intent
+                    if (c.isReady()) clusterShowWhenReady();   // desync-proof show
+                } else {
+                    if (!bsLayerVisible) setBlindSpotVisible(true);
+                }
+            } else {
+                // side == 0 (no indicator). Lift any max-cap lockout on the first
+                // genuinely-clear tick so a fresh indicator after the cap re-opens
+                // normally (a real blink reaches here between flashes; a forgotten
+                // signal never does, keeping the cap effective).
+                if (cluster && side == 0) {
+                    app.wheelstop.android.surveillance.ClusterProjectionController.getInstance()
+                        .notifySignalCleared();
+                }
+                if (bsLayerVisible && (now - bsLastTurnOnMs) >= BS_OFF_DEBOUNCE_MS) {
+                    setBlindSpotVisible(false);
+                    // Signal session ended — re-arm the orphan-dismiss latch so the
+                    // next turn-signal open re-checks for a parked map.
+                    bsDismissedOrphanMap = false;
+                    if (cluster) {
+                        // Hide the card now; restore the gauges after the linger window
+                        // (rides brief blink gaps without re-paying the open latency).
+                        app.wheelstop.android.surveillance.ClusterProjectionController.getInstance()
+                            .requestCloseLingered();
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            logger.debug("bsTurnTick: " + t.getMessage());
+        }
+    }
+
+    public void disableBlindSpot() {
+        bsLifecycleLock.lock();
+        try {
+            if (!blindSpotEnabled) return;
+            logger.info("BS: disabling blind-spot lane...");
+            // If camera-view will KEEP the lane (and possibly the cluster projection),
+            // we must NOT force-close the projection or stop the shared driver — that
+            // would blank an active camera-view on the cluster. Only do the full
+            // gauge-restore + teardown when neither program needs the lane.
+            boolean camviewKeepsLane = camViewActive;
+            // SAFETY: if a cluster projection is open AND no other program keeps it,
+            // restore the gauges FIRST, before any teardown. Gated on isClusterTarget()
+            // so a head-unit-only user never even constructs the controller.
+            if (isClusterTarget() && !camviewKeepsLane) {
+                try { app.wheelstop.android.surveillance.ClusterProjectionController.getInstance().forceClose("bs-disabled"); } catch (Throwable ignored) {}
+            }
+            blindSpotEnabled = false;
+
+            if (!camviewKeepsLane) {
+                stopBsTurnLoop();   // stop the daemon turn-trigger before teardown
+                app.wheelstop.android.camera.PanoramicCameraGpu cam = camera;
+                if (cam != null) cam.setBsLayerVisible(false);
+                bsLayerVisible = false;
+                fireBsVisibilityChanged();   // BS gone — let RMM re-reconcile camera profile
+                teardownSharedLaneLocked();
+                laneProgram = PROG_NONE;
+            } else {
+                // Hand the lane to camview: keep the scaler/layer AND the running
+                // driver (do NOT stop/restart it — it is the shared arbiter). Hide the
+                // BS image now; force a reconfig so the next tick applies the camview
+                // program. fireBsVisibilityChanged still runs so RMM re-reconciles.
+                bsLayerVisible = false;
+                fireBsVisibilityChanged();
+                laneProgram = PROG_NONE;   // force camview reconfig on next tick
+                logger.info("BS: disabled but lane retained for camera-view");
+            }
+
+            logger.info("BS: NATIVE blind-spot lane disabled");
+        } finally {
+            bsLifecycleLock.unlock();
+        }
+    }
+
+    /**
+     * Physically tear down the shared native lane (detach from PASS 1C, quiesce the
+     * render loop, GL-release the scaler's EGLSurface, then release the SurfaceControl
+     * layer — in that Adreno-mandated order). MUST be called holding
+     * {@link #bsLifecycleLock} and ONLY when NEITHER program needs the lane. Extracted
+     * verbatim from disableBlindSpot so both disable paths share the proven teardown.
+     */
+    private void teardownSharedLaneLocked() {
+        // Detach from render loop FIRST so PASS 1C stops blitting the
+        // about-to-be-released scaler.
+        if (camera != null) camera.clearBsStreamingComponents();
+
+        // FIX BS-RC-002: clearBsStreamingComponents() nulls the camera's volatile
+        // bsStreamScaler, but a render-loop iteration that already snapshotted it
+        // non-null at the top of PASS 1C will still call drawFrame() this frame.
+        // Post a no-op barrier to the serial GL handler and wait: it can only run
+        // AFTER any in-flight render iteration completed, so every subsequent
+        // iteration is guaranteed to have re-read the now-null field and skipped
+        // PASS 1C. Only THEN is it safe to release. Bounded so a wedged GL thread
+        // can't hang the disable caller (the watchdog handles a truly dead thread).
+        android.os.Handler renderQuiesceHandler =
+            (camera != null) ? camera.getGlHandler() : null;
+        if (renderQuiesceHandler != null) {
+            final java.util.concurrent.CountDownLatch quiesceLatch =
+                new java.util.concurrent.CountDownLatch(1);
+            boolean quiescePosted = renderQuiesceHandler.post(quiesceLatch::countDown);
+            if (quiescePosted) {
+                try {
+                    if (!quiesceLatch.await(1000, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                        logger.warn("BS: render-loop quiesce barrier did not "
+                            + "complete within 1000ms — proceeding with release");
+                    }
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+
+        final app.wheelstop.android.streaming.GpuStreamScaler scalerRef = bsScaler;
+        final app.wheelstop.android.surveillance.BsNativeLayer layerRef = bsLayer;
+        bsScaler = null;
+        bsLayer = null;
+        bsLayerVisible = false;
+        app.wheelstop.android.camera.PanoramicCameraGpu cam = camera;
+        if (cam != null) cam.setBsLayerVisible(false);
+
+        // GL-thread teardown: scaler.release (which destroys its EGLSurface wrapping
+        // the SurfaceControl layer's Surface) MUST happen before the layer/Surface is
+        // released — destroying the EGLWindowSurface after its backing Surface is gone
+        // is EGL_BAD_NATIVE_WINDOW on Adreno. Release the SC layer only after the GL
+        // release completes.
+        android.os.Handler glHandler = (camera != null) ? camera.getGlHandler() : null;
+        if (scalerRef != null && glHandler != null) {
+            final java.util.concurrent.CountDownLatch latch =
+                new java.util.concurrent.CountDownLatch(1);
+            boolean posted = glHandler.post(() -> {
+                try {
+                    try { scalerRef.release(); } catch (Throwable t) {
+                        logger.warn("BS: scaler release: " + t.getMessage());
+                    }
+                } finally { latch.countDown(); }
+            });
+            if (posted) {
+                try {
+                    if (!latch.await(1000, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                        logger.warn("BS: scaler release did not complete within 1000ms");
+                    }
+                } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+            } else {
+                try { scalerRef.release(); } catch (Throwable ignored) {}
+            }
+        } else if (scalerRef != null) {
+            try { scalerRef.release(); } catch (Throwable ignored) {}
+        }
+        // Now the EGLSurface is gone — safe to release the SurfaceControl layer.
+        if (layerRef != null) {
+            try { layerRef.release(); } catch (Throwable ignored) {}
+        }
+    }
+
+    // ══════════════════════════ CAMERA-VIEW PROGRAM ══════════════════════════
+    // On-demand camera view (front/rear/left/right/all-4) on the SAME shared native
+    // lane, arbitrated with blind-spot priority. Reuses the proven lane build,
+    // geometry/target machinery, and cluster projection flow; adds only the program
+    // selection + a non-turn-signal lifecycle.
+
+    public boolean isCamViewActive() { return camViewActive; }
+    public int getCamViewMode() { return camViewMode; }
+    public String getCamViewTargetString() { return camViewTarget; }
+
+    /**
+     * Show a camera view. Builds the shared lane if neither program has it up, then
+     * marks camview active; the arbiter (bsTurnTick) applies the camview program
+     * whenever blind-spot isn't actively showing. mode 0=all-4,1=front,2=right,
+     * 3=rear,4=left. target "head_unit"/"cluster". autoHideSec 0 = until hidden.
+     */
+    public void enableCamView(int mode, String target, int autoHideSec) throws Exception {
+        bsLifecycleLock.lock();
+        try {
+            String newTarget = "cluster".equals(target) ? "cluster" : "head_unit";
+            // RETARGET LEAK GUARD: if a camview was ALREADY holding the cluster
+            // projection ("camview" sustained token) and this re-show moves it to the
+            // head-unit, release the cluster hold NOW. camViewTick only acquires while
+            // cluster-targeted and never releases on a target flip, so without this the
+            // token would orphan (projection pinned open, gauges blanked, max-cap
+            // disarmed) until ACC-off. Idempotent: no-op if it wasn't holding.
+            if (camViewActive && isCamViewClusterTarget() && !"cluster".equals(newTarget)) {
+                try { app.wheelstop.android.surveillance.ClusterProjectionController.getInstance().releaseSustained("camview"); } catch (Throwable ignored) {}
+            }
+            camViewMode = (mode >= 0 && mode <= 4) ? mode : 0;
+            camViewTarget = newTarget;
+            camViewHideAtMs = (autoHideSec > 0)
+                ? android.os.SystemClock.elapsedRealtime() + autoHideSec * 1000L : 0L;
+            resolveCamViewGeometry();
+
+            if (!running || camera == null || camera.getGlHandler() == null) {
+                logger.warn("CamView: pano not running yet — enable deferred (caller must re-poll)");
+                throw new BlindSpotNotReadyException(
+                    "camera-view lane cannot arm — pano pipeline not running yet");
+            }
+
+            // Guard against a concurrent in-flight build (BS or camview). Mirrors the
+            // bsEnabling guard: buildSharedLaneLocked releases bsLifecycleLock around
+            // its GL-init wait, so a second enable that reacquires the lock during that
+            // window must NOT start a second build (double-alloc). If a build is in
+            // flight OR a live lane already exists, just mark camview active + force a
+            // reconfig and let the arbiter pick it up on the next tick — the lane is
+            // shared, never rebuilt (compute/memory-optimal: one scaler/layer/EGL).
+            boolean firstConsumer = !camViewActive && !blindSpotEnabled;
+            // A build is IN-FLIGHT (another program is mid-buildSharedLaneLocked, which
+            // released the lock around its GL-init wait). We must NOT optimistically
+            // mark camview active against it: if that build FAILS, its
+            // releasePartialBsLane guard (`!blindSpotEnabled && !camViewActive`) would
+            // be defeated by our flag, leaking a half-built, never-published lane that
+            // the reuse fast-path would then adopt forever (black video / pinned
+            // cluster). Instead DEFER — throw NotReady so the caller re-polls; by the
+            // next poll the in-flight build has resolved (published live → laneLive
+            // true, or failed → fully released) and we take a deterministic branch.
+            if (bsEnabling || camViewEnabling) {
+                logger.info("CamView: lane build in flight — deferring (caller re-polls)");
+                throw new BlindSpotNotReadyException(
+                    "camera-view deferred — a lane build is in flight");
+            }
+            boolean laneLive = (bsLayer != null && bsLayer.isCreated() && bsScaler != null);
+            if (laneLive) {
+                // Lane already fully built + published — safe to mark active now (no
+                // build can fail under us). Reconfigure to camview on the next tick.
+                camViewActive = true;
+                laneProgram = PROG_NONE;
+                startBsTurnLoop();
+                logger.info("CamView: reusing live shared lane (no rebuild)");
+            } else {
+                // Fresh build. Do NOT set camViewActive until the build SUCCEEDS —
+                // otherwise a GL-init timeout/throw inside buildSharedLaneLocked would
+                // (a) defeat releasePartialBsLane's `!blindSpotEnabled && !camViewActive`
+                // guard, leaking the SurfaceControl layer + scaler, and (b) leave
+                // camViewActive stuck true with a dead lane that the reuse branch would
+                // then adopt on retry (permanent no-video). Mirrors the BS path, which
+                // sets blindSpotEnabled only AFTER a successful build. On failure, reset
+                // state + release the partial lane, then rethrow so the caller re-polls.
+                camViewEnabling = true;
+                try {
+                    buildSharedLaneLocked();
+                } catch (Throwable t) {
+                    camViewEnabling = false;
+                    camViewActive = false;      // never armed
+                    camViewHideAtMs = 0L;
+                    // Guard now passes (both flags false) → releases the partial lane.
+                    if (!blindSpotEnabled && !camViewActive) releasePartialBsLane();
+                    if (t instanceof Exception) throw (Exception) t;
+                    throw new RuntimeException(t);
+                }
+                camViewEnabling = false;
+                camViewActive = true;       // armed only on successful build
+                laneProgram = PROG_NONE;   // force camview program config next tick
+                startBsTurnLoop();
+                if (firstConsumer) logger.info("CamView: shared lane built for camera-view");
+            }
+            logger.info(String.format("CamView: enabled mode=%d target=%s autoHide=%ds",
+                camViewMode, camViewTarget, autoHideSec));
+        } finally {
+            boolean nowActive = camViewActive;
+            String tgt = camViewTarget;
+            bsLifecycleLock.unlock();
+            // Tell the app-side close-button overlay a view is up (edge-driven, no poll).
+            // Fired outside the lock so the short `am broadcast` exec never holds it.
+            if (nowActive) emitCamViewState(true, tgt);
+            // NOTE: the camera-profile ramp for the new camera-view rung is driven by the
+            // existing camViewTick → setBlindSpotVisible/clusterShowWhenReady →
+            // fireBsVisibilityChanged edge (RMM.desiredCameraState reads camViewKeepWarmActive
+            // fresh), so no explicit reconcile trigger is needed here.
+        }
+    }
+
+    /** Hide the camera view. Tears the lane down only if blind-spot isn't also using it. */
+    public void disableCamView() {
+        boolean wasActive = false;
+        bsLifecycleLock.lock();
+        try {
+            wasActive = camViewActive;
+            if (!camViewActive) return;
+            logger.info("CamView: disabling camera view...");
+            camViewActive = false;
+            camViewHideAtMs = 0L;
+
+            // SAFETY (gauge-blank prevention): release the "camview" sustained hold
+            // UNCONDITIONALLY — removing a token that isn't in the set is a harmless
+            // idempotent no-op, and releasing regardless of the CURRENT target closes
+            // the "acquire keyed on cluster, release keyed on current target" leak: a
+            // camview that opened the cluster projection then retargeted to head_unit
+            // would otherwise orphan the token forever (projection pinned open, gauges
+            // blanked, max-cap disarmed). releaseSustained keeps the projection up ONLY
+            // if another sustained holder (nav map) remains OR a transient blind-spot
+            // turn-signal currently wants it; otherwise it force-closes + restores the
+            // gauges. Runs before any lane handoff/teardown, in BOTH branches below.
+            try { app.wheelstop.android.surveillance.ClusterProjectionController.getInstance().releaseSustained("camview"); } catch (Throwable ignored) {}
+
+            // If BS still needs the lane, just hand it back: hide the camview image,
+            // force a reconfig so the next tick re-applies the BS program.
+            if (blindSpotEnabled) {
+                // Hide the layer now; the BS arbiter re-shows on the next turn signal.
+                setBlindSpotVisible(false);
+                laneProgram = PROG_NONE;   // force BS reconfig on next tick
+                logger.info("CamView: disabled, lane retained for blind-spot");
+                return;
+            }
+
+            // Neither program needs the lane — full teardown. (The cluster projection,
+            // if any, was already released above.)
+            stopBsTurnLoop();
+            teardownSharedLaneLocked();
+            laneProgram = PROG_NONE;
+            logger.info("CamView: camera view disabled");
+        } finally {
+            bsLifecycleLock.unlock();
+            // Tell the app-side close-button overlay the view is gone (edge-driven).
+            // Only when it was actually active, so the no-op early-return path (view
+            // already hidden) doesn't fire a spurious "closed" broadcast.
+            if (wasActive) emitCamViewState(false, null);
+            // Let RMM re-reconcile so the camera drops back to a lower rung (BS/stream/idle)
+            // now that cam-view no longer needs the higher fps.
+            if (wasActive) fireBsVisibilityChanged();
+        }
+    }
+
+    private boolean isCamViewClusterTarget() { return "cluster".equals(camViewTarget); }
+
+    /**
+     * Fire an {@code am broadcast} telling the app-process close-button overlay
+     * (the camera-view ✕ hosted in {@link app.wheelstop.android.overlay.StatusOverlayService})
+     * that a camera view opened ({@code active=true}) or closed ({@code active=false}).
+     * This is the zero-poll edge signal — the daemon runs as shell/UID-2000 so it can
+     * broadcast to the app. Best-effort + fully detached: a short-lived exec whose output
+     * we never read, so it can never block the lifecycle path. Never throws.
+     */
+    private void emitCamViewState(boolean active, String target) {
+        try {
+            java.util.List<String> cmd = new java.util.ArrayList<>(java.util.Arrays.asList(
+                    "am", "broadcast",
+                    "-a", app.wheelstop.android.overlay.StatusOverlayService.ACTION_CAMVIEW_STATE,
+                    "-p", "app.wheelstop.android",
+                    "--ez", "active", active ? "true" : "false"));
+            if (target != null) { cmd.add("--es"); cmd.add("target"); cmd.add(target); }
+            Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
+            // Detach: drain+discard on a daemon thread so the child can't wedge on a
+            // full pipe, and never wait on the lifecycle thread.
+            final java.io.InputStream is = p.getInputStream();
+            Thread drain = new Thread(() -> {
+                byte[] buf = new byte[256];
+                try { while (is.read(buf) != -1) { /* discard */ } } catch (Throwable ignored) {}
+            }, "camview-state-broadcast");
+            drain.setDaemon(true);
+            drain.start();
+        } catch (Throwable t) {
+            logger.debug("emitCamViewState failed: " + t.getMessage());
+        }
+    }
+
+    /** Resolve the camview on-screen rect from UCM geometry (preset or absolute),
+     *  per target, mirroring resolveBsGeometry. Writes camViewGeomRect. */
+    private void resolveCamViewGeometry() {
+        try {
+            android.content.Context ctx = savedContext;
+            if (ctx == null) ctx = app.wheelstop.android.daemon.CameraDaemon.getAppContext();
+            org.json.JSONObject cv = app.wheelstop.android.config.UnifiedConfigManager.getCamView();
+            android.graphics.Point panel = (ctx != null)
+                ? (isCamViewClusterTarget()
+                    ? app.wheelstop.android.surveillance.BsNativeLayer.clusterDisplaySize(ctx)
+                    : app.wheelstop.android.surveillance.BsNativeLayer.displaySize(ctx))
+                : new android.graphics.Point(1920, isCamViewClusterTarget() ? 720 : 1080);
+            String geomKey = isCamViewClusterTarget() ? "geometryCluster" : "geometry";
+            org.json.JSONObject g = (cv != null) ? cv.optJSONObject(geomKey) : null;
+            int[] r;
+            if (g != null && g.has("sizePct")) {
+                camViewSizePct = g.optInt("sizePct", camViewSizePct);
+                if (g.has("corner")) camViewCorner = g.optString("corner", camViewCorner);
+                r = camViewPresetRect(panel);
+            } else if (g != null && g.has("x") && g.has("w")) {
+                r = clampRectToPanel(g.optInt("x"), g.optInt("y"), g.optInt("w"), g.optInt("h"), panel);
+            } else {
+                double defFrac = isCamViewClusterTarget() ? 0.80 : 0.60;
+                int w = (int) (panel.x * defFrac);
+                int h = (int) (w * (double) BS_HEIGHT / BS_WIDTH);
+                r = clampRectToPanel((panel.x - w) / 2, (panel.y - h) / 2, w, h, panel);
+            }
+            camViewGeomRect = new int[]{r[0], r[1], r[2], r[3]};
+        } catch (Throwable t) {
+            logger.warn("resolveCamViewGeometry failed: " + t.getMessage());
+            if (camViewGeomRect[2] <= 0) camViewGeomRect = new int[]{24, 24, 768, 576};
+        }
+    }
+
+    private int[] camViewPresetRect(android.graphics.Point panel) {
+        int p = Math.max(15, Math.min(camViewSizePct, 95));
+        int w = (int) (panel.x * (p / 100.0));
+        int h = (int) (w * (double) BS_HEIGHT / BS_WIDTH);
+        int inset = 24;
+        String corner = (camViewCorner != null) ? camViewCorner : "center";
+        if ("center".equals(corner)) {
+            return clampRectToPanel((panel.x - w) / 2, (panel.y - h) / 2, w, h, panel);
+        }
+        boolean right = corner.endsWith("r");
+        boolean bottom = corner.startsWith("b");
+        int x = right ? panel.x - w - inset : inset;
+        int y = bottom ? panel.y - h - inset : inset;
+        return clampRectToPanel(x, y, w, h, panel);
+    }
+
+    /** Clamp a rect into the given panel, keeping the 4:3 buffer ratio (uniform scale). */
+    private int[] clampRectToPanel(int x, int y, int w, int h, android.graphics.Point panel) {
+        w = Math.max(160, Math.min(w, panel.x));
+        h = Math.max(120, Math.min(h, panel.y));
+        double want = (double) BS_WIDTH / BS_HEIGHT;   // 4:3
+        if ((double) w / h > want) w = (int) (h * want);
+        else                       h = (int) (w / want);
+        x = Math.max(0, Math.min(x, panel.x - w));
+        y = Math.max(0, Math.min(y, panel.y - h));
+        return new int[]{x, y, w, h};
+    }
+
+    /**
+     * Fire-and-forget submit of {@code encoder.release()} onto the dedicated
+     * streaming-encoder release executor. NEVER blocks the caller — the GL
+     * render thread inside the disable Runnable returns immediately while
+     * the native release runs on the executor.
+     *
+     * <p>Single-threaded executor: Adreno's HAL refcount has known bugs
+     * around concurrent {@code MediaCodec.release()} calls. If a release
+     * wedges, subsequent ones queue behind it — that's an accepted cost
+     * in exchange for a design we can reason about. The shutdown hook
+     * drains the queue inline at process exit so encoders are released
+     * before the JVM goes away.
+     */
+    static void submitEncoderRelease(HardwareEventRecorderGpu encoderRef) {
+        if (encoderRef == null) return;
+        try {
+            STREAM_ENCODER_RELEASE_EXEC.submit(() -> {
+                try { encoderRef.release(); } catch (Throwable t) {
+                    DaemonLogger.getInstance(TAG).warn(
+                        "streamEncoder release on offload thread: " + t.getMessage());
+                }
+            });
+        } catch (java.util.concurrent.RejectedExecutionException re) {
+            // Executor shut down (typically JVM exit racing the disable
+            // path). Best-effort: spawn a one-shot daemon thread so the
+            // encoder still releases without pinning the caller.
+            Thread t = new Thread(() -> {
+                try { encoderRef.release(); } catch (Throwable ignored) {}
+            }, "StreamEncoderReleaseFallback");
+            t.setDaemon(true);
+            t.start();
+        }
+    }
+
+    /**
+     * Static shutdown hook for the encoder-release executor. Called from
+     * CameraDaemon's JVM shutdown hook so any in-flight releases drain
+     * before the process exits.
+     *
+     * @return true iff the executor drained cleanly within {@code awaitMs};
+     *         false if the timeout fired — in which case shutdownNow's
+     *         dropped Runnables are run inline so encoders still release
+     *         before process exit.
+     */
+    public static boolean shutdownStreamEncoderReleaseExec(long awaitMs) {
+        boolean drained = false;
+        try {
+            STREAM_ENCODER_RELEASE_EXEC.shutdown();
+            drained = STREAM_ENCODER_RELEASE_EXEC.awaitTermination(
+                awaitMs, java.util.concurrent.TimeUnit.MILLISECONDS);
+            if (!drained) {
+                DaemonLogger.getInstance(TAG).warn(
+                    "streamEncoder release exec did not drain in " + awaitMs
+                    + "ms; forcing shutdownNow + inline-draining queued releases");
+                for (Runnable r : STREAM_ENCODER_RELEASE_EXEC.shutdownNow()) {
+                    try { r.run(); } catch (Throwable ignored) {}
+                }
+            }
+        } catch (InterruptedException ie) {
+            DaemonLogger.getInstance(TAG).warn(
+                "shutdownStreamEncoderReleaseExec interrupted; forcing shutdownNow");
+            try {
+                for (Runnable r : STREAM_ENCODER_RELEASE_EXEC.shutdownNow()) {
+                    try { r.run(); } catch (Throwable ignored) {}
+                }
+            } catch (Throwable ignored) {}
+            Thread.currentThread().interrupt();
+        }
+        return drained;
+    }
+
+    // Single-thread executor for streamEncoder.release(). Single-threaded
+    // because two concurrent native-codec releases on Adreno occasionally
+    // trip a HAL refcount bug. Daemon thread so it doesn't block JVM exit.
+    private static final java.util.concurrent.ExecutorService STREAM_ENCODER_RELEASE_EXEC =
+        java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "StreamEncoderRelease");
+            t.setDaemon(true);
+            return t;
+        });
+    
+    /**
+     * Checks if streaming is enabled.
+     */
+    public boolean isStreamingEnabled() {
+        return streamingEnabled;
+    }
+
+    /**
+     * Re-runs BsCoefficients.authorize() to recover from a transient boot-time
+     * authorization failure. enableStreamingInternal() authorizes once at
+     * enable time, but if the context was null/unstable then (early boot,
+     * system_server transient) authorization silently stayed false and
+     * BsCoefficients.resolve() zeros its output forever. BsCoefficients.authorize() is idempotent
+     * (returns early once ready), so calling it again later — e.g. on ACC ON
+     * once a valid context exists — is a cheap, safe retry.
+     *
+     * @param ctx a valid app context; falls back to the saved/daemon context
+     */
+    public void retryOdAuthorization(android.content.Context ctx) {
+        try {
+            android.content.Context odCtx = ctx;
+            if (odCtx == null) odCtx = savedContext;
+            if (odCtx == null) odCtx = app.wheelstop.android.daemon.CameraDaemon.getAppContext();
+            if (odCtx != null) {
+                if (this.savedContext == null) this.savedContext = odCtx;
+                app.wheelstop.android.blindspot.BsCoefficients.authorize(odCtx);
+            } else {
+                logger.error("od authorize retry skipped: no context available");
+            }
+        } catch (Throwable t) {
+            logger.warn("od retry failed: " + t.getMessage());
+        }
+    }
+
+    /**
+     * Gets the stream scaler component.
+     */
+    public app.wheelstop.android.streaming.GpuStreamScaler getStreamScaler() {
+        return streamScaler;
+    }
+    
+    /**
+     * Gets the stream encoder component.
+     */
+    public HardwareEventRecorderGpu getStreamEncoder() {
+        return streamEncoder;
+    }
+    
+    /**
+     * Gets the WebSocket stream server.
+     */
+    public app.wheelstop.android.streaming.WebSocketStreamServer getWebSocketServer() {
+        return wsStreamServer;
+    }
+    
+    /**
+     * Sets the stream view mode (which camera to show).
+     * 
+     * @param mode 0=Mosaic (2x2 grid), 1=Front, 2=Right, 3=Rear, 4=Left
+     */
+    public void setStreamViewMode(int mode) {
+        if (streamScaler != null) {
+            streamScaler.setViewMode(mode);
+            logger.info("Stream view mode changed to " + mode);
+        } else {
+            logger.warn("Cannot set stream view mode - streaming not enabled");
+        }
+    }
+
+    /** Back-compat 8-arg pass-through (rear roll/pitch = 0 = rear identity). */
+    public void setBlindSpotParams(float hfov, float sideHFov, float yaw, float roll,
+                                   float feather, float projExp, float vscale, float pitch) {
+        setBlindSpotParams(hfov, sideHFov, yaw, roll, feather, projExp, vscale, pitch,
+                           0.0f, 0.0f);
+    }
+
+    /** POC blind-spot (view 7/8) panorama-stitch tuning pass-through. No-op if streaming off. */
+    public void setBlindSpotParams(float hfov, float sideHFov, float yaw, float roll,
+                                   float feather, float projExp, float vscale, float pitch,
+                                   float rearRoll, float rearPitch) {
+        // Tune BOTH the shared stream scaler (in case a browser is previewing
+        // view 7/8 on the live stream) AND the dedicated blind-spot lane's scaler
+        // (what the overlay actually renders) — so the debug-editor sliders
+        // update whichever the user is watching.
+        app.wheelstop.android.streaming.GpuStreamScaler ss = streamScaler;
+        if (ss != null) {
+            ss.setBlindSpotParams(hfov, sideHFov, yaw, roll, feather, projExp, vscale, pitch,
+                                  rearRoll, rearPitch);
+        }
+        app.wheelstop.android.streaming.GpuStreamScaler bs = bsScaler;
+        if (bs != null) {
+            bs.setBlindSpotParams(hfov, sideHFov, yaw, roll, feather, projExp, vscale, pitch,
+                                  rearRoll, rearPitch);
+        }
+        logger.info("Blind-spot params: hfov=" + hfov + " sideHFov=" + sideHFov
+                + " yaw=" + yaw + " roll=" + roll + " feather=" + feather
+                + " projExp=" + projExp + " vscale=" + vscale + " pitch=" + pitch
+                + " rearRoll=" + rearRoll + " rearPitch=" + rearPitch);
+    }
+
+    /**
+     * Blind-spot merge mode (views 7/8): 0 = both (rear+side stitch, default),
+     * 1 = side camera only, 2 = rear camera only. Pushes to BOTH the shared
+     * stream scaler (browser preview) and the dedicated BS lane's scaler (what
+     * the overlay renders), same as {@link #setBlindSpotParams}. No-op-safe.
+     */
+    public void setBlindSpotMergeMode(int mode) {
+        app.wheelstop.android.streaming.GpuStreamScaler ss = streamScaler;
+        if (ss != null) ss.setBlindSpotMergeMode(mode);
+        app.wheelstop.android.streaming.GpuStreamScaler bs = bsScaler;
+        if (bs != null) bs.setBlindSpotMergeMode(mode);
+        logger.info("Blind-spot merge mode set to " + mode);
+    }
+
+    /** Forward blind-spot card clarity (views 7/8) to the scaler(s): contrast
+     *  pivot (1.0 = neutral) and unsharp amount (0.0 = off). Pushes to BOTH the
+     *  shared stream scaler (browser preview) and the dedicated BS lane's scaler
+     *  (what the overlay renders), same as {@link #setBlindSpotParams}. No-op-safe. */
+    public void setBlindSpotClarity(float contrast, float sharpen) {
+        app.wheelstop.android.streaming.GpuStreamScaler ss = streamScaler;
+        if (ss != null) ss.setBlindSpotClarity(contrast, sharpen);
+        app.wheelstop.android.streaming.GpuStreamScaler bs = bsScaler;
+        if (bs != null) bs.setBlindSpotClarity(contrast, sharpen);
+    }
+
+    /** Map the persisted string merge mode to the scaler's int code. */
+    private static int bsMergeModeCode(String mode) {
+        if ("side".equals(mode)) return 1;
+        if ("rear".equals(mode)) return 2;
+        return 0;   // "both" / null / unknown
+    }
+
+    /**
+     * Re-read the blind-spot card rotation (and merge-mode gate) from config and
+     * re-apply it live. Called after a settings write changes blindspot.rotation OR
+     * blindspot.mergeMode (a flip to/from "both" changes whether rotation applies).
+     * Re-resolves geometry — which recomputes the rotation-aware dest rect + pushes
+     * the angle onto the layer — and re-applies the rect when the card is shown, so
+     * the change lands without an ACC cycle. No-op-safe when the lane isn't up.
+     */
+    public void refreshBlindSpotRotation() {
+        bsLifecycleLock.lock();
+        try {
+            resolveBsGeometry();
+            app.wheelstop.android.surveillance.BsNativeLayer layer = bsLayer;
+            if (layer != null && layer.isCreated() && bsLayerVisible) {
+                int[] g = bsGeomRect;
+                layer.setGeometry(g[0], g[1], g[2], g[3]);
+            }
+        } catch (Throwable t) {
+            logger.warn("refreshBlindSpotRotation failed: " + t.getMessage());
+        } finally {
+            bsLifecycleLock.unlock();
+        }
+    }
+
+    
+    /**
+     * Gets the current stream view mode.
+     * 
+     * @return 0=Mosaic, 1-4=Single camera, -1 if streaming not enabled
+     */
+    public int getStreamViewMode() {
+        return streamScaler != null ? streamScaler.getViewMode() : -1;
+    }
+    
+    /**
+     * Checks if currently recording.
+     * 
+     * @return true if recording, false otherwise
+     */
+    public boolean isRecording() {
+        return recorder != null && recorder.isRecording();
+    }
+
+    /**
+     * Checks if in recording mode (vs viewing mode).
+     */
+    public boolean isRecordingMode() {
+        return recordingMode;
+    }
+
+    /**
+     * Current deferred-record prefix, or {@code null} if no record is pending.
+     * Surfaced for {@link app.wheelstop.android.recording.RecordingModeManager} so
+     * its resync ticker can distinguish "modeActive=true but pipeline isn't
+     * actually writing frames AND isn't waiting on a deferred-record path"
+     * (which is genuinely wedged and warrants a re-activation) from "modeActive
+     * but a deferred record is still in flight" (which is a normal transient
+     * state and should not retrigger). Volatile field already; this is just a
+     * read-through getter.
+     */
+    public String getPendingRecordingPrefix() {
+        return pendingRecordingPrefix;
+    }
+
+    /**
+     * Checks if initialized.
+     *
+     * @return true if initialized
+     */
+    public boolean isInitialized() {
+        return initialized;
+    }
+    
+    private static String getVehicleModel() {
+        try {
+            return (String) Class.forName("android.os.SystemProperties")
+                .getMethod("get", String.class, String.class)
+                .invoke(null, "ro.product.model", "unknown");
+        } catch (Exception e) {
+            return "unknown";
+        }
+    }
+
+    /**
+     * Checks if running.
+     * 
+     * @return true if running
+     */
+    public boolean isRunning() {
+        return running;
+    }
+
+    /**
+     * Null-safe "is the encoder currently writing packets to disk" accessor.
+     * Used by the boot-time StorageManager cleanup-gate probe wired in
+     * CameraDaemon.main(): the probe is bound before this pipeline is
+     * constructed/init'd so the limit-enforcement ticker is never silently
+     * disabled by a construction/pre-init throw. Returns false (encoder idle)
+     * while the encoder is null or pre-init, preserving the anti-fail-open
+     * intent (no destructive delete burst during an active write).
+     *
+     * @return true only if the encoder exists and is writing to a file
+     */
+    public boolean isEncoderWriting() {
+        HardwareEventRecorderGpu e = this.encoder;
+        return e != null && e.isWritingToFile();
+    }
+
+    /**
+     * Register an external predicate that the WebSocket idle-shutdown
+     * callback consults before tearing the pipeline down. Returning true
+     * keeps the pipeline alive even when no recording is currently in
+     * flight — used by PROXIMITY_GUARD MONITORING (radar armed, waiting
+     * for trigger).
+     *
+     * <p>Pass {@code null} to clear. Predicate is called from the
+     * IdleShutdown thread; implementation must be thread-safe and
+     * non-blocking.
+     */
+    public void setKeepAlivePredicate(java.util.concurrent.Callable<Boolean> predicate) {
+        this.keepAlivePredicate = predicate;
+    }
+
+    /**
+     * Register a listener fired whenever the BS layer's on-screen visibility
+     * changes. RecordingModeManager uses this to ramp the global camera fps when
+     * BS is the sole consumer. Best-effort; exceptions are swallowed.
+     */
+    public void setBsVisibilityListener(Runnable listener) {
+        this.bsVisibilityListener = listener;
+    }
+
+    /** Register a listener fired whenever live-view streaming is enabled/disabled
+     *  (incl. WS idle auto-close). RecordingModeManager uses it to recompute the
+     *  global camera fps floor. Best-effort; exceptions swallowed. */
+    public void setStreamStateListener(Runnable listener) {
+        this.streamStateListener = listener;
+    }
+
+    // Last bsLayerVisible value the listener was notified about. Edge-detect so
+    // callers (incl. the per-250ms clusterShowWhenReady re-assert) can invoke
+    // fireBsVisibilityChanged liberally without firing the listener every tick —
+    // only true on→off / off→on transitions reach RecordingModeManager.
+    private volatile boolean bsLastNotifiedVisible = false;
+
+    /** Fire the BS-visibility listener IFF bsLayerVisible actually changed since
+     *  the last notification. Safe to call from every BS show/hide site (turn-
+     *  tick, cluster show/close, disable). Never throws into the caller. */
+    private void fireBsVisibilityChanged() {
+        boolean now = bsLayerVisible;
+        if (now == bsLastNotifiedVisible) {
+            return;
+        }
+        bsLastNotifiedVisible = now;
+        Runnable l = bsVisibilityListener;
+        if (l != null) {
+            try {
+                l.run();
+            } catch (Throwable t) {
+                logger.warn("bsVisibilityListener failed: " + t.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Gets the camera component.
+     * 
+     * @return PanoramicCameraGpu instance
+     */
+    public PanoramicCameraGpu getCamera() {
+        return camera;
+    }
+    
+    /**
+     * Gets the surveillance engine.
+     *
+     * @return SurveillanceEngineGpu instance
+     */
+    public SurveillanceEngineGpu getSentry() {
+        return sentry;
+    }
+
+    /**
+     * Gets the pano mosaic recorder. Used by the storage watchdog to
+     * re-poke the recorder's output dir after a hot SD/USB remount, so
+     * future segments land on the freshly-mounted volume rather than the
+     * stale (vanished) mount point captured at startRecording time.
+     *
+     * @return the active {@link GpuMosaicRecorder}, or {@code null} when
+     *         the pipeline has not yet created one (pre-init / post-release).
+     */
+    /**
+     * Last time GpuMosaicRecorder closed a recording file (segment rotation
+     * or final stop). Read by RecordingModeManager's wedge ticker so a
+     * normal segment-boundary isRecording()=false flicker doesn't get
+     * misread as a wedge that needs re-activation.
+     *
+     * @return wallclock millis of last file-closed callback, 0 if none yet.
+     */
+    public long getLastSegmentRotateMs() {
+        return lastSegmentRotateMs;
+    }
+
+    /**
+     * Stamps the segment-rotation timestamp. Called from GpuMosaicRecorder's
+     * file-closed callback.
+     */
+    void noteSegmentRotated() {
+        lastSegmentRotateMs = System.currentTimeMillis();
+    }
+
+    public GpuMosaicRecorder getRecorder() {
+        return recorder;
+    }
+
+    /**
+     * Gets the adaptive bitrate controller.
+     * 
+     * @return AdaptiveBitrateController instance
+     */
+    public AdaptiveBitrateController getBitrateController() {
+        return bitrateController;
+    }
+    
+    /**
+     * Checks if surveillance mode is active.
+     * 
+     * @return true if in surveillance mode
+     */
+    public boolean isSurveillanceMode() {
+        return currentMode == Mode.SURVEILLANCE;
+    }
+
+    /**
+     * @return true when the sentry currently has active motion or is recording
+     * an event — the signal RMM uses to ramp the camera from parked-idle fps
+     * back to the full surveillance fps. False when the sentry is absent
+     * (falls through to today's behaviour).
+     */
+    public boolean hasActiveSurveillanceMotion() {
+        SurveillanceEngineGpu s = sentry;
+        return s != null && s.hasActiveMotion();
+    }
+
+    /**
+     * @return true when surveillance is in CONTINUOUS (always-record) mode,
+     * which has NO AI lane and already records at full fps — the parked-idle
+     * throttle must exclude it. False when the sentry is absent.
+     */
+    public boolean isContinuousSurveillance() {
+        SurveillanceEngineGpu s = sentry;
+        return s != null && s.isContinuousMode();
+    }
+
+    /**
+     * Checks if normal recording mode is active.
+     * 
+     * @return true if in normal recording mode
+     */
+    public boolean isNormalRecordingMode() {
+        return currentMode == Mode.NORMAL_RECORDING;
+    }
+
+    /**
+     * FIX (audit R5): expose the encoder's last-encoded-frame timestamp so
+     * RMM's wedge ticker can detect encoder hangs that don't surface in
+     * isRunning()/isRecording(). Returns 0 when the encoder is null, has
+     * not been initialized, or has not produced a coded frame yet — caller
+     * must treat 0 as "no signal" (skip the wedge check). Returns the wall
+     * clock time (System.currentTimeMillis) of the last
+     * dequeueOutputBuffer that yielded a real coded frame.
+     */
+    public long getLastEncodedFrameMs() {
+        HardwareEventRecorderGpu enc = encoder;
+        if (enc == null) return 0L;
+        return enc.getLastEncodedFrameMs();
+    }
+
+    /**
+     * FIX (false-GREEN: "REC/MIC green but no video file"): expose the
+     * encoder's last-disk-write timestamp so RMM's wedge ticker can detect a
+     * "muxer open but nothing landing on disk" stall (SD unmount mid-segment,
+     * ENOSPC, every write failing below the 5-strike abort). Distinct from
+     * getLastEncodedFrameMs(): that advances on every coded frame even when no
+     * file is being written, because the encoder always runs for the
+     * pre-record ring. Returns 0 when the encoder is null or no muxer has
+     * opened yet — caller must treat 0 as "no signal" (skip the check).
+     */
+    public long getLastDiskWrittenMs() {
+        HardwareEventRecorderGpu enc = encoder;
+        if (enc == null) return 0L;
+        return enc.getLastDiskWrittenMs();
+    }
+
+    /**
+     * Sets the telemetry collector instance for overlay data.
+     */
+    public void setTelemetryCollector(TelemetryDataCollector collector) {
+        this.telemetryCollector = collector;
+        if (recorder != null) {
+            recorder.setTelemetryCollector(collector);
+        }
+    }
+    
+    /**
+     * Switch the WebSocket stream sink from this pano pipeline's stream
+     * encoder to the OEM Dashcam pipeline's encoder. Called via reflection
+     * by {@code CameraDaemon.routeStreamToOemDashcam} when view mode 6 is
+     * selected. Returns silently when streaming isn't active or the OEM
+     * pipeline isn't running.
+     *
+     * <p>Bidirectional: when view mode 0..4 is selected later,
+     * {@code reattachOwnStreamCallback} reverses this — the WS server is
+     * the same instance throughout, only the source encoder changes.
+     */
+    /**
+     * @return true iff the OEM encoder is now feeding the WS sink. Returns
+     *         false (with a WARN log) when streaming wasn't enabled, the
+     *         OEM pipeline wasn't running, or its encoder hadn't been
+     *         constructed yet. Caller surfaces the failure to the client
+     *         instead of misreporting success.
+     */
+    public boolean attachExternalStreamCallback(
+            app.wheelstop.android.camera.OemDashcamPipeline oemPipeline) {
+        streamLifecycleLock.lock();
+        try {
+            return attachExternalStreamCallbackLocked(oemPipeline);
+        } finally {
+            streamLifecycleLock.unlock();
+        }
+    }
+
+    private boolean attachExternalStreamCallbackLocked(
+            app.wheelstop.android.camera.OemDashcamPipeline oemPipeline) {
+        // Held under streamLifecycleLock so we share the lock with
+        // disableStreaming. Otherwise: HTTP worker A passes the
+        // `streamingEnabled` gate, worker B's disableStreaming acquires
+        // the lock, nulls streamScaler + clears OEM publish ref +
+        // posts the GL release Runnable; worker A then re-installs the
+        // publish ref onto the about-to-be-released scaler and the OEM
+        // render loop pins it indefinitely. Symptom: live stream
+        // switches feeds 1-2s after a view change because the scaler
+        // the OEM loop is publishing into is a stale ref the WS server
+        // is no longer reading from.
+        if (!streamingEnabled || wsStreamServer == null) {
+            logger.warn("attachExternalStreamCallback: streaming not enabled — ignoring");
+            return false;
+        }
+        if (oemPipeline == null || !oemPipeline.isRunning()) {
+            logger.warn("attachExternalStreamCallback: OEM pipeline not running — ignoring");
+            return false;
+        }
+        // Capture the live scaler under the monitor.
+        final app.wheelstop.android.streaming.GpuStreamScaler liveScaler = streamScaler;
+        if (liveScaler == null) {
+            logger.warn("attachExternalStreamCallback: streamScaler null — streaming not initialized");
+            return false;
+        }
+        int oemTex = oemPipeline.getCameraTextureId();
+        android.graphics.SurfaceTexture oemSt = oemPipeline.getCameraSurfaceTexture();
+        if (oemTex == 0 || oemSt == null) {
+            logger.warn("attachExternalStreamCallback: OEM texture not yet allocated — ignoring");
+            return false;
+        }
+        try {
+            liveScaler.bindOemSource(oemTex, oemSt);
+            // Defensive: a concurrent disable that BARELY missed the
+            // monitor entry could have just nulled streamScaler and
+            // cleared the OEM publish ref. Re-check under our held
+            // monitor that the captured scaler is still THE live scaler
+            // before we re-install the publish ref. If not, undo and
+            // refuse the route.
+            if (streamScaler != liveScaler) {
+                try { liveScaler.unbindOemSource(); } catch (Throwable ignored) {}
+                logger.warn("attachExternalStreamCallback: scaler swapped under us; aborting attach");
+                return false;
+            }
+            oemPipeline.setStreamScalerForOemPublish(liveScaler);
+        } catch (Throwable t) {
+            logger.warn("attachExternalStreamCallback: streamScaler.bindOemSource failed: "
+                + t.getMessage());
+            return false;
+        }
+        externalStreamSourceActive = true;
+        logger.info("Stream sink switched: pano → OEM Dashcam");
+        return true;
+    }
+
+    /**
+     * True when the WS sink is currently bound to an external (OEM)
+     * encoder rather than this pipeline's own streamEncoder. Used by
+     * reattachOwnStreamCallback to skip the SPS/PPS-resend storm on
+     * every view 0..4 click — only fires when there's actually something
+     * to swap back.
+     */
+    private volatile boolean externalStreamSourceActive = false;
+
+    /**
+     * Restore the AVM mosaic as the streamScaler's source. Called by the
+     * existing /api/stream/view/{0..4} path after the scaler view-mode is
+     * set. Under the SOTA texture-sharing architecture there's no encoder
+     * swap or callback rebind — the same {@code streamEncoder} keeps
+     * feeding the WS sink throughout. We only tell the scaler to stop
+     * sampling the OEM OES texture and resume reading the AVM mosaic.
+     */
+    public void reattachOwnStreamCallback() {
+        // Held under streamLifecycleLock so a concurrent disableStreaming
+        // can't null streamScaler between our null-check and the
+        // unbindOemSource call (R8 regression #2). Lock is cheap — no
+        // GL post inside, just a setter on the scaler and an OEM publish
+        // ref clear.
+        streamLifecycleLock.lock();
+        try {
+            // Capture the scaler under the lock; release immediately
+            // before invoking unbindOemSource so the call doesn't pin
+            // peers, but keep the local reference so a concurrent disable
+            // that nulls streamScaler post-capture can't NPE us.
+            final app.wheelstop.android.streaming.GpuStreamScaler scaler = streamScaler;
+            if (!streamingEnabled || scaler == null) return;
+            if (!externalStreamSourceActive) return;
+            externalStreamSourceActive = false;
+            try {
+                scaler.unbindOemSource();
+            } catch (Throwable t) {
+                logger.warn("streamScaler.unbindOemSource failed: " + t.getMessage());
+            }
+            // Stop the OEM render loop's per-frame matrix publish — once
+            // the scaler is no longer sampling OEM, the publish is wasted
+            // work.
+            try {
+                app.wheelstop.android.camera.OemDashcamPipeline oem =
+                    app.wheelstop.android.daemon.CameraDaemon.getOemDashcamPipeline();
+                if (oem != null) oem.setStreamScalerForOemPublish(null);
+            } catch (Throwable ignored) {}
+            logger.info("Stream source: OEM → AVM mosaic");
+        } finally {
+            streamLifecycleLock.unlock();
+        }
+    }
+
+    /**
+     * Tracks whether THIS pipeline instance currently holds an active polling
+     * refcount on the shared TelemetryDataCollector. The collector is
+     * refcount-floored at 0, but asymmetric start/stop calls (start gated on
+     * NORMAL_RECORDING, stop unconditional) underflow against the floor and
+     * silently consume a future consumer's release. Tracking explicit hold
+     * state keeps every start/stop pair balanced regardless of mode.
+     */
+    private boolean overlayPollingHeld = false;
+
+    /**
+     * Select the DASHCAM recording composition layout (0 = standard 360
+     * mosaic, 1 = dashcam: 360 front slice on top, 360 left/rear/right below).
+     * Persisted in recording.recordingLayout. Stored here and pushed to the
+     * recorder only while the pipeline is NOT in surveillance mode — sentry
+     * owns its own layout profile (see {@link #setSurveillanceRecordingLayout}).
+     * Called from the daemon at startup and from the settings API on change.
+     */
+    public void setRecordingLayout(int layout) {
+        this.recordingLayoutConfig = (layout == 1) ? 1 : 0;
+        applyActiveLayoutProfile();
+    }
+
+    /**
+     * Record the user's preference for sourcing the DASHCAM top band from a
+     * dedicated windshield camera (recording.dashcamUseWindshield). Pushed to
+     * the producer only while NOT in surveillance mode. The windshield is
+     * captured by PanoramicCameraGpu and composited into the recorder's dashcam
+     * top band when available; the dashcam layout falls back to the 360
+     * front-camera slice (the documented graceful fallback) when it isn't.
+     */
+    public void setDashcamUseWindshield(boolean useWindshield) {
+        this.dashcamUseWindshieldConfig = useWindshield;
+        applyActiveLayoutProfile();
+    }
+
+    /**
+     * Select the SENTRY (surveillance) recording composition layout — the
+     * independent counterpart to {@link #setRecordingLayout}. Persisted in
+     * surveillance.recordingLayout. Stored here and pushed to the recorder
+     * only while the pipeline IS in surveillance mode, so dashcam and sentry
+     * recordings can use two different layouts on the one shared recorder.
+     * Called from the daemon at startup and from the settings API on change.
+     */
+    public void setSurveillanceRecordingLayout(int layout) {
+        this.surveillanceLayoutConfig = (layout == 1) ? 1 : 0;
+        applyActiveLayoutProfile();
+    }
+
+    /**
+     * SENTRY counterpart to {@link #setDashcamUseWindshield}: sentry's own
+     * "use the dedicated windshield camera for the dashcam top band"
+     * preference (surveillance.useWindshield). Pushed to the producer only
+     * while in surveillance mode.
+     */
+    public void setSurveillanceUseWindshield(boolean useWindshield) {
+        this.surveillanceUseWindshieldConfig = useWindshield;
+        applyActiveLayoutProfile();
+    }
+
+    /**
+     * Push the layout profile that matches the CURRENT pipeline mode to the
+     * shared recorder + windshield camera. Surveillance mode uses the
+     * surveillance.* profile; every other mode (normal recording / idle) uses
+     * the dashcam recording.* profile. The two modes are mutually exclusive,
+     * so a single recorder serves both by re-applying the right profile on each
+     * mode transition, recorder (re)creation, and config change. A change to
+     * the INACTIVE profile is stored but not shown until that mode is entered.
+     */
+    private void applyActiveLayoutProfile() {
+        boolean surveillance = currentMode == Mode.SURVEILLANCE;
+        int layout = surveillance ? surveillanceLayoutConfig : recordingLayoutConfig;
+        boolean useWindshield = surveillance
+            ? surveillanceUseWindshieldConfig : dashcamUseWindshieldConfig;
+        if (recorder != null) {
+            // GpuMosaicRecorder.setRecordingLayout early-returns when unchanged.
+            recorder.setRecordingLayout(layout);
+        }
+        applyWindshieldToCamera(useWindshield);
+    }
+
+    /**
+     * Push the given windshield-source preference to the producer: resolve the
+     * windshield camera id for this vehicle and enable/disable the dedicated
+     * windshield capture accordingly. No-op until the camera exists (re-applied
+     * on the next mode transition / recorder creation). PanoramicCameraGpu
+     * opens/closes the camera on its GL thread and falls back to the 360 front
+     * slice if it can't open it. Callers (config setters + mode transitions on
+     * ACC events) are infrequent, so re-resolving + pushing here is never on a
+     * hot path.
+     */
+    private void applyWindshieldToCamera(boolean useWindshield) {
+        PanoramicCameraGpu cam = this.camera;
+        if (cam == null) return;
+        int windshieldCameraId = -1;
+        try {
+            windshieldCameraId = app.wheelstop.android.camera.CameraConfigResolver
+                .resolve(getVehicleModel())
+                .getDirectCameraIdForRole(app.wheelstop.android.camera.CameraRole.WINDSHIELD);
+        } catch (Throwable t) {
+            windshieldCameraId = -1;
+        }
+        this.windshieldCameraIdConfig = windshieldCameraId;
+        cam.setDashcamWindshieldCamera(
+            useWindshield && windshieldCameraId >= 0, windshieldCameraId);
+    }
+
+    /**
+     * Enables or disables the telemetry overlay.
+     * Starts/stops the telemetry collector based on current recording mode.
+     *
+     * <p>Refcount discipline: start path is gated on {@code enabled &&
+     * currentMode == NORMAL_RECORDING}; stop path mirrors that gate via the
+     * {@code overlayPollingHeld} flag so we never issue more stops than
+     * starts. Without this, a user toggling overlay-off outside NORMAL_RECORDING
+     * issues an unmatched decrement that the collector's atomic floor
+     * absorbs but that steals the next legitimate consumer's release.
+     */
+    public void setOverlayEnabled(boolean enabled) {
+        this.overlayEnabledConfig = enabled;
+        if (recorder != null) {
+            recorder.setOverlayEnabled(enabled);
+        }
+        if (telemetryCollector == null) return;
+
+        boolean shouldHold = enabled && currentMode == Mode.NORMAL_RECORDING;
+        if (shouldHold && !overlayPollingHeld) {
+            telemetryCollector.setOverlayRecordingActive(true);
+            telemetryCollector.startPolling();
+            overlayPollingHeld = true;
+        } else if (!shouldHold && overlayPollingHeld) {
+            telemetryCollector.setOverlayRecordingActive(false);
+            telemetryCollector.stopPolling();
+            overlayPollingHeld = false;
+        }
+    }
+}

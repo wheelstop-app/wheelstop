@@ -234,7 +234,7 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
-        android:name="com.overdrive.app.OverdriveApplication"
+        android:name="app.wheelstop.android.OverdriveApplication"
         android:allowBackup="false"
         android:label="@string/app_name"
         android:extractNativeLibs="true"
@@ -248,7 +248,7 @@
 
         <!-- New Modern UI Activity -->
         <activity 
-            android:name="com.overdrive.app.ui.MainActivity"
+            android:name="app.wheelstop.android.ui.MainActivity"
             android:exported="true"
             android:screenOrientation="unspecified"
             android:configChanges="orientation|screenSize|keyboardHidden"
@@ -258,7 +258,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
             <intent-filter>
-                <action android:name="com.overdrive.app.START_LOCATION_ACTIVITY" />
+                <action android:name="app.wheelstop.android.START_LOCATION_ACTIVITY" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
@@ -286,7 +286,7 @@
             gate stays armed).
         -->
         <activity
-            android:name="com.overdrive.app.ui.PinLockActivity"
+            android:name="app.wheelstop.android.ui.PinLockActivity"
             android:exported="false"
             android:launchMode="singleTop"
             android:excludeFromRecents="true"
@@ -299,7 +299,7 @@
              a WebView page: MapLibre GL needs WebGL2/modern Chrome the head-unit
              WebView lacks. configChanges keeps the GL surface alive across rotation. -->
         <activity
-            android:name="com.overdrive.app.navmap.RoadSenseMapActivity"
+            android:name="app.wheelstop.android.navmap.RoadSenseMapActivity"
             android:exported="false"
             android:launchMode="singleTop"
             android:screenOrientation="unspecified"
@@ -326,9 +326,9 @@
              `am start` onto the cluster; AMS rejects a non-exported component from a
              foreign uid. Safe: no sensitive input, only mirrors the nav route. -->
         <activity
-            android:name="com.overdrive.app.navmap.RoadSenseClusterMapActivity"
+            android:name="app.wheelstop.android.navmap.RoadSenseClusterMapActivity"
             android:exported="true"
-            android:taskAffinity="com.overdrive.app.cluster"
+            android:taskAffinity="app.wheelstop.android.cluster"
             android:launchMode="singleInstance"
             android:excludeFromRecents="true"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|density|fontScale"
@@ -336,7 +336,7 @@
 
         <!-- Blocker Activity for Sentry Mode (transparent click blocker) -->
         <activity
-            android:name="com.overdrive.app.BlockerActivity"
+            android:name="app.wheelstop.android.BlockerActivity"
             android:exported="true"
             android:theme="@android:style/Theme.Translucent.NoTitleBar.Fullscreen"
             android:excludeFromRecents="true"
@@ -351,7 +351,7 @@
              coalesced (Activity already running just bumps onNewIntent / stays
              up while the deadline keeps extending). -->
         <activity
-            android:name="com.overdrive.app.DeterrentActivity"
+            android:name="app.wheelstop.android.DeterrentActivity"
             android:exported="true"
             android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
             android:excludeFromRecents="true"
@@ -363,17 +363,17 @@
 
         <!-- Video Playback Activity - fullscreen player for the "Play Video"
              automation/keymap action. exported=true is REQUIRED: the CameraDaemon
-             (shell uid 2000) launches it via `am start -n com.overdrive.app/.ui.VideoPlaybackActivity`
+             (shell uid 2000) launches it via `am start -n app.wheelstop.android/.ui.VideoPlaybackActivity`
              (same bridge as DeterrentActivity) — the daemon can't render video itself.
              singleTask + clear-task so a repeat play replaces the current clip in one
              instance. Library clips stream from the daemon's authenticated raw endpoint. -->
         <activity
-            android:name="com.overdrive.app.ui.VideoPlaybackActivity"
+            android:name="app.wheelstop.android.ui.VideoPlaybackActivity"
             android:exported="true"
             android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
             android:excludeFromRecents="true"
             android:launchMode="singleTask"
-            android:taskAffinity="com.overdrive.app.mediaplayer"
+            android:taskAffinity="app.wheelstop.android.mediaplayer"
             android:screenOrientation="unspecified"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|navigation|fontScale|locale|layoutDirection|uiMode|density" />
 
@@ -381,13 +381,13 @@
              split-screen re-dock path. exported=true is REQUIRED: the CameraDaemon
              (shell uid 2000) launches it in windowing mode 3 (SPLIT_SCREEN_PRIMARY)
              via `am start` targeting
-             com.overdrive.app/com.overdrive.app.launcher.AppLauncherGhostActivity
+             app.wheelstop.android/app.wheelstop.android.launcher.AppLauncherGhostActivity
              to force a split-screen-primary stack, then moves an already-running app's
              task into it. singleInstance keeps the docked half a distinct task;
              excludeFromRecents so the invisible anchor never shows in Recents. It
              self-finishes after a short grace window (see AppLauncherGhostActivity). -->
         <activity
-            android:name="com.overdrive.app.launcher.AppLauncherGhostActivity"
+            android:name="app.wheelstop.android.launcher.AppLauncherGhostActivity"
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
             android:resizeableActivity="true"
             android:launchMode="singleInstance"
@@ -397,7 +397,7 @@
         <!-- Location Starter Activity - Transparent, starts Location service and finishes immediately -->
         <!-- Used by SentryDaemon to restart Location service without bringing app to foreground -->
         <activity
-            android:name="com.overdrive.app.ui.LocationStarterActivity"
+            android:name="app.wheelstop.android.ui.LocationStarterActivity"
             android:exported="true"
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
             android:excludeFromRecents="true"
@@ -405,13 +405,13 @@
             android:taskAffinity=""
             android:launchMode="singleTask">
             <intent-filter>
-                <action android:name="com.overdrive.app.START_LOCATION_SILENT" />
+                <action android:name="app.wheelstop.android.START_LOCATION_SILENT" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
 
         <receiver
-            android:name="com.overdrive.app.receiver.BootReceiver"
+            android:name="app.wheelstop.android.receiver.BootReceiver"
             android:enabled="true"
             android:exported="true"
             android:directBootAware="true">
@@ -444,14 +444,14 @@
              the process if it has been killed (force-stop, OOM, OEM cleanup).
              No intent-filter: only invoked via explicit PendingIntent. -->
         <receiver
-            android:name="com.overdrive.app.receiver.ProcessRevivalReceiver"
+            android:name="app.wheelstop.android.receiver.ProcessRevivalReceiver"
             android:enabled="true"
             android:exported="false"
             android:directBootAware="true" />
 
         <!-- Location Boot Receiver - Auto-start Location service after device reboot -->
         <receiver
-            android:name="com.overdrive.app.receiver.LocationBootReceiver"
+            android:name="app.wheelstop.android.receiver.LocationBootReceiver"
             android:enabled="true"
             android:exported="true">
             <intent-filter>
@@ -462,14 +462,14 @@
 
         <!-- Location Sidecar Service - Writes GPS to shared file for daemon -->
         <service
-            android:name="com.overdrive.app.services.LocationSidecarService"
+            android:name="app.wheelstop.android.services.LocationSidecarService"
             android:foregroundServiceType="location|dataSync"
             android:exported="true" />
 
         <!-- Daemon Keepalive Service - Keeps app alive and monitors SCREEN_OFF.
              exported=true is REQUIRED: the CameraDaemon (shell uid 2000) respawns
              the app headlessly via `am start-foreground-service -n
-             com.overdrive.app/.services.DaemonKeepaliveService` in
+             app.wheelstop.android/.services.DaemonKeepaliveService` in
              KeymapApiHandler.forceRestartAppForA11y() (the a11y-bind-wedge
              recovery). AMS rejects a non-exported component launched from a
              foreign uid, so exported=false would let the watchdog force-stop the
@@ -478,7 +478,7 @@
              The service self-guards in onStartCommand (post-update defer +
              permission checks), so exporting it carries the same low risk. -->
         <service
-            android:name="com.overdrive.app.services.DaemonKeepaliveService"
+            android:name="app.wheelstop.android.services.DaemonKeepaliveService"
             android:foregroundServiceType="specialUse|dataSync"
             android:exported="true" />
 
@@ -492,7 +492,7 @@
              `am start-foreground-service` — the same proven path GpsMonitor uses for
              LocationSidecarService. -->
         <service
-            android:name="com.overdrive.app.roadsense.sidecar.RoadSenseImuSidecarService"
+            android:name="app.wheelstop.android.roadsense.sidecar.RoadSenseImuSidecarService"
             android:foregroundServiceType="dataSync"
             android:exported="true" />
 
@@ -505,28 +505,28 @@
              after the user opens MainActivity. The service self-guards the overlay
              permission in onStartCommand, so an am launch without it cleanly no-ops. -->
         <service
-            android:name="com.overdrive.app.roadsense.overlay.RoadSenseOverlayService"
+            android:name="app.wheelstop.android.roadsense.overlay.RoadSenseOverlayService"
             android:foregroundServiceType="specialUse|dataSync"
             android:exported="true" />
 
 
         <!-- Status Overlay Service - Floating recording/trip status indicator -->
         <service
-            android:name="com.overdrive.app.overlay.StatusOverlayService"
+            android:name="app.wheelstop.android.overlay.StatusOverlayService"
             android:foregroundServiceType="specialUse"
             android:exported="false" />
 
         <!-- Media Playback Service - plays the "Play Audio" automation/keymap sound
              in the REAL app process. exported=true is REQUIRED: the CameraDaemon
              (shell uid 2000, synthetic context) launches it via
-             `am start-foreground-service -n com.overdrive.app/.services.MediaPlaybackService`
+             `am start-foreground-service -n app.wheelstop.android/.services.MediaPlaybackService`
              — the daemon CANNOT play a MediaPlayer itself (prepare() fails 0x80000000
              on this firmware) nor startForegroundService cross-process. Same proven
              bridge the RoadSense/Location sidecars use. Library sounds are streamed
              from the daemon's authenticated /api/audio/library/raw (the app UID can't
              read /data/local/tmp), so exporting carries no file-access surface. -->
         <service
-            android:name="com.overdrive.app.services.MediaPlaybackService"
+            android:name="app.wheelstop.android.services.MediaPlaybackService"
             android:foregroundServiceType="mediaPlayback"
             android:exported="true" />
 
@@ -534,23 +534,23 @@
              automation/keymap message as a TYPE_APPLICATION_OVERLAY in the REAL app
              process. exported=true is REQUIRED: the CameraDaemon (shell uid 2000)
              launches it via
-             `am start-foreground-service -n com.overdrive.app/.overlay.MessageOverlayService`
+             `am start-foreground-service -n app.wheelstop.android/.overlay.MessageOverlayService`
              — the daemon has no UI surface. Same proven bridge as MediaPlaybackService /
              the RoadSense overlay. Non-focusable window so it never steals focus from the
              foreground app; all content comes from the launching Intent extras (no file
              or data-access surface), so exporting carries no additional risk. -->
         <service
-            android:name="com.overdrive.app.overlay.MessageOverlayService"
+            android:name="app.wheelstop.android.overlay.MessageOverlayService"
             android:foregroundServiceType="specialUse|dataSync"
             android:exported="true" />
 
 
         <!-- AccessibilityService Keep-Alive - Highest process priority protection.
              Prevents BYD firmware from killing the app after 24 hours.
-             Enable via: settings put secure enabled_accessibility_services com.overdrive.app/com.overdrive.app.services.KeepAliveAccessibilityService
+             Enable via: settings put secure enabled_accessibility_services app.wheelstop.android/app.wheelstop.android.services.KeepAliveAccessibilityService
                          settings put secure accessibility_enabled 1 -->
         <service
-            android:name="com.overdrive.app.services.KeepAliveAccessibilityService"
+            android:name="app.wheelstop.android.services.KeepAliveAccessibilityService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
             android:exported="false">
             <intent-filter>

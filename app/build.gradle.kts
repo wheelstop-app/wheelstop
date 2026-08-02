@@ -321,12 +321,12 @@ android {
             keyAlias = System.getenv("KEY_ALIAS") ?: "key0"
         }
     }
-    namespace = "com.overdrive.app"
+    namespace = "app.wheelstop.android"
     compileSdk = 36
     ndkVersion = "26.1.10909125"
 
     defaultConfig {
-        applicationId = "com.overdrive.app"
+        applicationId = "app.wheelstop.android"
         minSdk = 25
         targetSdk = 25
         versionCode = 1
@@ -367,7 +367,7 @@ android {
             //   → R8 strips all log calls from bytecode
             // When ANY flag is true (debug build): exclude proguard-rules-strip-logs.pro
             //   → log calls stay in bytecode, DaemonLogConfig controls which tags write to disk
-            val logConfigFile = file("src/main/java/com/overdrive/app/logging/DaemonLogConfig.java")
+            val logConfigFile = file("src/main/java/app/wheelstop/android/logging/DaemonLogConfig.java")
             val loggingEnabled = if (logConfigFile.exists()) {
                 val content = logConfigFile.readText()
                 val enableAllMatch = Regex("""public static final boolean ENABLE_ALL\s*=\s*true""").containsMatchIn(content)
