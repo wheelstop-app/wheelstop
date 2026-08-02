@@ -2893,7 +2893,7 @@ public class PanoramicCameraGpu {
                 // frame. acquireLatestImage() returns null when nothing new
                 // arrived, so the unconditional drain is a cheap no-op that
                 // just keeps the last frame bound on idle iterations.
-                // (Ported from Overdrive-release PR #97.) The stall guard
+                // (Ported from the upstream project, PR #97.) The stall guard
                 // below remains as a safety net for genuine frame-stoppage
                 // (handle contention / HAL pause) that draining can't prevent.
                 if (windshieldStarted) {

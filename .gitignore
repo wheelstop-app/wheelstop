@@ -27,3 +27,6 @@
 
 # Internal planning docs (specs/plans) — not for the public repo
 docs/superpowers/
+
+# Superpowers SDD scratch (ledgers, review packages) — never commit
+.superpowers/
