@@ -135,7 +135,7 @@ jobs:
             echo "::error::signer cert $GOT != pinned $EXPECTED_CERT — refusing to publish"; exit 1
           fi
 
-      - name: Stage assets (versioned APK + SHA256SUMS)
+      - name: Stage assets (APK + SHA256SUMS + licences + GPL corresponding source)
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -145,18 +145,33 @@ jobs:
           cp "$APK" "dist/wheelstop-alpha-${VERSION}.apk"
           ( cd dist && sha256sum "wheelstop-alpha-${VERSION}.apk" | tee SHA256SUMS )
 
+          # GPLv3 compliance: the APK bundles the GPL-3 sing-box binary, so every release
+          # must convey its Corresponding Source and the licence/notice in the same place.
+          cp THIRD_PARTY_NOTICES.md LICENSES/GPL-3.0.txt LICENSES/Apache-2.0.txt LICENSES/sing-box.LICENSE dist/
+          SB_VER=$(grep -E '^libsingbox\.upstream' app/tunnel-binaries.lock | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+          if [ -z "$SB_VER" ]; then echo "::error::could not read sing-box version from app/tunnel-binaries.lock"; exit 1; fi
+          curl -fsSL -o "dist/sing-box-${SB_VER#v}-corresponding-source.tar.gz" \
+            "https://github.com/SagerNet/sing-box/archive/refs/tags/${SB_VER}.tar.gz"
+          echo "staged Corresponding Source for sing-box ${SB_VER}"
+
       - name: Publish to the rolling alpha release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          NOTES="Signed release ${VERSION}. Cert-gated to the pinned release signer. Installs in place via same-cert pm install -r."
+          printf 'Signed release %s. Cert-gated to the pinned release signer. Installs in place via same-cert pm install -r.\n\nBundled third-party binaries and their licences are described in THIRD_PARTY_NOTICES.md (attached). The Corresponding Source for the GPL-3 sing-box binary is attached as sing-box-*-corresponding-source.tar.gz.\n' "$VERSION" > dist/RELEASE_NOTES.md
+          ASSETS=(
+            "dist/wheelstop-alpha-${VERSION}.apk"
+            dist/SHA256SUMS
+            dist/THIRD_PARTY_NOTICES.md
+            dist/GPL-3.0.txt dist/Apache-2.0.txt dist/sing-box.LICENSE
+            dist/sing-box-*-corresponding-source.tar.gz
+          )
           if gh release view alpha >/dev/null 2>&1; then
-            gh release upload alpha "dist/wheelstop-alpha-${VERSION}.apk" dist/SHA256SUMS --clobber
-            gh release edit alpha --title "alpha ${VERSION}" --notes "$NOTES" --target "$GITHUB_SHA"
+            gh release upload alpha "${ASSETS[@]}" --clobber
+            gh release edit alpha --title "alpha ${VERSION}" --notes-file dist/RELEASE_NOTES.md --target "$GITHUB_SHA"
           else
-            gh release create alpha \
-              "dist/wheelstop-alpha-${VERSION}.apk" dist/SHA256SUMS \
-              --title "alpha ${VERSION}" --notes "$NOTES" --target "$GITHUB_SHA"
+            gh release create alpha "${ASSETS[@]}" \
+              --title "alpha ${VERSION}" --notes-file dist/RELEASE_NOTES.md --target "$GITHUB_SHA"
           fi
