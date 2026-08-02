@@ -111,8 +111,8 @@ jobs:
           set -euo pipefail
           APK=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
           mkdir -p dist
-          cp "$APK" "dist/overdrive-alpha-${VERSION}.apk"
-          ( cd dist && sha256sum "overdrive-alpha-${VERSION}.apk" | tee SHA256SUMS )
+          cp "$APK" "dist/wheelstop-alpha-${VERSION}.apk"
+          ( cd dist && sha256sum "wheelstop-alpha-${VERSION}.apk" | tee SHA256SUMS )
 
       - name: Publish to the rolling alpha release
         env:
@@ -122,10 +122,10 @@ jobs:
           set -euo pipefail
           NOTES="Signed release ${VERSION}. Cert-gated to the pinned release signer. Installs in place via same-cert pm install -r."
           if gh release view alpha >/dev/null 2>&1; then
-            gh release upload alpha "dist/overdrive-alpha-${VERSION}.apk" dist/SHA256SUMS --clobber
+            gh release upload alpha "dist/wheelstop-alpha-${VERSION}.apk" dist/SHA256SUMS --clobber
             gh release edit alpha --title "alpha ${VERSION}" --notes "$NOTES" --target "$GITHUB_SHA"
           else
             gh release create alpha \
-              "dist/overdrive-alpha-${VERSION}.apk" dist/SHA256SUMS \
+              "dist/wheelstop-alpha-${VERSION}.apk" dist/SHA256SUMS \
               --title "alpha ${VERSION}" --notes "$NOTES" --target "$GITHUB_SHA"
           fi

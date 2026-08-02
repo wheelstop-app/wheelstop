@@ -1942,8 +1942,8 @@ public class AppUpdater {
 
     /**
      * Extract version from APK filename including channel.
-     * "overdrive-release-alpha-v6.1.apk" → "alpha-v6.1"
-     * "overdrive-release-prod-v2.0.1.apk" → "prod-v2.0.1"
+     * "wheelstop-alpha-v6.1.apk" → "alpha-v6.1"
+     * "wheelstop-prod-v2.0.1.apk" → "prod-v2.0.1"
      */
     static String extractVersion(String apkName) {
         if (apkName != null) {

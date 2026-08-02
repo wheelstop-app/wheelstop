@@ -9,6 +9,6 @@ import org.junit.Test;
 public class UpdateRepoConfigTest {
     @Test
     public void updateRepoPointsAtFork() {
-        assertEquals("shauneccles/Overdrive-release", BuildConfig.UPDATE_REPO);
+        assertEquals("wheelstop-app/wheelstop", BuildConfig.UPDATE_REPO);
     }
 }

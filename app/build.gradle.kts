@@ -393,7 +393,7 @@ android {
             // Update channel: "alpha" for release builds (checks alpha tag on GitHub)
             buildConfigField("String", "UPDATE_CHANNEL", "\"alpha\"")
             // Auto-update source: this fork's releases, not upstream.
-            buildConfigField("String", "UPDATE_REPO", "\"shauneccles/Overdrive-release\"")
+            buildConfigField("String", "UPDATE_REPO", "\"wheelstop-app/wheelstop\"")
             buildConfigField("boolean", "LOG_CAPTURE", "true")
             buildConfigField("String", "LOG_UPLOAD_URL", "\"\"")
         }
@@ -412,7 +412,7 @@ android {
             // Debug builds also check alpha channel for updates
             buildConfigField("String", "UPDATE_CHANNEL", "\"alpha\"")
             // Auto-update source: this fork's releases, not upstream.
-            buildConfigField("String", "UPDATE_REPO", "\"shauneccles/Overdrive-release\"")
+            buildConfigField("String", "UPDATE_REPO", "\"wheelstop-app/wheelstop\"")
             buildConfigField("boolean", "LOG_CAPTURE", "true")
             buildConfigField("String", "LOG_UPLOAD_URL", "\"\"")
         }
