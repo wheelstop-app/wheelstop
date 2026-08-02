@@ -33,7 +33,7 @@ All permalinks in these documents use the form:
 
 ## Bottom line
 
-OverDrive is not a hardened consumer remote-control product. It is a power-user tool that **bootstraps system-level privilege** on the head unit (daemons run as UID 2000 / shell, some as UID 1000 / system, holding the full `BYDAUTO_*` vehicle HAL permission set — door locks, drivetrain, ADAS, charging) and then exposes that privilege through channels that are, in multiple cases, **unauthenticated or trivially bypassed**.
+OverDrive is not a hardened consumer remote-control product. It is a power-user tool that **bootstraps elevated privilege** on the head unit (daemons run as UID 2000 / shell — the UID 1000 / system path is disabled in this build; see [doc 10](10-review-and-verification.md) and the F16 correction) and drives the vehicle through the **BYD-cloud leg with the owner's credentials** (the signature-protected `BYDAUTO_*_SET` HAL *writes* are not granted to this unsigned APK — see the actuation correction in [doc 10, Part 3](10-review-and-verification.md#part-3--direct-answer-to-the-owners-concern)). It then exposes that credential/command surface through channels that are, in multiple cases, **unauthenticated or trivially bypassed**.
 
 The design contains some genuinely sound elements (see [What is done well](#what-is-done-reasonably-well)), but the aggregate posture means a motivated attacker in any of several positions — a co-resident app, a device on the same Wi-Fi, the operator of the bundled proxy, or a party on a shared MQTT broker — can observe the car's camera and location and/or actuate it.
 
@@ -49,7 +49,7 @@ The design contains some genuinely sound elements (see [What is done well](#what
 | F4 | Live H.264 camera stream on `0.0.0.0:8887` with zero authentication | 🔴 Critical | Same Wi-Fi / LAN, or any local app | [05](findings/05-surveillance-and-camera.md#f4) |
 | F5 | JWT signing secret is 8 chars (~41 bits) **and** stored in a shell-readable config file | 🔴 Critical | LAN sniff → offline crack; shell-domain process | [01](findings/01-network-exposure-and-auth.md#f5) |
 | F6 | "Encryption" (`Safe`/`Enc`) uses an AES key committed to the repo | 🔴 Critical | Anyone with the public repo | [09](findings/09-secrets-and-crypto.md#f6) |
-| F7 | MQTT adds no app-level sender auth on command topics (critical **iff** broker is anonymous/weak-ACL + control enabled); UI nudges toward a public plaintext broker | 🔴 Critical (conditional) | Anyone on an anonymous/weak-ACL broker | [06](findings/06-mqtt.md#f7) |
+| F7 | MQTT adds no app-level sender auth on command topics (critical **iff** broker is anonymous/weak-ACL + control **and Home Assistant discovery** enabled); UI nudges toward a public plaintext broker | 🔴 Critical (conditional) | Anyone on an anonymous/weak-ACL broker | [06](findings/06-mqtt.md#f7) |
 | F8 | Loopback "safety-net" auth bypass for locally-terminating forwarders without proxy headers | 🟠 High | Local-terminating forwarder / on-device SSRF | [01](findings/01-network-exposure-and-auth.md#f8) |
 | F9 | Unauthenticated surveillance IPC socket exposes GPS, config, control | 🟠 High | Any local app | [05](findings/05-surveillance-and-camera.md#f9) |
 | F10 | Unsigned config restore deep-merges attacker sections (Telegram owner, community/tunnel) into live config | 🟠 High | Valid session + phished restore | [08](findings/08-community-and-backup.md#f10) |
@@ -63,6 +63,12 @@ The design contains some genuinely sound elements (see [What is done well](#what
 | F18 | `trustAllCerts` / trust-all TLS socket factories disable certificate validation | 🟡 Medium | On-path attacker | [06](findings/06-mqtt.md#f18) |
 | F19 | Enabling a Zrok/Cloudflare tunnel publishes the control plane to the internet with no tunnel-layer auth | 🟠 High (situational) | Internet | [03](findings/03-proxy-mitm-and-infrastructure.md#f19) |
 | F20 | Shell commands built by string concatenation across launchers (latent pattern — no reachable injection today) | 🟡 Low/Medium | Latent (future changes) | [02](findings/02-local-rce-and-ipc.md#f20) |
+| F21 | Telegram daemon IPC (`:19880`) uploads any daemon-readable file to an **attacker-chosen** chat (unauth); precondition: Telegram + video uploads enabled | 🟠 High | Any local app (Telegram integration on) | [10](10-review-and-verification.md#part-2--what-the-second-pass-adds) |
+| F22 | BYD event daemon telemetry listener (`:19878`) — **dead code in this build** (daemon not launched) | ⚪ Dormant | Latent (only if re-enabled) | [10](10-review-and-verification.md#part-2--what-the-second-pass-adds) |
+| F23 | AAC audio-ingest listener (`127.0.0.1`) unauth; latent duplicated-port constant | 🟡 Low | Any local app | [10](10-review-and-verification.md#part-2--what-the-second-pass-adds) |
+| F24 | Sentry control socket (`:19879`) unauth — kill the keepalive/power daemon (availability) + control location monitoring | 🟡 Medium | Any local app | [10](10-review-and-verification.md#part-2--what-the-second-pass-adds) |
+
+> Rows F21–F24 and an accuracy correction to the `BYDAUTO`-actuation impact framing come from the **independent review pass** — see [doc 10](10-review-and-verification.md). F1–F20 above are the original audit.
 
 ---
 
@@ -79,6 +85,7 @@ The design contains some genuinely sound elements (see [What is done well](#what
 | [07 — Telegram bot](findings/07-telegram-bot.md) | Owner model, pairing PIN, token storage, command surface |
 | [08 — Community automations & config backup](findings/08-community-and-backup.md) | Restore merge, credential export, community trust, automation capability |
 | [09 — Secrets & cryptography](findings/09-secrets-and-crypto.md) | `Safe`/`Enc` key, world-readable config, credential cipher derivation |
+| [10 — Independent review & verification](10-review-and-verification.md) | Second-pass verification of F1–F20 against source, four additional unauthenticated loopback listeners (F21–F24), an accuracy correction to the `BYDAUTO`-actuation impact framing, and a direct risk answer for the owner |
 
 ---
 
