@@ -911,8 +911,9 @@ public class StreamingApiHandler {
     }
     
     // Blind-spot (view 7/8) LIVE tuning (in-memory; debug editor). tail is up to
-    // 10 opaque scalars: "{p0}/{p1}/{p2}/{p3}/{p4}/{p5}/{p6}/{p7}/{p8}/{p9}"
-    // (trailing values optional; each defaults to its identity value).
+    // 12 opaque scalars: "{p0}/{p1}/{p2}/{p3}/{p4}/{p5}/{p6}/{p7}/{p8}/{p9}/{p10}/{p11}"
+    // (trailing values optional; each defaults to its identity value, except
+    // p10/p11 [contrast/sharpen] which default to the persisted config value).
     private static void handleBlindSpotParams(OutputStream out, String tail) throws Exception {
         GpuSurveillancePipeline pipeline = CameraDaemon.getGpuPipeline();
         if (pipeline == null) {
@@ -922,6 +923,12 @@ public class StreamingApiHandler {
         float hfov = 1.66f, sideHFov = 1.98f, yaw = 1.23f, roll = 0.25f,
               feather = 0.38f, projExp = 1.0f, vscale = 1.0f, pitch = -0.275f,
               rearRoll = 0.0f, rearPitch = 0.0f;
+        // contrast/sharpen (p10/p11) default to the persisted config value
+        // (not a hardcoded literal like the geometry scalars above) so that
+        // omitting them from the URL is a no-op against whatever's already
+        // configured, rather than silently resetting live tuning.
+        float contrast = com.overdrive.app.config.UnifiedConfigManager.getBlindSpotContrast();
+        float sharpen  = com.overdrive.app.config.UnifiedConfigManager.getBlindSpotSharpen();
         try {
             String[] p = tail.split("/");
             if (p.length > 0 && !p[0].isEmpty()) hfov      = Float.parseFloat(p[0]);
@@ -934,12 +941,15 @@ public class StreamingApiHandler {
             if (p.length > 7 && !p[7].isEmpty()) pitch     = Float.parseFloat(p[7]);
             if (p.length > 8 && !p[8].isEmpty()) rearRoll  = Float.parseFloat(p[8]);
             if (p.length > 9 && !p[9].isEmpty()) rearPitch = Float.parseFloat(p[9]);
+            if (p.length > 10 && !p[10].isEmpty()) contrast = Float.parseFloat(p[10]);
+            if (p.length > 11 && !p[11].isEmpty()) sharpen  = Float.parseFloat(p[11]);
         } catch (NumberFormatException e) {
             HttpResponse.sendJsonError(out, "Bad blind-spot params: " + tail);
             return;
         }
         pipeline.setBlindSpotParams(hfov, sideHFov, yaw, roll, feather, projExp, vscale, pitch,
                                     rearRoll, rearPitch);
+        pipeline.setBlindSpotClarity(contrast, sharpen);
         JSONObject ok = new JSONObject();
         ok.put("success", true);
         ok.put("hfov", hfov);
@@ -952,6 +962,8 @@ public class StreamingApiHandler {
         ok.put("pitch", pitch);
         ok.put("rearRoll", rearRoll);
         ok.put("rearPitch", rearPitch);
+        ok.put("contrast", contrast);
+        ok.put("sharpen", sharpen);
         HttpResponse.sendJson(out, ok.toString());
     }
 
@@ -1075,6 +1087,12 @@ public class StreamingApiHandler {
                     String mm = bs.optString("mergeMode", "both");
                     pipeline.setBlindSpotMergeMode(
                         "side".equals(mm) ? 1 : ("rear".equals(mm) ? 2 : 0));
+                    // Clarity (contrast/sharpen) — apply alongside the stitch calib and
+                    // merge mode so a browser switching the live stream to 7/8 matches
+                    // the persisted selection, not the scaler's neutral default.
+                    pipeline.setBlindSpotClarity(
+                        com.overdrive.app.config.UnifiedConfigManager.getBlindSpotContrast(),
+                        com.overdrive.app.config.UnifiedConfigManager.getBlindSpotSharpen());
                 }
             } catch (Throwable t) {
                 CameraDaemon.log("blindspot calib apply failed: " + t.getMessage());

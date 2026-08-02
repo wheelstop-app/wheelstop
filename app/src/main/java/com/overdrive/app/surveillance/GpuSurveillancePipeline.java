@@ -4507,6 +4507,12 @@ public class GpuSurveillancePipeline {
                 // Merge mode (both/side/rear) — re-applied here so it survives an
                 // enable or a side switch, same lifecycle as the stitch calibration.
                 s.setBlindSpotMergeMode(bsMergeModeCode(bs.optString("mergeMode", "both")));
+                // Card clarity (contrast/sharpen) — same lifecycle as the stitch
+                // calibration/merge mode above: re-applied on every enable/resync/
+                // side switch so a config change lands without an ACC cycle.
+                s.setBlindSpotClarity(
+                    com.overdrive.app.config.UnifiedConfigManager.getBlindSpotContrast(),
+                    com.overdrive.app.config.UnifiedConfigManager.getBlindSpotSharpen());
             }
         } catch (Throwable t) {
             logger.warn("blindspot calib apply failed: " + t.getMessage());
@@ -6255,6 +6261,17 @@ public class GpuSurveillancePipeline {
         com.overdrive.app.streaming.GpuStreamScaler bs = bsScaler;
         if (bs != null) bs.setBlindSpotMergeMode(mode);
         logger.info("Blind-spot merge mode set to " + mode);
+    }
+
+    /** Forward blind-spot card clarity (views 7/8) to the scaler(s): contrast
+     *  pivot (1.0 = neutral) and unsharp amount (0.0 = off). Pushes to BOTH the
+     *  shared stream scaler (browser preview) and the dedicated BS lane's scaler
+     *  (what the overlay renders), same as {@link #setBlindSpotParams}. No-op-safe. */
+    public void setBlindSpotClarity(float contrast, float sharpen) {
+        com.overdrive.app.streaming.GpuStreamScaler ss = streamScaler;
+        if (ss != null) ss.setBlindSpotClarity(contrast, sharpen);
+        com.overdrive.app.streaming.GpuStreamScaler bs = bsScaler;
+        if (bs != null) bs.setBlindSpotClarity(contrast, sharpen);
     }
 
     /** Map the persisted string merge mode to the scaler's int code. */

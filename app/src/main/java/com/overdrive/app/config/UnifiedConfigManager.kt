@@ -656,7 +656,9 @@ object UnifiedConfigManager {
         // ignored (recording always gets full rate; see RecordingModeManager
         // .reconcileCameraProfile).
         if (!blindspot.has("idleFps")) blindspot.put("idleFps", 1)
-        if (!blindspot.has("activeFps")) blindspot.put("activeFps", 15)
+        if (!blindspot.has("activeFps")) blindspot.put("activeFps", 25)
+        if (!blindspot.has("contrast")) blindspot.put("contrast", 1.0)
+        if (!blindspot.has("sharpen")) blindspot.put("sharpen", 0.0)
         // Display target: "head_unit" (default — 15.6" center screen, layerStack 0,
         // shipping behaviour) or "cluster" (driver gauge screen via OEM projection).
         if (!blindspot.has("target")) blindspot.put("target", "head_unit")
@@ -1538,12 +1540,37 @@ object UnifiedConfigManager {
     fun getBlindSpotIdleFps(): Int =
         getBlindSpot().optInt("idleFps", 1).coerceIn(1, 15)
 
+    /** Pure helper: extract blind-spot activeFps with defaults and clamping.
+     *  Defaults to 25, clamped to [1, 30]. */
+    @JvmStatic fun blindSpotActiveFps(bs: org.json.JSONObject): Int =
+        bs.optInt("activeFps", 25).coerceIn(1, 30)
+
+    /** Pure helper: extract blind-spot contrast with defaults and clamping.
+     *  Defaults to 1.0 (neutral), clamped to [0.5, 2.0]. */
+    @JvmStatic fun blindSpotContrast(bs: org.json.JSONObject): Float =
+        bs.optDouble("contrast", 1.0).toFloat().coerceIn(0.5f, 2.0f)
+
+    /** Pure helper: extract blind-spot sharpen with defaults and clamping.
+     *  Defaults to 0.0 (off), clamped to [0.0, 1.0]. */
+    @JvmStatic fun blindSpotSharpen(bs: org.json.JSONObject): Float =
+        bs.optDouble("sharpen", 0.0).toFloat().coerceIn(0.0f, 1.0f)
+
     /** Global camera fps while the camera is kept warm ONLY for blind-spot AND
      *  the blind-spot view is SHOWN (turn signal on). Ramps the shared camera up
-     *  so the blind-spot view is smooth. Default 15 fps. */
+     *  so the blind-spot view is smooth. Default 25 fps. */
     @JvmStatic
     fun getBlindSpotActiveFps(): Int =
-        getBlindSpot().optInt("activeFps", 15).coerceIn(1, 30)
+        blindSpotActiveFps(getBlindSpot())
+
+    /** Blind-spot image contrast scaling. 1.0 is neutral. Default 1.0. */
+    @JvmStatic
+    fun getBlindSpotContrast(): Float =
+        blindSpotContrast(getBlindSpot())
+
+    /** Blind-spot image sharpening filter strength. 0.0 is off. Default 0.0. */
+    @JvmStatic
+    fun getBlindSpotSharpen(): Float =
+        blindSpotSharpen(getBlindSpot())
 
     /** Master gate for the parked-idle surveillance camera throttle. Default
      *  FALSE ⇒ every deployed unit is byte-identical until explicit opt-in. */
