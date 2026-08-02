@@ -12,10 +12,10 @@
     <color name="white">#FFFFFFFF</color>
 
     <!-- Brand -->
-    <color name="brand_primary">#5DDBB6</color>
-    <color name="brand_secondary">#85CFFF</color>
+    <color name="brand_primary">#FFBD58</color>
+    <color name="brand_secondary">#F5BB23</color>
     <color name="brand_cyan">@color/brand_primary</color>
-    <color name="brand_cyan_glow">#335DDBB6</color>
+    <color name="brand_cyan_glow">#33FFBD58</color>
 
     <!-- Backgrounds — M3 surface tonal stack -->
     <color name="bg_base">#0E1311</color>

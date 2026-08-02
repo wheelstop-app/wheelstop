@@ -65,7 +65,7 @@
 :root[data-theme="light"] {
     --bg-glass: rgba(247, 250, 247, 0.88);
 
-    --chart-line-1: #00876C;
+    --chart-line-1: #FFB020;
     --chart-line-2: #00658F;
     --chart-warning: #B45309;
     --chart-soh: #7C3AED;
