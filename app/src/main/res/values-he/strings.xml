@@ -762,7 +762,7 @@
     <!-- ============================================================== -->
     <!-- Hero card -->
     <!-- SOTA hero headline. Static identity statement (not a time-of-day
-         greeting) — pairs with the OVERDRIVE overline above and the live
+         greeting) — pairs with the WHEELSTOP overline above and the live
          status row of chips below. Locale catalogs auto-translate. -->
     <string name="dashboard_hero_headline">On watch</string>
     <string name="dashboard_subtitle_all_systems">All systems online</string>
@@ -812,7 +812,7 @@
     <!-- ============================================================ -->
     <!-- Hero -->
     <string name="settings_hero_title">Settings</string>
-    <string name="settings_hero_overline">OVERDRIVE</string>
+    <string name="settings_hero_overline">WHEELSTOP</string>
     <string name="settings_hero_subtitle">Tune appearance, recording, surveillance, and on-device data.</string>
     <!-- Section overlines -->
     <string name="settings_overline_preferences">PREFERENCES</string>

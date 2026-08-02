@@ -757,7 +757,7 @@
     <!-- ============================================================== -->
     <!-- Hero card -->
     <!-- SOTA hero headline. Static identity statement (not a time-of-day
-         greeting) — pairs with the OVERDRIVE overline above and the live
+         greeting) — pairs with the WHEELSTOP overline above and the live
          status row of chips below. Locale catalogs auto-translate. -->
     <string name="dashboard_hero_headline">निगरानी पर</string>
     <string name="dashboard_subtitle_all_systems">सभी प्रणाली ऑनलाइन</string>
@@ -807,7 +807,7 @@
     <!-- ============================================================ -->
     <!-- Hero -->
     <string name="settings_hero_title">सेटिंग्स</string>
-    <string name="settings_hero_overline">ओवरड्राइव</string>
+    <string name="settings_hero_overline">WHEELSTOP</string>
     <string name="settings_hero_subtitle">उपस्थिति, रिकॉर्डिंग, निगरानी और डिवाइस पर डेटा को ट्यून करें।</string>
     <!-- Section overlines -->
     <string name="settings_overline_preferences">पूर्ववर्ती</string>

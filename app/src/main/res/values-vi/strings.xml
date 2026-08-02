@@ -754,7 +754,7 @@
     <!-- ============================================================== -->
     <!-- Hero card -->
     <!-- SOTA hero headline. Static identity statement (not a time-of-day
-         greeting) — pairs with the OVERDRIVE overline above and the live
+         greeting) — pairs with the WHEELSTOP overline above and the live
          status row of chips below. Locale catalogs auto-translate. -->
     <string name="dashboard_hero_headline">Đang canh chừng</string>
     <string name="dashboard_subtitle_all_systems">Tất cả hệ thống trực tuyến</string>
@@ -804,7 +804,7 @@
     <!-- ============================================================ -->
     <!-- Hero -->
     <string name="settings_hero_title">Cài đặt</string>
-    <string name="settings_hero_overline">TÔNG CÁN</string>
+    <string name="settings_hero_overline">WHEELSTOP</string>
     <string name="settings_hero_subtitle">Định hướng ngoại hình, ghi lại, giám sát và dữ liệu trên thiết bị.</string>
     <!-- Section overlines -->
     <string name="settings_overline_preferences">TƯU ĐC</string>

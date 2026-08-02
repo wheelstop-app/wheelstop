@@ -6,11 +6,11 @@
     "note": "Майстер-джерело. Інші локалі генеруються завдяки dev/i18n_translate.py через NLB-200. Відредагуйте лише цей файл; відновлюйте решту."
   },
   "app": {
-    "name": "Овердрайв",
+    "name": "Wheelstop",
     "tagline": "Система оточення",
     "live_view_title": "Live View - Wheelstop",
     "events_title": "Події - Wheelstop",
-    "surveillance_title": "Огляд – Овердрайв",
+    "surveillance_title": "Огляд – Wheelstop",
     "recordings_title": "Записи - Wheelstop",
     "performance_title": "Продуктивність - Wheelstop",
     "abrp_title": "ABRP - Wheelstop",
@@ -22,7 +22,7 @@
     "byd_cloud_title": "BYD Cloud – Wheelstop",
     "telegram_title": "Телеграма - Wheelstop",
     "dashboard_title": "Панель керування - Wheelstop",
-    "road_sense_title": "RoadSense - Овердиск"
+    "road_sense_title": "RoadSense - Wheelstop"
   },
   "nav": {
     "dashboard": "Приладна дошка",
@@ -485,7 +485,7 @@
       "auto_delete": "Автоматично видаляти старі файли Dashcam",
       "auto_delete_desc": "Звільніть місце на SD-карті, видаливши найстаріші записи в BYD dashcam",
       "recommend_label": "⚠️ Рекомендовано",
-      "recommend_text": "Пристрій використовує SD - вмикає очищення, щоб звільнити місце",
+      "recommend_text": "Wheelstop використовує SD - вмикає очищення, щоб звільнити місце",
       "path": "Шлях до Dashcam",
       "usage": "Використання Dashcam",
       "files": "Файли",
@@ -707,7 +707,7 @@
     "cdr_protect_recent_desc": "Не видаляти файли dashcam новіші",
     "cdr_protected": "Захищений",
     "cdr_recommend_label": "⚠️ Рекомендовано",
-    "cdr_recommend_text": "Пристрій використовує SD - вмикає очищення, щоб звільнити місце",
+    "cdr_recommend_text": "Wheelstop використовує SD - вмикає очищення, щоб звільнити місце",
     "cdr_reserved": "Зарезервований простір для Wheelstop",
     "cdr_reserved_desc": "Звільніть це на SD-карті",
     "cdr_title": "BYD Dashcam автоматичне очищення",
@@ -1822,7 +1822,7 @@
   },
   "map": {
     "your_vehicle": "Ваш автомобіль",
-    "your_vehicle_sub": "Огляд Овердрайв",
+    "your_vehicle_sub": "Огляд Wheelstop",
     "you_are_here": "Ви тут"
   },
   "pip": {

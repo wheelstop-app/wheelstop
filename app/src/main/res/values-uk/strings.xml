@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Овердрайв</string>
+    <string name="app_name">Wheelstop</string>
     <!-- Accessibility Service -->
-    <string name="accessibility_service_description">Триває моніторинг пристрою Овердрайвера в фоновому режимі. Ця служба не переглядає або не взаємодіє з вмістом екрану.</string>
+    <string name="accessibility_service_description">Триває моніторинг пристрою Wheelstop в фоновому режимі. Ця служба не переглядає або не взаємодіє з вмістом екрану.</string>
     <!-- Recording Mode Labels -->
     <!-- Proximity Guard Settings Labels -->
     <!-- Quality Settings Labels -->
@@ -162,7 +162,7 @@
     <string name="camera_mapping_summary_probing">Панорамний потік: Попереднє визначення / зондування</string>
     <string name="camera_mapping_current_format">Поточне відображення: %1$s</string>
     <string name="camera_mapping_current_none">Поточне зіставлення: Авто / за замовчуванням</string>
-    <string name="camera_mapping_hint">За замовчуванням, надмірний диск зберігає попередню поведінку запуску, але тепер дозволяє відкалібрувати правильно об\'єднану панораму. Попередній перегляд кожної об’єднаної нарізки, відображає логічні 360 ролей у фрагменті, що фактично відображається спереду/вправо/вліво на вашій машині, і демон повторно використає макет для запису, трансляцій і після перезапуску.</string>
+    <string name="camera_mapping_hint">За замовчуванням, Wheelstop зберігає попередню поведінку запуску, але тепер дозволяє відкалібрувати правильно об\'єднану панораму. Попередній перегляд кожної об’єднаної нарізки, відображає логічні 360 ролей у фрагменті, що фактично відображається спереду/вправо/вліво на вашій машині, і демон повторно використає макет для запису, трансляцій і після перезапуску.</string>
     <!-- fragment_dashboard -->
     <string name="dashboard_scan_to_connect">Сканувати для підключення</string>
     <string name="dashboard_qr_waiting">Чекаємо тунелю…</string>
@@ -607,7 +607,7 @@
     <string name="nav_page_mqtt">ШВИДКІСТЬ</string>
     <string name="nav_page_byd_cloud">BYD Cloud</string>
     <!-- StatusOverlayService persistent notification (foreground service) -->
-    <string name="status_overlay_notif_title">Статус Супердиску</string>
+    <string name="status_overlay_notif_title">Статус Wheelstop</string>
     <string name="status_overlay_notif_text">Status overlay active</string>
     <!-- DaemonKeepaliveService persistent notification (foreground service)
          and the group-summary row that collapses Overdrive's three FGS
@@ -616,7 +616,7 @@
          or only the keepalive survived an OOM respawn. -->
     <string name="daemon_keepalive_notif_title">Активний Wheelstop</string>
     <string name="daemon_keepalive_notif_text">Моніторинг транспортних засобів</string>
-    <string name="overdrive_status_summary_title">Овердрайв</string>
+    <string name="overdrive_status_summary_title">Wheelstop</string>
     <string name="overdrive_status_summary_text">Фонові служби працюють</string>
     <!-- ============================================================== -->
     <!-- M3 Revamp: navigation rail + settings sub-rail + theme picker  -->
@@ -743,7 +743,7 @@
     <string name="diagnostics_settings_subtitle">Налаштування програми, тема та мова.</string>
     <!-- SOTA Integrations page -->
     <string name="integrations_hero_title">Ентеграції</string>
-    <string name="integrations_hero_subtitle">Підключити перевантажений до ваших сервісів.</string>
+    <string name="integrations_hero_subtitle">Підключити Wheelstop до ваших сервісів.</string>
     <string name="integrations_status_unknown">Торкніться, щоб налаштувати</string>
     <string name="integrations_status_configured">Налаштовано</string>
     <string name="integrations_status_not_set_up">Не створено</string>
@@ -756,13 +756,13 @@
     <string name="settings_action_check_update">Перевірити наявність оновлень</string>
     <string name="settings_action_reset_data">Reset data…</string>
     <!-- Content descriptions for rail / segmented controls -->
-    <string name="cd_brand_logo">Овердрайв</string>
+    <string name="cd_brand_logo">Wheelstop</string>
     <!-- ============================================================== -->
     <!-- Dashboard SOTA revamp                                            -->
     <!-- ============================================================== -->
     <!-- Hero card -->
     <!-- SOTA hero headline. Static identity statement (not a time-of-day
-         greeting) — pairs with the OVERDRIVE overline above and the live
+         greeting) — pairs with the WHEELSTOP overline above and the live
          status row of chips below. Locale catalogs auto-translate. -->
     <string name="dashboard_hero_headline">На годиннику</string>
     <string name="dashboard_subtitle_all_systems">Всі системи онлайн</string>
@@ -812,7 +812,7 @@
     <!-- ============================================================ -->
     <!-- Hero -->
     <string name="settings_hero_title">Налаштування</string>
-    <string name="settings_hero_overline">Огляд</string>
+    <string name="settings_hero_overline">WHEELSTOP</string>
     <string name="settings_hero_subtitle">Настроювання зовнішності, запису, спостереження і на пристрої.</string>
     <!-- Section overlines -->
     <string name="settings_overline_preferences">НАЛАШТУВАННЯ</string>
@@ -866,7 +866,7 @@
     <string name="settings_security_overline_lock">Блокування програм</string>
     <string name="settings_security_overline_recovery">Якщо ви забудете PIN-код</string>
     <string name="settings_security_toggle_title">Вимагати PIN-код</string>
-    <string name="settings_security_toggle_subtitle_off">Вимкнуто - будь-хто може відкрити овердиск.</string>
+    <string name="settings_security_toggle_subtitle_off">Вимкнуто - будь-хто може відкрити Wheelstop.</string>
     <string name="settings_security_toggle_subtitle_on">Увімкнено - PIN-код необхідний для відкриття Wheelstop.</string>
     <string name="settings_security_change_title">Змінити PIN-код</string>
     <string name="settings_security_change_subtitle">Підтвердьте поточний PIN-код, потім встановіть новий.</string>
@@ -977,16 +977,16 @@
     </plurals>
     <!-- Process uptime. Days form takes (days, hours); hours form takes hours only. -->
     <plurals name="dashboard_insight_uptime_days_hours">
-        <item quantity="one">Змінити можливості онлайн для %1$d дня, %2$d год</item>
+        <item quantity="one">Wheelstop онлайн для %1$d дня, %2$d год</item>
         <item quantity="few">Дозволити використання онлайн для %1$d днів, %2$d год</item>
         <item quantity="many">Дозволити використання онлайн для %1$d днів, %2$d год</item>
-        <item quantity="other">Дозволити використання онлайн для %1$d днів, %2$d год</item>
+        <item quantity="other">Wheelstop онлайн для %1$d днів, %2$d год</item>
     </plurals>
     <plurals name="dashboard_insight_uptime_hours">
-        <item quantity="one">Дозволити використання онлайн для %1$d за годину</item>
+        <item quantity="one">Wheelstop онлайн для %1$d за годину</item>
         <item quantity="few">Дозволити використання онлайн для %1$d годин</item>
         <item quantity="many">Дозволити використання онлайн для %1$d годин</item>
-        <item quantity="other">Дозволити використання онлайн для %1$d годин</item>
+        <item quantity="other">Wheelstop онлайн для %1$d годин</item>
     </plurals>
     <!-- Duration helpers used inside insights (last_charge etc.). -->
     <plurals name="dashboard_insight_minutes">

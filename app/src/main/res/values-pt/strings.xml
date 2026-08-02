@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Sobrecarga</string>
+    <string name="app_name">Wheelstop</string>
     <!-- Accessibility Service -->
     <string name="accessibility_service_description">Mantém o monitoramento do veículo Wheelstop ativo em segundo plano. Este serviço não lê ou interage com o conteúdo da tela.</string>
     <!-- Recording Mode Labels -->
@@ -134,7 +134,7 @@
     <string name="camera_selection_hint">Automaticamente escolhe a câmera certa para a sua aparação em cada botão. Câmera 1 = Selo BYD, Câmera 0 = Cortar Atto. Reinicie o daemon após alterar o ID da câmera para que a configuração tenha efeito.</string>
     <!-- OEM Dashcam camera ID picker (Phase 5: separate forward-sensor pipeline) -->
     <string name="camera_oem_dashcam_title">ID da Câmera do Dashcam OEM</string>
-    <string name="camera_oem_dashcam_hint">Escolha o id da AVMCamera que aponta para o sensor de dashcam avançado. Dashcam é um OPPOSITE do pano: Seal/Han pano = 1 → dashcam = 0; Atto / Tang pano = 0 → dashcam = 1. Deixe em Auto para deixar a escolha da Sobrecarga.</string>
+    <string name="camera_oem_dashcam_hint">Escolha o id da AVMCamera que aponta para o sensor de dashcam avançado. Dashcam é um OPPOSITE do pano: Seal/Han pano = 1 → dashcam = 0; Atto / Tang pano = 0 → dashcam = 1. Deixe em Auto para deixar a escolha do Wheelstop.</string>
     <string name="camera_oem_dashcam_auto_resolved">Automático — usando ajuda %1$d (Pano é Ajuda %2$d)</string>
     <string name="camera_oem_dashcam_auto_unavailable">Automático — ajuda de pano é %1$d, não é possível inferir o dashcam</string>
     <string name="camera_oem_dashcam_save">Guardar</string>
@@ -395,7 +395,7 @@
     <string name="update_picker_current_suffix">%1$s (instalado)</string>
     <string name="update_picker_older_suffix">%1$s (antigo)</string>
     <!-- Update progress (title + per-step status; no emoji — state icon carries the cue) -->
-    <string name="update_progress_title">Atualizando Sobrecarga</string>
+    <string name="update_progress_title">Atualizando Wheelstop</string>
     <string name="update_step_downloading">Baixando atualização…</string>
     <string name="update_step_verifying">Verificando o download…</string>
     <string name="update_step_stopping">Parando daemons…</string>
@@ -608,9 +608,9 @@
          notifications into one shade entry. The summary text is intentionally
          generic so it stays accurate whether all three services are running
          or only the keepalive survived an OOM respawn. -->
-    <string name="daemon_keepalive_notif_title">Sobrecarga ativa</string>
+    <string name="daemon_keepalive_notif_title">Wheelstop ativo</string>
     <string name="daemon_keepalive_notif_text">Sistemas de monitoramento</string>
-    <string name="overdrive_status_summary_title">Sobrecarga</string>
+    <string name="overdrive_status_summary_title">Wheelstop</string>
     <string name="overdrive_status_summary_text">Serviços em segundo plano em execução</string>
     <!-- ============================================================== -->
     <!-- M3 Revamp: navigation rail + settings sub-rail + theme picker  -->
@@ -659,7 +659,7 @@
     <string name="settings_about_support_share_title">Diga ao dono de um colega</string>
     <string name="settings_about_support_share_value">Cada link compartilhado ajuda outro proprietário da BYD a descobrir o Wheelstop.</string>
     <string name="settings_about_support_share_message">Confira o Wheelstop — dashcam de código aberto vigilância &amp; para BYD: https://overdrive-5lc.pages.dev/</string>
-    <string name="settings_about_support_share_chooser">Compartilhar Sobrecarga</string>
+    <string name="settings_about_support_share_chooser">Compartilhar Wheelstop</string>
     <string name="settings_about_open_link_failed">Não foi possível abrir link.</string>
     <string name="settings_about_open_link_copied">Nenhum navegador encontrado. URL copiado: %1$s</string>
     <string name="settings_about_support_kofi_title">Combustível a próxima liberação</string>
@@ -750,13 +750,13 @@
     <string name="settings_action_check_update">Verificar se há atualizações</string>
     <string name="settings_action_reset_data">Reiniciar dados…</string>
     <!-- Content descriptions for rail / segmented controls -->
-    <string name="cd_brand_logo">Sobrecarga</string>
+    <string name="cd_brand_logo">Wheelstop</string>
     <!-- ============================================================== -->
     <!-- Dashboard SOTA revamp                                            -->
     <!-- ============================================================== -->
     <!-- Hero card -->
     <!-- SOTA hero headline. Static identity statement (not a time-of-day
-         greeting) — pairs with the OVERDRIVE overline above and the live
+         greeting) — pairs with the WHEELSTOP overline above and the live
          status row of chips below. Locale catalogs auto-translate. -->
     <string name="dashboard_hero_headline">No relógio</string>
     <string name="dashboard_subtitle_all_systems">Todos os sistemas online</string>
@@ -806,7 +806,7 @@
     <!-- ============================================================ -->
     <!-- Hero -->
     <string name="settings_hero_title">Confirgurações</string>
-    <string name="settings_hero_overline">PROPRIETÁRIO</string>
+    <string name="settings_hero_overline">WHEELSTOP</string>
     <string name="settings_hero_subtitle">Ajustar aparência, gravação, vigilância e dados no dispositivo.</string>
     <!-- Section overlines -->
     <string name="settings_overline_preferences">PREFERÊNCIA</string>
@@ -967,12 +967,12 @@
     </plurals>
     <!-- Process uptime. Days form takes (days, hours); hours form takes hours only. -->
     <plurals name="dashboard_insight_uptime_days_hours">
-        <item quantity="one">Sobrecarga online por %1$d dia, %2$d h</item>
-        <item quantity="other">Sobrecarga online por %1$d dias, %2$d h</item>
+        <item quantity="one">Wheelstop online por %1$d dia, %2$d h</item>
+        <item quantity="other">Wheelstop online por %1$d dias, %2$d h</item>
     </plurals>
     <plurals name="dashboard_insight_uptime_hours">
-        <item quantity="one">Sobrecarga online para %1$d hora</item>
-        <item quantity="other">Sobrecarga online por %1$d horas</item>
+        <item quantity="one">Wheelstop online para %1$d hora</item>
+        <item quantity="other">Wheelstop online por %1$d horas</item>
     </plurals>
     <!-- Duration helpers used inside insights (last_charge etc.). -->
     <plurals name="dashboard_insight_minutes">

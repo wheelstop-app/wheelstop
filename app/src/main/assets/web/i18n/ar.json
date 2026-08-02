@@ -6,23 +6,23 @@
     "note": "المصدر الرئيسي. يتم إنشاء مواقع أخرى بواسطة dev/i18n_translate.py عبر NLB-200. تحرير هذا الملف فقط؛ قم بإعادة إنشاء البقية."
   },
   "app": {
-    "name": "تجاوز القرص",
+    "name": "Wheelstop",
     "tagline": "نظام المراقبة",
-    "live_view_title": "عرض مباشر - تجاوز القرص",
-    "events_title": "الأحداث - تجاوز القرص",
-    "surveillance_title": "المراقبة - القيادة المفرطة",
-    "recordings_title": "التسجيلات - تجاوز القرص",
-    "performance_title": "الأداء - القيادة المفرطة",
-    "abrp_title": "ABRP - تجاوز القرص",
-    "mqtt_title": "MQTT - تجاوز القرص",
-    "trips_title": "رحلات - تجاوز القرص",
-    "notifications_title": "الإشعارات - تجاوز القرص",
-    "vehicle_control_title": "تحكم المدرعات - تجاوز القيادة",
-    "login_title": "تسجيل الدخول - تجاوز القرص",
-    "byd_cloud_title": "سحابة BYD - تجاوز القرص",
-    "telegram_title": "تيليجرام - تجاوز القرص",
-    "dashboard_title": "لوحة التحكم - تجاوز القرص",
-    "road_sense_title": "حساس الطرق - تجاوز القرص"
+    "live_view_title": "عرض مباشر - Wheelstop",
+    "events_title": "الأحداث - Wheelstop",
+    "surveillance_title": "المراقبة - Wheelstop",
+    "recordings_title": "التسجيلات - Wheelstop",
+    "performance_title": "الأداء - Wheelstop",
+    "abrp_title": "ABRP - Wheelstop",
+    "mqtt_title": "MQTT - Wheelstop",
+    "trips_title": "رحلات - Wheelstop",
+    "notifications_title": "الإشعارات - Wheelstop",
+    "vehicle_control_title": "تحكم المدرعات - Wheelstop",
+    "login_title": "تسجيل الدخول - Wheelstop",
+    "byd_cloud_title": "سحابة BYD - Wheelstop",
+    "telegram_title": "تيليجرام - Wheelstop",
+    "dashboard_title": "لوحة التحكم - Wheelstop",
+    "road_sense_title": "حساس الطرق - Wheelstop"
   },
   "nav": {
     "dashboard": "لوحة التحكم",
@@ -46,7 +46,7 @@
     "overview_group": "نظرة عامة",
     "vehicle_group": "السيارة",
     "about_group": "حول",
-    "brand_home": "تجاوز القرص - فتح لوحة التحكم",
+    "brand_home": "Wheelstop - فتح لوحة التحكم",
     "telegram": "تيليجرام",
     "road_sense": "حساس الطرق"
   },
@@ -485,7 +485,7 @@
       "auto_delete": "حذف تلقائي لملف Dashkam القديم",
       "auto_delete_desc": "قم بتفريغ مساحة بطاقة SD عن طريق إزالة أقدم تسجيلات BYD dashcam",
       "recommend_label": "⚠️ موصى به",
-      "recommend_text": "فوق القرص يستخدم SD - تمكين التنظيف للحفاظ على المساحة مجاناً",
+      "recommend_text": "Wheelstop يستخدم SD - تمكين التنظيف للحفاظ على المساحة مجاناً",
       "path": "مسار داشكام",
       "usage": "استخدام داشكام",
       "files": "الملفات",
@@ -493,7 +493,7 @@
       "deletable": "محذوف",
       "bg_monitor": "مراقبة الخلفية",
       "last_cleanup": "آخر تنظيف",
-      "reserved": "المساحة المحجوزة للسباق الزائد",
+      "reserved": "المساحة المحجوزة لـ Wheelstop",
       "reserved_desc": "حافظ على هذا مجاناً على بطاقة SD",
       "protect_recent": "حماية الملفات الأخيرة",
       "protect_recent_desc": "لا تقم بحذف ملفات dashkam أحدث من هذا",
@@ -604,9 +604,9 @@
       "low_label": "{value} range"
     },
     "aggressive_warning": "اكتشفت الأنماط العدوانية. التسارع الثقيل والتأخر في الكبح يقلل من نطاقك بشكل كبير.",
-    "sd_path_default": "بطاقة الذاكرة SD / فوق السباق / الرحلات",
-    "usb_path_default": "USB / تجاوز الذاكرة / الرحلات",
-    "internal_path_default": "الداخلية / تجاوز السباق / الرحلات",
+    "sd_path_default": "بطاقة الذاكرة SD / Wheelstop / الرحلات",
+    "usb_path_default": "USB / Wheelstop / الرحلات",
+    "internal_path_default": "الداخلية / Wheelstop / الرحلات",
     "sd_card_available": "بطاقة SD: متوفر",
     "sd_card_not_detected": "بطاقة SD: لم يتم اكتشاف",
     "apply_changes": "تطبيق التغييرات",
@@ -707,8 +707,8 @@
     "cdr_protect_recent_desc": "لا تقم بحذف ملفات dashkam أحدث من هذا",
     "cdr_protected": "محمي",
     "cdr_recommend_label": "⚠️ موصى به",
-    "cdr_recommend_text": "فوق القرص يستخدم SD - تمكين التنظيف للحفاظ على المساحة مجاناً",
-    "cdr_reserved": "المساحة المحجوزة للسباق الزائد",
+    "cdr_recommend_text": "Wheelstop يستخدم SD - تمكين التنظيف للحفاظ على المساحة مجاناً",
+    "cdr_reserved": "المساحة المحجوزة لـ Wheelstop",
     "cdr_reserved_desc": "حافظ على هذا مجاناً على بطاقة SD",
     "cdr_title": "تنظيف تلقائي لـ BYD",
     "cdr_total_freed": "مجموع المحررين",
@@ -1611,7 +1611,7 @@
     "install_failed_start": "فشل التثبيت للبدء",
     "install_request_failed": "فشل طلب التثبيت: {error}",
     "install_failed": "فشل التثبيت: {error}",
-    "updating": "تحديث تجاوز القرص",
+    "updating": "تحديث Wheelstop",
     "reconnecting": "إعادة الاتصال…",
     "headunit_installing": "الوحدة الرئيسية تقوم بتثبيت التحديث. سيتم تحديث هذه الصفحة تلقائيًا عندما يكون الإصدار الجديد على الإنترنت.",
     "phase_queued": "قائمة الانتظار - إعداد…",
@@ -1632,7 +1632,7 @@
     "lan_hint": "يسترد الوصول إلى الشبكة المحلية (<code>{ips}</code>) ~{seconds}s أسرع من النفق - قم بالتبديل إليه الآن إذا استطعت.",
     "recommend_inapp_default": "يمسح BYD القائمة البيضاء للبدء التلقائي في كل تثبيت. التطبيق داخل السيارة يدفعك؛ لا يمكن تطبيق الويب.",
     "recommend_inapp_intro": "<strong>موصى به: التحديث من تطبيق السيارة بدلا من ذلك.</strong> {reason}",
-    "title_update_to": "تحديث تجاوز القيادة إلى <span class=\"upd-newv\">{version}</span>?",
+    "title_update_to": "تحديث Wheelstop إلى <span class=\"upd-newv\">{version}</span>?",
     "currently_on": "حاليا على {version}",
     "downtime_warning": "<strong>الوصول عن بعد إلى ~{minutes} دقيقة.</strong> Daemons إعادة تشغيل وإعادة اتصال النفق بعد التثبيت.",
     "fallback_check_label": "التحقق من وجود تحديثات",
@@ -1822,7 +1822,7 @@
   },
   "map": {
     "your_vehicle": "السيارة الخاصة بك",
-    "your_vehicle_sub": "المراقبة المفرطة للسيارات",
+    "your_vehicle_sub": "المراقبة Wheelstop",
     "you_are_here": "أنت هنا"
   },
   "pip": {
@@ -1901,7 +1901,7 @@
     "auto": "تلقائي"
   },
   "about": {
-    "page_title": "حول - تجاوز القرص",
+    "page_title": "حول - Wheelstop",
     "page_title_short": "حول",
     "contributors_title": "المساهمون",
     "contributors_sub": "الأشخاص الذين شحنوا التعليمات البرمجية إلى Wheelstop.",
@@ -1917,8 +1917,8 @@
       "star_value": "يأخذ ثانية. يعني الكثير.",
       "star_url": "https://github.com/yash-srivastava/Overdrive-release",
       "share_title": "أخبر مالك زميل",
-      "share_value": "كل رابط مشترك يساعد مالك BYD آخر على اكتشاف الزحف المفرط.",
-      "share_message": "تحقق من فائقة القيادة - مراقبة مفتوحة المصدر و داشكام: https://overdrive-5lc.pages.dev/",
+      "share_value": "كل رابط مشترك يساعد مالك BYD آخر على اكتشاف Wheelstop.",
+      "share_message": "تحقق من Wheelstop - مراقبة مفتوحة المصدر و داشكام: https://overdrive-5lc.pages.dev/",
       "kofi_title": "وقود الإصدار التالي ☕",
       "kofi_value": "القهوة على \"كو - في\" تبقى في وقت متأخر من الليل.",
       "kofi_url": "https://ko-fi.com/E1E71XALHX"
@@ -1949,7 +1949,7 @@
     "recommend_step_5": "اختر فترة تفويض تناسب الوقت الذي تريد أن يبقى هذا الملف الشخصي نشطاً.",
     "recommend_step_6": "قم بتسجيل الخروج من تطبيق BYD، ثم قم بالتسجيل باستخدام البريد الإلكتروني الثانوي باستخدام رمز التحقق وإنشاء كلمة مرور.",
     "recommend_step_7": "اضغط على قفل أو فتح في تطبيق BYD - سيدفعك إلى تعيين رقم تعريف شخصي.",
-    "recommend_step_8": "أدخل البريد الإلكتروني الثانوي، كلمة المرور، والتثبت التحكم هنا في تجاوز القرص."
+    "recommend_step_8": "أدخل البريد الإلكتروني الثانوي، كلمة المرور، والتثبت التحكم هنا في Wheelstop."
   },
   "telegram": {
     "page_title": "تيليجرام",
@@ -2108,7 +2108,7 @@
     "native_dvr_enable": "إعادة تمكين DVR الأصلي",
     "native_dvr_status_enabled": "الحالة: تمكين",
     "native_dvr_status_disabled": "الحالة: معطل بواسطة Wheelstop",
-    "native_dvr_disable_toast": "DVR الأصلي معطل. تجاوز القرص يمتلك الآن الكاميرا.",
+    "native_dvr_disable_toast": "DVR الأصلي معطل. Wheelstop يمتلك الآن الكاميرا.",
     "native_dvr_enable_toast": "تم إعادة تمكين DVR الأصلي.",
     "start_timeout": "انتهت مهلة بدء خط الأنابيب - تحقق من سجلات Ddaemon"
   }

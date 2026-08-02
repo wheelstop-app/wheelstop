@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Overstasjon</string>
+    <string name="app_name">Wheelstop</string>
     <!-- Accessibility Service -->
-    <string name="accessibility_service_description">Holder overdrive kjøretøyovervåking aktiv i bakgrunnen. Denne tjenesten leser ikke eller samhandler med skjerminnholdet.</string>
+    <string name="accessibility_service_description">Holder Wheelstop kjøretøyovervåking aktiv i bakgrunnen. Denne tjenesten leser ikke eller samhandler med skjerminnholdet.</string>
     <!-- Recording Mode Labels -->
     <!-- Proximity Guard Settings Labels -->
     <!-- Quality Settings Labels -->
@@ -198,8 +198,8 @@
     <string name="onboarding_exit">Avslutt tur</string>
     <string name="onboarding_done_short">Har det</string>
     <!-- Step 0: authorize the daemon (system ADB popup) -->
-    <string name="onboarding_authorize_title">Vekk overjakt</string>
-    <string name="onboarding_authorize_body">Overkjøre kjører kameraet via en liten hjelpemiddel på enheten. Android vil spørre om en gang for å tillate USB-feilsøking - trykk <b>Allow</b> og sjekk <b>Alltid tillate fra denne enheten</b> så den forblir ved hver omstart.</string>
+    <string name="onboarding_authorize_title">Vekk Wheelstop</string>
+    <string name="onboarding_authorize_body">Wheelstop kjører kameraet via en liten hjelpemiddel på enheten. Android vil spørre om en gang for å tillate USB-feilsøking - trykk <b>Allow</b> og sjekk <b>Alltid tillate fra denne enheten</b> så den forblir ved hver omstart.</string>
     <string name="onboarding_authorize_button">Tillat tilgang</string>
     <string name="onboarding_authorize_waiting_title">Venter på tillatelse…</string>
     <string name="onboarding_authorize_waiting_body">Godta Android-popup-vinduet. Hvis du ikke ser det, kan den allerede få - dette vil fortsette alene.</string>
@@ -209,7 +209,7 @@
     <!-- Camera mapping chapter -->
     <string name="onboarding_camera_step_label">Kamera · Steg %1$d av %2$d</string>
     <string name="onboarding_camera_intro_title">Still opp kameraene dine</string>
-    <string name="onboarding_camera_intro_body">La oss la oss fortelle overdrive hvilket kamera som er 30-displayet ditt, og hvilket som er dashbordet. Det tar omtrent et minutt, og du kan endre det senere.</string>
+    <string name="onboarding_camera_intro_body">La oss la oss fortelle Wheelstop hvilket kamera som er 30-displayet ditt, og hvilket som er dashbordet. Det tar omtrent et minutt, og du kan endre det senere.</string>
     <string name="onboarding_camera_intro_primary">Begynn</string>
     <string name="onboarding_camera_opening_title">Åpner kamera oppsett…</string>
     <string name="onboarding_camera_opening_body">Laster inn en direkte forhåndsvisning fra kameraene dine. Dette kan ta noen sekunder.</string>
@@ -234,7 +234,7 @@
     <string name="onboarding_camera_windshield_primary">Vis meg</string>
     <string name="onboarding_camera_windshield_skip">Nei takk</string>
     <!-- Vehicle profile chapter -->
-    <string name="onboarding_vehicle_title">Sørg for å overkjøre batteriet</string>
+    <string name="onboarding_vehicle_title">Sørg for å Wheelstop batteriet</string>
     <string name="onboarding_vehicle_body">Velg din modell og vi fyller ut kWh, eller skriv den selv (15–120). Dette gjør rekkevidde og ladingsestimater nøyaktig. Du kan hoppe over og sette den senere.</string>
     <string name="onboarding_vehicle_primary">Angi batteri</string>
     <!-- Dashboard orientation chapter -->
@@ -507,7 +507,7 @@
     <string name="update_picker_current_suffix">%1$s (installert)</string>
     <string name="update_picker_older_suffix">%1$s (eldre)</string>
     <!-- Update progress (title + per-step status; no emoji — state icon carries the cue) -->
-    <string name="update_progress_title">Oppdaterer overstasjon</string>
+    <string name="update_progress_title">Oppdaterer Wheelstop</string>
     <string name="update_step_downloading">Laster ned oppdatering…</string>
     <string name="update_step_verifying">Verifiserer nedlasting…</string>
     <string name="update_step_stopping">Stopper daemoner…</string>
@@ -713,7 +713,7 @@
     <string name="nav_page_mqtt">MTALL</string>
     <string name="nav_page_byd_cloud">BYD Cloud</string>
     <!-- StatusOverlayService persistent notification (foreground service) -->
-    <string name="status_overlay_notif_title">Overstasjon status</string>
+    <string name="status_overlay_notif_title">Wheelstop status</string>
     <string name="status_overlay_notif_text">Status overlay active</string>
     <!-- DaemonKeepaliveService persistent notification (foreground service)
          and the group-summary row that collapses Overdrive's three FGS
@@ -722,7 +722,7 @@
          or only the keepalive survived an OOM respawn. -->
     <string name="daemon_keepalive_notif_title">Wheelstop aktiv</string>
     <string name="daemon_keepalive_notif_text">Overvåking av kjøretøysystemer</string>
-    <string name="overdrive_status_summary_title">Overkjøring</string>
+    <string name="overdrive_status_summary_title">Wheelstop</string>
     <string name="overdrive_status_summary_text">Bakgrunnstjenester kjører</string>
     <!-- ============================================================== -->
     <!-- M3 Revamp: navigation rail + settings sub-rail + theme picker  -->
@@ -782,13 +782,13 @@
     <string name="settings_backup_pick_file">Velg en backup å gjenopprette</string>
     <string name="settings_backup_no_files">Ingen sikkerhetskopifiler funnet. Eksporter først eller kopier en sikkerhetskopi .json til %1$s, og prøv på nytt.</string>
     <string name="settings_backup_read_failed">Kan ikke lese filen</string>
-    <string name="settings_backup_invalid_file">Den filen er ikke en gyldig overdriv-sikkerhetskopi</string>
+    <string name="settings_backup_invalid_file">Den filen er ikke en gyldig Wheelstop-sikkerhetskopi</string>
     <string name="settings_backup_restoring">Gjenoppretter…</string>
     <string name="settings_backup_restored">Innstillinger gjenopprettet</string>
     <string name="settings_backup_restore_failed">Gjenoppretting mislyktes</string>
     <string name="settings_backup_daemon_down">Kameratjenesten må kjøres for å sikkerhetskopiere eller gjenopprette. Start den fra Daemons, og prøv på nytt.</string>
     <string name="settings_backup_restore_confirm_title">Gjenopprett innstillinger?</string>
-    <string name="settings_backup_restore_confirm_msg">Dette erstatter de gjeldende Overdriv-innstillingene med backup og reload tjenesten. Det fungerer bare på samme hode enhet som sikkerhetskopien ble tatt på.</string>
+    <string name="settings_backup_restore_confirm_msg">Dette erstatter de gjeldende Wheelstop-innstillingene med backup og reload tjenesten. Det fungerer bare på samme hode enhet som sikkerhetskopien ble tatt på.</string>
     <string name="settings_backup_restore_confirm_btn">Gjenopprett</string>
     <string name="settings_backup_restart_hint">Innstillinger gjenopprettet. Start kameraets daemon på nytt (Daemons → Kamera → Restart) for å sikre at alle gjenopprettede innstillinger brukes.</string>
     <string name="settings_backup_trips_prompt">Inkluder reiseloggen (distanse, energi, kostnad, poengsum, start/slutt-plassering)? Detaljerte telemetri per tur er ikke inkludert. Filen vil inneholde din posisjonshistorikk - behold den privat.</string>
@@ -799,9 +799,9 @@
          personality without being corny — short, warm, specific. -->
     <string name="settings_about_support_section">Drevet av mennesker som deg</string>
     <string name="settings_about_support_share_title">Fortell en medeier</string>
-    <string name="settings_about_support_share_value">Hver delte lenke hjelper en annen BYD-eier å oppdage overdrive.</string>
-    <string name="settings_about_support_share_message">Sjekk ut overdriv— åpen kildekode overvåkning &amp; dashcam for BYD: https://overdrive-5lc.pages.dev/</string>
-    <string name="settings_about_support_share_chooser">Del overdrive</string>
+    <string name="settings_about_support_share_value">Hver delte lenke hjelper en annen BYD-eier å oppdage Wheelstop.</string>
+    <string name="settings_about_support_share_message">Sjekk ut Wheelstop— åpen kildekode overvåkning &amp; dashcam for BYD: https://overdrive-5lc.pages.dev/</string>
+    <string name="settings_about_support_share_chooser">Del Wheelstop</string>
     <string name="settings_about_open_link_failed">Kunne ikke åpne lenken.</string>
     <string name="settings_about_open_link_copied">Ingen nettleser funnet. URL kopiert: %1$s</string>
     <string name="settings_about_support_kofi_title">Drivstoff den neste utgaven</string>
@@ -879,7 +879,7 @@
     <string name="diagnostics_settings_subtitle">App-innstillinger, tema og språk.</string>
     <!-- SOTA Integrations page -->
     <string name="integrations_hero_title">Integrasjoner</string>
-    <string name="integrations_hero_subtitle">Koble overdriver til tjenestene dine.</string>
+    <string name="integrations_hero_subtitle">Koble Wheelstop til tjenestene dine.</string>
     <string name="integrations_status_unknown">Trykk for å konfigurere</string>
     <string name="integrations_status_configured">Konfigurert</string>
     <string name="integrations_status_not_set_up">Ikke konfigurert</string>
@@ -892,13 +892,13 @@
     <string name="settings_action_check_update">Se etter oppdateringer</string>
     <string name="settings_action_reset_data">Tilbakestill data…</string>
     <!-- Content descriptions for rail / segmented controls -->
-    <string name="cd_brand_logo">Overstasjon</string>
+    <string name="cd_brand_logo">Wheelstop</string>
     <!-- ============================================================== -->
     <!-- Dashboard SOTA revamp                                            -->
     <!-- ============================================================== -->
     <!-- Hero card -->
     <!-- SOTA hero headline. Static identity statement (not a time-of-day
-         greeting) — pairs with the OVERDRIVE overline above and the live
+         greeting) — pairs with the WHEELSTOP overline above and the live
          status row of chips below. Locale catalogs auto-translate. -->
     <string name="dashboard_hero_headline">På klokken</string>
     <string name="dashboard_subtitle_all_systems">Alle systemer pålogget</string>
@@ -948,7 +948,7 @@
     <!-- ============================================================ -->
     <!-- Hero -->
     <string name="settings_hero_title">Innstillinger</string>
-    <string name="settings_hero_overline">FORSKJUL</string>
+    <string name="settings_hero_overline">WHEELSTOP</string>
     <string name="settings_hero_subtitle">Juster utseende, registreringer, overvåking og data på enheten.</string>
     <!-- Section overlines -->
     <string name="settings_overline_preferences">PREFERANSER</string>
@@ -965,7 +965,7 @@
     <string name="settings_about_row_subtitle">Versjon, lisens, støtte utvikling.</string>
     <string name="settings_reset_row_subtitle">Fjern opptak, hendelser eller alle cacher.</string>
     <!-- Footer -->
-    <string name="settings_footer_format">Overstasjon %1$s · %2$s</string>
+    <string name="settings_footer_format">Wheelstop %1$s · %2$s</string>
     <!-- ============================================================ -->
     <!-- Appearance pane — SOTA visual theme picker                    -->
     <!-- ============================================================ -->
@@ -982,7 +982,7 @@
     <!-- Privacy pane — stance + storage summary + reset               -->
     <!-- ============================================================ -->
     <string name="settings_privacy_stance_title">Pålogget enhet som standard</string>
-    <string name="settings_privacy_stance_body">Overstasjon kjører helt på hovedenheten. Ingen telemetri forlater bilen din bortsett fra via tunneler og integrasjoner du eksplisitt konfigurerer.</string>
+    <string name="settings_privacy_stance_body">Wheelstop kjører helt på hovedenheten. Ingen telemetri forlater bilen din bortsett fra via tunneler og integrasjoner du eksplisitt konfigurerer.</string>
     <string name="settings_privacy_overline_storage">LOKAL OPPBEVARING</string>
     <string name="settings_privacy_overline_reset">DATA TILBAKESTILT</string>
     <string name="settings_privacy_storage_clips_label">Klipp på disk</string>
@@ -996,14 +996,14 @@
          surveillance, recording, Telegram alerts, status overlay, and the
          deterrent screen all run independently regardless of this state. -->
     <string name="settings_security_title">Sikkerhet</string>
-    <string name="settings_security_subtitle">Lås overDrive-appen slik at passasjerer og ventiler ikke kan åpne den uten PIN-koden.</string>
+    <string name="settings_security_subtitle">Lås Wheelstop-appen slik at passasjerer og ventiler ikke kan åpne den uten PIN-koden.</string>
     <string name="settings_security_stance_title">Kun UI lås</string>
     <string name="settings_security_stance_body">Overvåkningskontroll, opptak, avskrekkende, varsler og bakgrunnstjenester fortsetter å kjøre mens appen er låst. PIN-koden gater Wheelstop-grensesnittet, noe annet.</string>
     <string name="settings_security_overline_lock">App lås</string>
     <string name="settings_security_overline_recovery">Dersom du har glemt PIN-koden</string>
     <string name="settings_security_toggle_title">Krev PIN-kode</string>
-    <string name="settings_security_toggle_subtitle_off">Av – alle kan åpne overDrive.</string>
-    <string name="settings_security_toggle_subtitle_on">– PIN-kode kreves for å åpne overDrive.</string>
+    <string name="settings_security_toggle_subtitle_off">Av – alle kan åpne Wheelstop.</string>
+    <string name="settings_security_toggle_subtitle_on">– PIN-kode kreves for å åpne Wheelstop.</string>
     <string name="settings_security_change_title">Endre PIN-kode</string>
     <string name="settings_security_change_subtitle">Bekreft gjeldende PIN-kode, og sett deretter en ny.</string>
     <string name="settings_security_autolock_title">Autolås</string>
@@ -1040,7 +1040,7 @@
          the app lock is enabled and the session isn\'t fresh. -->
     <string name="pin_lock_title">Angi PIN-koden</string>
     <string name="pin_lock_title_unlocked">Opplåst</string>
-    <string name="pin_lock_subtitle_default">Lås opp overstasjon for å fortsette.</string>
+    <string name="pin_lock_subtitle_default">Lås opp Wheelstop for å fortsette.</string>
     <string name="pin_lock_subtitle_wrong">Feil PIN. Prøv igjen.</string>
     <string name="pin_lock_subtitle_locked_out">For mange forsøk. Prøv igjen om litt.</string>
     <!-- %1$s is a formatted countdown like "30s" or "2:45". -->
@@ -1083,7 +1083,7 @@
          provider, so translators should keep numeric placeholders intact
          (do not spell out the digits). -->
     <!-- First-launch welcome — only shown on the very first dashboard visit. -->
-    <string name="dashboard_insight_welcome">Velkommen — Overkjøring er nå ditt andre par øyne.</string>
+    <string name="dashboard_insight_welcome">Velkommen — Wheelstop er nå ditt andre par øyne.</string>
     <!-- Parking delta. %1$s = absolute SOC delta string ("8%"); %2$s = absolute kWh string ("4 kWh"). -->
     <string name="dashboard_insight_parked_charged_kwh">Plukket opp %1$s (∙%2$s) mens den parkeres</string>
     <string name="dashboard_insight_parked_charged">Picked up %1$s while parked</string>
@@ -1109,12 +1109,12 @@
     </plurals>
     <!-- Process uptime. Days form takes (days, hours); hours form takes hours only. -->
     <plurals name="dashboard_insight_uptime_days_hours">
-        <item quantity="one">Overstasjon online for %1$d dag, %2$d time</item>
-        <item quantity="other">Overkjøre online for %1$d dager, %2$d time</item>
+        <item quantity="one">Wheelstop online for %1$d dag, %2$d time</item>
+        <item quantity="other">Wheelstop online for %1$d dager, %2$d time</item>
     </plurals>
     <plurals name="dashboard_insight_uptime_hours">
-        <item quantity="one">Overstyrt på nettet for %1$d time</item>
-        <item quantity="other">Overkjøre online for %1$d timer</item>
+        <item quantity="one">Wheelstop på nettet for %1$d time</item>
+        <item quantity="other">Wheelstop online for %1$d timer</item>
     </plurals>
     <!-- Duration helpers used inside insights (last_charge etc.). -->
     <plurals name="dashboard_insight_minutes">

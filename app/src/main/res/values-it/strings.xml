@@ -905,7 +905,7 @@ Questa azione non puo essere annullata.</string>
     <!-- ============================================================== -->
     <!-- Hero card -->
     <!-- SOTA hero headline. Static identity statement (not a time-of-day
-         greeting) — pairs with the OVERDRIVE overline above and the live
+         greeting) — pairs with the WHEELSTOP overline above and the live
          status row of chips below. Locale catalogs auto-translate. -->
     <string name="dashboard_hero_headline">In sorveglianza</string>
     <string name="dashboard_subtitle_all_systems">Tutti i sistemi online</string>
@@ -955,7 +955,7 @@ Questa azione non puo essere annullata.</string>
     <!-- ============================================================ -->
     <!-- Hero -->
     <string name="settings_hero_title">Impostazioni</string>
-    <string name="settings_hero_overline">OVERDRIVE</string>
+    <string name="settings_hero_overline">WHEELSTOP</string>
     <string name="settings_hero_subtitle">Regola aspetto, registrazione, sorveglianza e dati sul dispositivo.</string>
     <!-- Section overlines -->
     <string name="settings_overline_preferences">PREFERENZE</string>

@@ -903,7 +903,7 @@
     <!-- ============================================================== -->
     <!-- Hero card -->
     <!-- SOTA hero headline. Static identity statement (not a time-of-day
-         greeting) — pairs with the OVERDRIVE overline above and the live
+         greeting) — pairs with the WHEELSTOP overline above and the live
          status row of chips below. Locale catalogs auto-translate. -->
     <string name="dashboard_hero_headline">En veille active</string>
     <string name="dashboard_subtitle_all_systems">Tous les systèmes en ligne</string>
@@ -953,7 +953,7 @@
     <!-- ============================================================ -->
     <!-- Hero -->
     <string name="settings_hero_title">Paramètres</string>
-    <string name="settings_hero_overline">Le dépassement</string>
+    <string name="settings_hero_overline">WHEELSTOP</string>
     <string name="settings_hero_subtitle">Ajustez l\'apparence, l\'enregistrement, la surveillance et les données sur l\'appareil.</string>
     <!-- Section overlines -->
     <string name="settings_overline_preferences">Préférences</string>

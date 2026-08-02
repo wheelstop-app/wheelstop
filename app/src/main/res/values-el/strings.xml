@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Υπέρβαση</string>
+    <string name="app_name">Wheelstop</string>
     <!-- Accessibility Service -->
     <string name="accessibility_service_description">Διατηρεί την εποπτεία οχημάτων Wheelstop ενεργή στο παρασκήνιο. Αυτή η υπηρεσία δεν διαβάζει ή δεν αλληλεπιδρά με το περιεχόμενο οθόνης.</string>
     <!-- Recording Mode Labels -->
@@ -608,9 +608,9 @@
          notifications into one shade entry. The summary text is intentionally
          generic so it stays accurate whether all three services are running
          or only the keepalive survived an OOM respawn. -->
-    <string name="daemon_keepalive_notif_title">Υπερκίνηση Ενεργού</string>
+    <string name="daemon_keepalive_notif_title">Wheelstop Ενεργού</string>
     <string name="daemon_keepalive_notif_text">Συστήματα παρακολούθησης οχημάτων</string>
-    <string name="overdrive_status_summary_title">Υπερκίνηση</string>
+    <string name="overdrive_status_summary_title">Wheelstop</string>
     <string name="overdrive_status_summary_text">Υπηρεσίες παρασκηνίου που εκτελούνται</string>
     <!-- ============================================================== -->
     <!-- M3 Revamp: navigation rail + settings sub-rail + theme picker  -->
@@ -750,13 +750,13 @@
     <string name="settings_action_check_update">Έλεγχος ενημερώσεων</string>
     <string name="settings_action_reset_data">Reset data…</string>
     <!-- Content descriptions for rail / segmented controls -->
-    <string name="cd_brand_logo">Υπέρβαση</string>
+    <string name="cd_brand_logo">Wheelstop</string>
     <!-- ============================================================== -->
     <!-- Dashboard SOTA revamp                                            -->
     <!-- ============================================================== -->
     <!-- Hero card -->
     <!-- SOTA hero headline. Static identity statement (not a time-of-day
-         greeting) — pairs with the OVERDRIVE overline above and the live
+         greeting) — pairs with the WHEELSTOP overline above and the live
          status row of chips below. Locale catalogs auto-translate. -->
     <string name="dashboard_hero_headline">Στο ρολόι</string>
     <string name="dashboard_subtitle_all_systems">Όλα τα συστήματα online</string>
@@ -806,7 +806,7 @@
     <!-- ============================================================ -->
     <!-- Hero -->
     <string name="settings_hero_title">Ρυθμίσεις</string>
-    <string name="settings_hero_overline">ΕΠΑΛΗΘΕΥΣΗ</string>
+    <string name="settings_hero_overline">WHEELSTOP</string>
     <string name="settings_hero_subtitle">Συντονιστική εμφάνιση, καταγραφή, επιτήρηση και δεδομένα της συσκευής.</string>
     <!-- Section overlines -->
     <string name="settings_overline_preferences">ΠΡΟΤΙΜΗΣΕΙΣ</string>

@@ -593,7 +593,7 @@
     <string name="dashboard_action_settings">Innstillinger</string>
     <string name="dashboard_action_settings_subtitle">Preferanser og om</string>
     <string name="settings_hero_title">Innstillinger</string>
-    <string name="settings_hero_overline">Overdrevet</string>
+    <string name="settings_hero_overline">WHEELSTOP</string>
     <string name="settings_hero_subtitle">Tone utseende, opptak, overvåking og data på enheten.</string>
     <string name="settings_overline_preferences">Foreløp</string>
     <string name="settings_overline_about_data">Om &amp; DATA</string>

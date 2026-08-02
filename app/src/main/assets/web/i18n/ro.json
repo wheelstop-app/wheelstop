@@ -6,20 +6,20 @@
     "note": "Sursa principala. Alte localuri sunt generate de dev/i18n_translate.py prin NLLB-200. Editați doar acest fișier, regenerați restul."
   },
   "app": {
-    "name": "Suprapunere",
+    "name": "Wheelstop",
     "tagline": "Sistem de supraveghere",
-    "live_view_title": "Vizualizare live - Suprapunere",
+    "live_view_title": "Vizualizare live - Wheelstop",
     "events_title": "Evenimente - Wheelstop",
     "surveillance_title": "Supraveghere - Wheelstop",
-    "recordings_title": "Înregistrări - Suprapunere",
-    "performance_title": "Performanță - Suprapunere",
-    "abrp_title": "ABRP - Suprapunere",
-    "mqtt_title": "MQTT - Suprapunere",
-    "trips_title": "Curse - Suprapunere",
-    "notifications_title": "Notificări - Suprapunere",
-    "vehicle_control_title": "Control vehicul - Suprapunere",
+    "recordings_title": "Înregistrări - Wheelstop",
+    "performance_title": "Performanță - Wheelstop",
+    "abrp_title": "ABRP - Wheelstop",
+    "mqtt_title": "MQTT - Wheelstop",
+    "trips_title": "Curse - Wheelstop",
+    "notifications_title": "Notificări - Wheelstop",
+    "vehicle_control_title": "Control vehicul - Wheelstop",
     "login_title": "Autentificare - Wheelstop",
-    "byd_cloud_title": "BYD Cloud - Suprapunere",
+    "byd_cloud_title": "BYD Cloud - Wheelstop",
     "telegram_title": "Telegrama - Wheelstop",
     "dashboard_title": "Panou - Wheelstop",
     "road_sense_title": "RoadSense - Wheelstop"
@@ -46,7 +46,7 @@
     "overview_group": "Prezentare generală",
     "vehicle_group": "Vehicul",
     "about_group": "Despre",
-    "brand_home": "Suprapunere - deschide tabloul de bord",
+    "brand_home": "Wheelstop - deschide tabloul de bord",
     "telegram": "Telegramă",
     "road_sense": "RoadSense"
   },
@@ -605,8 +605,8 @@
     },
     "aggressive_warning": "S-au detectat modele agresive. Accelerația grea și frânarea tardivă reduc semnificativ distanța.",
     "sd_path_default": "Card SD / Wheelstop / Curse",
-    "usb_path_default": "USB / Suprapunere / curse",
-    "internal_path_default": "Interne / Depășire / curse",
+    "usb_path_default": "USB / Wheelstop / curse",
+    "internal_path_default": "Interne / Wheelstop / curse",
     "sd_card_available": "Card SD: Disponibil",
     "sd_card_not_detected": "Card SD: Nedetectat",
     "apply_changes": "Aplică modificările",
@@ -1822,7 +1822,7 @@
   },
   "map": {
     "your_vehicle": "Vehicul tău",
-    "your_vehicle_sub": "Supravegherea în exces",
+    "your_vehicle_sub": "Supravegherea Wheelstop",
     "you_are_here": "Ești aici"
   },
   "pip": {
@@ -1901,7 +1901,7 @@
     "auto": "Automat"
   },
   "about": {
-    "page_title": "Despre — Suprapunere",
+    "page_title": "Despre — Wheelstop",
     "page_title_short": "Despre",
     "contributors_title": "Colaboratori",
     "contributors_sub": "Persoanele care au expediat codul către Wheelstop.",

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Nadměrný disk</string>
+    <string name="app_name">Wheelstop</string>
     <!-- Accessibility Service -->
-    <string name="accessibility_service_description">Udržuje monitorování vozidla při přetížení na pozadí. Tato služba nečte ani nekomunikuje s obsahem obrazovky.</string>
+    <string name="accessibility_service_description">Udržuje monitorování vozidla při Wheelstop na pozadí. Tato služba nečte ani nekomunikuje s obsahem obrazovky.</string>
     <!-- Recording Mode Labels -->
     <!-- Proximity Guard Settings Labels -->
     <!-- Quality Settings Labels -->
@@ -134,7 +134,7 @@
     <string name="camera_selection_hint">Automaticky vybere správnou kameru pro oříznutí při každém spuštění. Fotoaparát 1 = BYD Seal, Kamera 0 = Oříznutí. Po změně ID kamery restartujte démon.</string>
     <!-- OEM Dashcam camera ID picker (Phase 5: separate forward-sensor pipeline) -->
     <string name="camera_oem_dashcam_title">ID OEM Dashcam kamery</string>
-    <string name="camera_oem_dashcam_hint">Vyberte AVMCamera ID, který míří na snímač dashcamu. Dashcam je OPPOZITE panle: Se/Han pano = 1 → dashcam = 0; Atto / Tang pano = 0 → dashcam = 1. Ponechte na autu a nechte Disk vybrat.</string>
+    <string name="camera_oem_dashcam_hint">Vyberte AVMCamera ID, který míří na snímač dashcamu. Dashcam je OPPOZITE panle: Se/Han pano = 1 → dashcam = 0; Atto / Tang pano = 0 → dashcam = 1. Ponechte na autu a nechte Wheelstop vybrat.</string>
     <string name="camera_oem_dashcam_auto_resolved">Automatické použití id %1$d (pano je id %2$d)</string>
     <string name="camera_oem_dashcam_auto_unavailable">Auto — pano id je %1$d, nelze odvodit dashcam</string>
     <string name="camera_oem_dashcam_save">Uložit</string>
@@ -162,7 +162,7 @@
     <string name="camera_mapping_summary_probing">Panoramatický stream: Automatická starší detekce / probování</string>
     <string name="camera_mapping_current_format">Aktuální mapování: %1$s</string>
     <string name="camera_mapping_current_none">Aktuální mapování: Automatické / výchozí</string>
-    <string name="camera_mapping_hint">Překrytý disk udržuje starší startovací chování ve výchozím nastavení, ale nyní umožňuje správně kalibrovat sloučený panoramatický pás. Náhled každého syrového sloučeného řezu, namapovat logické 360 role na řez, který skutečně ukazuje před/vpravo/dozadu/doleva/doleva na vašem vozidle, a daemon bude po restartu znovu používat toto rozložení pro nahrávání, streamování a AI.</string>
+    <string name="camera_mapping_hint">Wheelstop udržuje starší startovací chování ve výchozím nastavení, ale nyní umožňuje správně kalibrovat sloučený panoramatický pás. Náhled každého syrového sloučeného řezu, namapovat logické 360 role na řez, který skutečně ukazuje před/vpravo/dozadu/doleva/doleva na vašem vozidle, a daemon bude po restartu znovu používat toto rozložení pro nahrávání, streamování a AI.</string>
     <!-- fragment_dashboard -->
     <string name="dashboard_scan_to_connect">Skenovat připojení</string>
     <string name="dashboard_qr_waiting">Čekání na tunel…</string>
@@ -182,7 +182,7 @@
     <string name="setup_language_body">Výchozí nastavení je jazyk. Klepnutím vyberte jiný jazyk pro aplikaci Wheelstop a webový tunel.</string>
     <string name="setup_language_button">Vyberte jazyk</string>
     <string name="setup_autostart_title">Zakázat omezení automatického spuštění</string>
-    <string name="setup_autostart_body">Klepnutím níže otevřete BYD Auto-Start. Najděte Překrytý disk v seznamu a zrušte zaškrtnutí políčka. BYD to vymaže při každé instalaci - po aktualizacích to znovu uděláte.</string>
+    <string name="setup_autostart_body">Klepnutím níže otevřete BYD Auto-Start. Najděte Wheelstop v seznamu a zrušte zaškrtnutí políčka. BYD to vymaže při každé instalaci - po aktualizacích to znovu uděláte.</string>
     <string name="setup_autostart_button">Otevřít BYD automatické spuštění</string>
     <string name="setup_overlay_title">Povolit zobrazení přes ostatní aplikace</string>
     <string name="setup_overlay_body">Povolením zobrazíte plovoucí indikátor stavu pro nahrávání a sledování jízdy nad jinými aplikacemi.</string>
@@ -401,7 +401,7 @@
     <string name="update_picker_current_suffix">%1$s (nainstalováno)</string>
     <string name="update_picker_older_suffix">%1$s (starší)</string>
     <!-- Update progress (title + per-step status; no emoji — state icon carries the cue) -->
-    <string name="update_progress_title">Aktualizace přepsání</string>
+    <string name="update_progress_title">Aktualizace Wheelstop</string>
     <string name="update_step_downloading">Stahování aktualizace…</string>
     <string name="update_step_verifying">Ověřování stahování…</string>
     <string name="update_step_stopping">Zastavování démonů…</string>
@@ -607,16 +607,16 @@
     <string name="nav_page_mqtt">MQTT</string>
     <string name="nav_page_byd_cloud">BYD Cloud</string>
     <!-- StatusOverlayService persistent notification (foreground service) -->
-    <string name="status_overlay_notif_title">Stav nadměrného disku</string>
+    <string name="status_overlay_notif_title">Stav Wheelstop</string>
     <string name="status_overlay_notif_text">Status overlay active</string>
     <!-- DaemonKeepaliveService persistent notification (foreground service)
          and the group-summary row that collapses Overdrive's three FGS
          notifications into one shade entry. The summary text is intentionally
          generic so it stays accurate whether all three services are running
          or only the keepalive survived an OOM respawn. -->
-    <string name="daemon_keepalive_notif_title">Aktivní přetížení</string>
+    <string name="daemon_keepalive_notif_title">Aktivní Wheelstop</string>
     <string name="daemon_keepalive_notif_text">Monitorovací systémy vozidel</string>
-    <string name="overdrive_status_summary_title">Přepínač</string>
+    <string name="overdrive_status_summary_title">Wheelstop</string>
     <string name="overdrive_status_summary_text">Služby na pozadí běží</string>
     <!-- ============================================================== -->
     <!-- M3 Revamp: navigation rail + settings sub-rail + theme picker  -->
@@ -654,7 +654,7 @@
     <string name="settings_privacy_title">Soukromí &amp; data</string>
     <string name="settings_privacy_body">Resetuje index nahrávek, uložená data, stav daemon a nastavení na zařízení. Akce nelze vrátit zpět.</string>
     <!-- Settings → About pane copy -->
-    <string name="settings_about_title">O přebytečném disku</string>
+    <string name="settings_about_title">O Wheelstop</string>
     <string name="settings_about_version_label">Verze</string>
     <string name="settings_about_package_label">Postavit</string>
     <string name="settings_about_check_update_value">Zkontrolujte nejnovější verzi GitHub a nainstalujte ji pokud je novější.</string>
@@ -665,7 +665,7 @@
     <string name="settings_about_support_share_title">Řekněte kolegovi</string>
     <string name="settings_about_support_share_value">Každý sdílený odkaz pomáhá jinému majiteli BYD objevit Wheelstop.</string>
     <string name="settings_about_support_share_message">Podívejte se na Wheelstop — open-source sledování &amp; dashcam pro BYD: https://overdrive-5lc.pages.dev/</string>
-    <string name="settings_about_support_share_chooser">Sdílet přetažení</string>
+    <string name="settings_about_support_share_chooser">Sdílet Wheelstop</string>
     <string name="settings_about_open_link_failed">Nelze otevřít odkaz.</string>
     <string name="settings_about_open_link_copied">Nebyl nalezen žádný prohlížeč. URL zkopírováno: %1$s</string>
     <string name="settings_about_support_kofi_title">Palivujte další vydání</string>
@@ -756,13 +756,13 @@
     <string name="settings_action_check_update">Zkontrolovat aktualizace</string>
     <string name="settings_action_reset_data">Obnovit data…</string>
     <!-- Content descriptions for rail / segmented controls -->
-    <string name="cd_brand_logo">Nadměrný disk</string>
+    <string name="cd_brand_logo">Wheelstop</string>
     <!-- ============================================================== -->
     <!-- Dashboard SOTA revamp                                            -->
     <!-- ============================================================== -->
     <!-- Hero card -->
     <!-- SOTA hero headline. Static identity statement (not a time-of-day
-         greeting) — pairs with the OVERDRIVE overline above and the live
+         greeting) — pairs with the WHEELSTOP overline above and the live
          status row of chips below. Locale catalogs auto-translate. -->
     <string name="dashboard_hero_headline">Na hodinkách</string>
     <string name="dashboard_subtitle_all_systems">Všechny systémy online</string>
@@ -812,7 +812,7 @@
     <!-- ============================================================ -->
     <!-- Hero -->
     <string name="settings_hero_title">Nastavení</string>
-    <string name="settings_hero_overline">PŘEHLED</string>
+    <string name="settings_hero_overline">WHEELSTOP</string>
     <string name="settings_hero_subtitle">Vyladit vzhled, záznam, dohled a data v zařízení.</string>
     <!-- Section overlines -->
     <string name="settings_overline_preferences">PREFERENČNÍ HODNOTY</string>
@@ -825,11 +825,11 @@
     <string name="settings_section_surveillance_subtitle">Detekční zóny, rozvrh, citlivost pohybu.</string>
     <string name="settings_section_daemons_subtitle">Cloudflared, Zrok, Telegram, MQTT běžci.</string>
     <!-- About / data row subtitles -->
-    <string name="settings_about_row_title">O přebytečném disku</string>
+    <string name="settings_about_row_title">O Wheelstop</string>
     <string name="settings_about_row_subtitle">Verze, licence, podpora vývoje.</string>
     <string name="settings_reset_row_subtitle">Vymazat záznamy, události nebo všechny keše.</string>
     <!-- Footer -->
-    <string name="settings_footer_format">Překrytý disk %1$s · %2$s</string>
+    <string name="settings_footer_format">Wheelstop %1$s · %2$s</string>
     <!-- ============================================================ -->
     <!-- Appearance pane — SOTA visual theme picker                    -->
     <!-- ============================================================ -->
@@ -846,7 +846,7 @@
     <!-- Privacy pane — stance + storage summary + reset               -->
     <!-- ============================================================ -->
     <string name="settings_privacy_stance_title">Ve výchozím nastavení zapnout zařízení</string>
-    <string name="settings_privacy_stance_body">Přepínač běží zcela na hlavičce. Žádné telemetrie neopustí vaše vozidlo kromě tunelů a integrací, které výslovně konfigurováte.</string>
+    <string name="settings_privacy_stance_body">Wheelstop běží zcela na hlavičce. Žádné telemetrie neopustí vaše vozidlo kromě tunelů a integrací, které výslovně konfigurováte.</string>
     <string name="settings_privacy_overline_storage">MÍSTNÍ SKLADOVÁNÍ</string>
     <string name="settings_privacy_overline_reset">OBNOVENÍ ÚDAJŮ</string>
     <string name="settings_privacy_storage_clips_label">Klipy na disku</string>
@@ -862,12 +862,12 @@
     <string name="settings_security_title">Zabezpečení</string>
     <string name="settings_security_subtitle">Uzamkněte aplikaci Wheelstop tak, aby ji cestující a valety nemohly otevřít bez vašeho PINu.</string>
     <string name="settings_security_stance_title">Pouze UI zámek</string>
-    <string name="settings_security_stance_body">Průzkum, nahrávání, odstrašování, upozornění a služby na pozadí stále běží, když je aplikace uzamčena. PIN brány přebytečného disku, nic jiného.</string>
+    <string name="settings_security_stance_body">Průzkum, nahrávání, odstrašování, upozornění a služby na pozadí stále běží, když je aplikace uzamčena. PIN brány Wheelstop, nic jiného.</string>
     <string name="settings_security_overline_lock">Zámek aplikace</string>
     <string name="settings_security_overline_recovery">Pokud zapomenete svůj PIN</string>
     <string name="settings_security_toggle_title">Vyžadovat PIN</string>
-    <string name="settings_security_toggle_subtitle_off">Vypnuto — kdokoliv může otevřít přetížení.</string>
-    <string name="settings_security_toggle_subtitle_on">Zapnuto – PIN je vyžadován k otevření Přepínače přetížení.</string>
+    <string name="settings_security_toggle_subtitle_off">Vypnuto — kdokoliv může otevřít Wheelstop.</string>
+    <string name="settings_security_toggle_subtitle_on">Zapnuto – PIN je vyžadován k otevření Wheelstop.</string>
     <string name="settings_security_change_title">Změnit PIN</string>
     <string name="settings_security_change_subtitle">Potvrďte aktuální kód PIN, poté nastavte nový.</string>
     <string name="settings_security_autolock_title">Automatické uzamčení</string>
@@ -904,7 +904,7 @@
          the app lock is enabled and the session isn\'t fresh. -->
     <string name="pin_lock_title">Zadejte PIN</string>
     <string name="pin_lock_title_unlocked">Odemknuto</string>
-    <string name="pin_lock_subtitle_default">Odemkněte přebytečný disk pro pokračování.</string>
+    <string name="pin_lock_subtitle_default">Odemkněte Wheelstop pro pokračování.</string>
     <string name="pin_lock_subtitle_wrong">Nesprávný PIN. Zkuste to znovu.</string>
     <string name="pin_lock_subtitle_locked_out">Příliš mnoho pokusů. Zkuste to za chvíli znovu.</string>
     <!-- %1$s is a formatted countdown like "30s" or "2:45". -->
@@ -977,16 +977,16 @@
     </plurals>
     <!-- Process uptime. Days form takes (days, hours); hours form takes hours only. -->
     <plurals name="dashboard_insight_uptime_days_hours">
-        <item quantity="one">Přepsat online pro %1$d den, %2$d h</item>
+        <item quantity="one">Wheelstop online pro %1$d den, %2$d h</item>
         <item quantity="few">Přepsat online na %1$d dní, %2$d h</item>
         <item quantity="many">Přepsat online na %1$d dní, %2$d h</item>
-        <item quantity="other">Přepsat online na %1$d dní, %2$d h</item>
+        <item quantity="other">Wheelstop online na %1$d dní, %2$d h</item>
     </plurals>
     <plurals name="dashboard_insight_uptime_hours">
-        <item quantity="one">Přepsat online na %1$d hodinu</item>
+        <item quantity="one">Wheelstop online na %1$d hodinu</item>
         <item quantity="few">Přepsat online na %1$d hodin</item>
         <item quantity="many">Přepsat online na %1$d hodin</item>
-        <item quantity="other">Přepsat online na %1$d hodin</item>
+        <item quantity="other">Wheelstop online na %1$d hodin</item>
     </plurals>
     <!-- Duration helpers used inside insights (last_charge etc.). -->
     <plurals name="dashboard_insight_minutes">

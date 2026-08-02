@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Suprapunere</string>
+    <string name="app_name">Wheelstop</string>
     <!-- Accessibility Service -->
-    <string name="accessibility_service_description">Mențineți monitorizarea vehiculelor suprasolicitate activă în fundal. Acest serviciu nu citește sau nu interacționează cu conținutul ecranului.</string>
+    <string name="accessibility_service_description">Mențineți monitorizarea vehiculelor Wheelstop activă în fundal. Acest serviciu nu citește sau nu interacționează cu conținutul ecranului.</string>
     <!-- Recording Mode Labels -->
     <!-- Proximity Guard Settings Labels -->
     <!-- Quality Settings Labels -->
@@ -611,9 +611,9 @@
          notifications into one shade entry. The summary text is intentionally
          generic so it stays accurate whether all three services are running
          or only the keepalive survived an OOM respawn. -->
-    <string name="daemon_keepalive_notif_title">Suprapunere activă</string>
+    <string name="daemon_keepalive_notif_title">Wheelstop activă</string>
     <string name="daemon_keepalive_notif_text">Monitorizarea sistemelor vehiculelor</string>
-    <string name="overdrive_status_summary_title">Suprapunere</string>
+    <string name="overdrive_status_summary_title">Wheelstop</string>
     <string name="overdrive_status_summary_text">Servicii de fundal rulate</string>
     <!-- ============================================================== -->
     <!-- M3 Revamp: navigation rail + settings sub-rail + theme picker  -->
@@ -753,13 +753,13 @@
     <string name="settings_action_check_update">Verifică pentru actualizări</string>
     <string name="settings_action_reset_data">Resetare date…</string>
     <!-- Content descriptions for rail / segmented controls -->
-    <string name="cd_brand_logo">Suprapunere</string>
+    <string name="cd_brand_logo">Wheelstop</string>
     <!-- ============================================================== -->
     <!-- Dashboard SOTA revamp                                            -->
     <!-- ============================================================== -->
     <!-- Hero card -->
     <!-- SOTA hero headline. Static identity statement (not a time-of-day
-         greeting) — pairs with the OVERDRIVE overline above and the live
+         greeting) — pairs with the WHEELSTOP overline above and the live
          status row of chips below. Locale catalogs auto-translate. -->
     <string name="dashboard_hero_headline">Pe ceas</string>
     <string name="dashboard_subtitle_all_systems">Toate sistemele online</string>
@@ -809,7 +809,7 @@
     <!-- ============================================================ -->
     <!-- Hero -->
     <string name="settings_hero_title">Setări</string>
-    <string name="settings_hero_overline">OVERDRIVE</string>
+    <string name="settings_hero_overline">WHEELSTOP</string>
     <string name="settings_hero_subtitle">Desenați aspectul, înregistrarea, supravegherea și datele de pe dispozitiv.</string>
     <!-- Section overlines -->
     <string name="settings_overline_preferences">PREFERINŢE</string>
@@ -826,7 +826,7 @@
     <string name="settings_about_row_subtitle">Versiune, licenţă, suport pentru dezvoltare.</string>
     <string name="settings_reset_row_subtitle">Ştergeţi înregistrările, evenimentele sau toate geocutiile.</string>
     <!-- Footer -->
-    <string name="settings_footer_format">Suprapunere %1$s · %2$s</string>
+    <string name="settings_footer_format">Wheelstop %1$s · %2$s</string>
     <!-- ============================================================ -->
     <!-- Appearance pane — SOTA visual theme picker                    -->
     <!-- ============================================================ -->
@@ -977,9 +977,9 @@
         <item quantity="other">Wheelstop online pentru %1$d zile, %2$d hr</item>
     </plurals>
     <plurals name="dashboard_insight_uptime_hours">
-        <item quantity="one">Depășire online pentru %1$d oră</item>
+        <item quantity="one">Wheelstop online pentru %1$d oră</item>
         <item quantity="few">Depăşire online pentru %1$d ore</item>
-        <item quantity="other">Depăşire online pentru %1$d ore</item>
+        <item quantity="other">Wheelstop online pentru %1$d ore</item>
     </plurals>
     <!-- Duration helpers used inside insights (last_charge etc.). -->
     <plurals name="dashboard_insight_minutes">

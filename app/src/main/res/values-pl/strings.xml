@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Nadmiarowy</string>
+    <string name="app_name">Wheelstop</string>
     <!-- Accessibility Service -->
     <string name="accessibility_service_description">Zachowuje aktywny monitoring pojazdu Wheelstop w tle. Ta usługa nie odczytuje ani nie wchodzi w interakcję z zawartością ekranu.</string>
     <!-- Recording Mode Labels -->
@@ -162,7 +162,7 @@
     <string name="camera_mapping_summary_probing">Strumień panoramiczny: Automatyczne wykrywanie / sondowanie</string>
     <string name="camera_mapping_current_format">Aktualne mapowanie: %1$s</string>
     <string name="camera_mapping_current_none">Aktualne mapowanie: Automatyczne / domyślne</string>
-    <string name="camera_mapping_hint">PrzeDysk domyślnie utrzymuje starsze zachowanie startowe, ale teraz pozwala na kalibrację scalonego paska panoramicznego. Podgląd każdego surowego scalonego wycinka, mapowanie logicznych 360 ról do wycinka, który w rzeczywistości pokazuje przód/prawo/tył/lewo w pojeździe, a demon ponownie wykorzysta ten układ do nagrywania, odtwarzania strumieniowego i AI po ponownym uruchomieniu.</string>
+    <string name="camera_mapping_hint">Wheelstop domyślnie utrzymuje starsze zachowanie startowe, ale teraz pozwala na kalibrację scalonego paska panoramicznego. Podgląd każdego surowego scalonego wycinka, mapowanie logicznych 360 ról do wycinka, który w rzeczywistości pokazuje przód/prawo/tył/lewo w pojeździe, a demon ponownie wykorzysta ten układ do nagrywania, odtwarzania strumieniowego i AI po ponownym uruchomieniu.</string>
     <!-- fragment_dashboard -->
     <string name="dashboard_scan_to_connect">Zeskanuj aby połączyć</string>
     <string name="dashboard_qr_waiting">Oczekiwanie na tunel…</string>
@@ -401,7 +401,7 @@
     <string name="update_picker_current_suffix">%1$s (zainstalowany)</string>
     <string name="update_picker_older_suffix">%1$s (starszy)</string>
     <!-- Update progress (title + per-step status; no emoji — state icon carries the cue) -->
-    <string name="update_progress_title">Aktualizowanie Naddysku</string>
+    <string name="update_progress_title">Aktualizowanie Wheelstop</string>
     <string name="update_step_downloading">Pobieranie aktualizacji…</string>
     <string name="update_step_verifying">Weryfikowanie pobierania…</string>
     <string name="update_step_stopping">Zatrzymywanie demonów…</string>
@@ -607,16 +607,16 @@
     <string name="nav_page_mqtt">MQTT</string>
     <string name="nav_page_byd_cloud">BYD Cloud</string>
     <!-- StatusOverlayService persistent notification (foreground service) -->
-    <string name="status_overlay_notif_title">Status naddysku</string>
+    <string name="status_overlay_notif_title">Status Wheelstop</string>
     <string name="status_overlay_notif_text">Status overlay active</string>
     <!-- DaemonKeepaliveService persistent notification (foreground service)
          and the group-summary row that collapses Overdrive's three FGS
          notifications into one shade entry. The summary text is intentionally
          generic so it stays accurate whether all three services are running
          or only the keepalive survived an OOM respawn. -->
-    <string name="daemon_keepalive_notif_title">Przeciążenie aktywne</string>
+    <string name="daemon_keepalive_notif_title">Wheelstop aktywny</string>
     <string name="daemon_keepalive_notif_text">Monitorowanie układów pojazdów</string>
-    <string name="overdrive_status_summary_title">Przeciążenie</string>
+    <string name="overdrive_status_summary_title">Wheelstop</string>
     <string name="overdrive_status_summary_text">Uruchomione usługi w tle</string>
     <!-- ============================================================== -->
     <!-- M3 Revamp: navigation rail + settings sub-rail + theme picker  -->
@@ -665,7 +665,7 @@
     <string name="settings_about_support_share_title">Powiedz współwłaścicielowi</string>
     <string name="settings_about_support_share_value">Każdy współdzielony link pomaga innemu właścicielowi BYD odkryć Wheelstop.</string>
     <string name="settings_about_support_share_message">Sprawdź Wheelstop — open-source surveillance &amp; dashcam dla BYD: https://overdrive-5lc.pages.dev/</string>
-    <string name="settings_about_support_share_chooser">Podziel się Naddyskiem</string>
+    <string name="settings_about_support_share_chooser">Podziel się Wheelstop</string>
     <string name="settings_about_open_link_failed">Nie można otworzyć linku.</string>
     <string name="settings_about_open_link_copied">Nie znaleziono przeglądarki. Adres URL skopiowany: %1$s</string>
     <string name="settings_about_support_kofi_title">Paliwo następne zwolnienie</string>
@@ -756,13 +756,13 @@
     <string name="settings_action_check_update">Sprawdź aktualizacje</string>
     <string name="settings_action_reset_data">Resetuj dane…</string>
     <!-- Content descriptions for rail / segmented controls -->
-    <string name="cd_brand_logo">Nadmiarowy</string>
+    <string name="cd_brand_logo">Wheelstop</string>
     <!-- ============================================================== -->
     <!-- Dashboard SOTA revamp                                            -->
     <!-- ============================================================== -->
     <!-- Hero card -->
     <!-- SOTA hero headline. Static identity statement (not a time-of-day
-         greeting) — pairs with the OVERDRIVE overline above and the live
+         greeting) — pairs with the WHEELSTOP overline above and the live
          status row of chips below. Locale catalogs auto-translate. -->
     <string name="dashboard_hero_headline">Na zegarku</string>
     <string name="dashboard_subtitle_all_systems">Wszystkie systemy online</string>
@@ -812,7 +812,7 @@
     <!-- ============================================================ -->
     <!-- Hero -->
     <string name="settings_hero_title">Ustawienia</string>
-    <string name="settings_hero_overline">OGRANICZENIE</string>
+    <string name="settings_hero_overline">WHEELSTOP</string>
     <string name="settings_hero_subtitle">Dostosuj wygląd, nagrywanie, nadzór i dane na urządzeniu.</string>
     <!-- Section overlines -->
     <string name="settings_overline_preferences">PREFERENCJE</string>
@@ -829,7 +829,7 @@
     <string name="settings_about_row_subtitle">Wersja, licencja, wspieraj rozwój.</string>
     <string name="settings_reset_row_subtitle">Wyczyść nagrania, wydarzenia lub wszystkie skrzynki.</string>
     <!-- Footer -->
-    <string name="settings_footer_format">Nadmiarowość %1$s · %2$s</string>
+    <string name="settings_footer_format">Wheelstop %1$s · %2$s</string>
     <!-- ============================================================ -->
     <!-- Appearance pane — SOTA visual theme picker                    -->
     <!-- ============================================================ -->
@@ -977,16 +977,16 @@
     </plurals>
     <!-- Process uptime. Days form takes (days, hours); hours form takes hours only. -->
     <plurals name="dashboard_insight_uptime_days_hours">
-        <item quantity="one">Przeciąż online przez %1$d dnia, %2$d godzina</item>
-        <item quantity="few">Przeciąż online przez %1$d dni, %2$d godzina</item>
-        <item quantity="many">Przeciąż online przez %1$d dni, %2$d godzina</item>
-        <item quantity="other">Przeciąż online przez %1$d dni, %2$d godzina</item>
+        <item quantity="one">Wheelstop online przez %1$d dnia, %2$d godzina</item>
+        <item quantity="few">Wheelstop online przez %1$d dni, %2$d godzina</item>
+        <item quantity="many">Wheelstop online przez %1$d dni, %2$d godzina</item>
+        <item quantity="other">Wheelstop online przez %1$d dni, %2$d godzina</item>
     </plurals>
     <plurals name="dashboard_insight_uptime_hours">
-        <item quantity="one">Przeciąż online przez %1$d godzinę</item>
-        <item quantity="few">Przeciąż online przez %1$d godzin</item>
-        <item quantity="many">Przeciąż online przez %1$d godzin</item>
-        <item quantity="other">Przeciąż online przez %1$d godzin</item>
+        <item quantity="one">Wheelstop online przez %1$d godzinę</item>
+        <item quantity="few">Wheelstop online przez %1$d godzin</item>
+        <item quantity="many">Wheelstop online przez %1$d godzin</item>
+        <item quantity="other">Wheelstop online przez %1$d godzin</item>
     </plurals>
     <!-- Duration helpers used inside insights (last_charge etc.). -->
     <plurals name="dashboard_insight_minutes">

@@ -903,7 +903,7 @@
     <!-- ============================================================== -->
     <!-- Hero card -->
     <!-- SOTA hero headline. Static identity statement (not a time-of-day
-         greeting) — pairs with the OVERDRIVE overline above and the live
+         greeting) — pairs with the WHEELSTOP overline above and the live
          status row of chips below. Locale catalogs auto-translate. -->
     <string name="dashboard_hero_headline">Op wacht</string>
     <string name="dashboard_subtitle_all_systems">Alle systemen online</string>
@@ -953,7 +953,7 @@
     <!-- ============================================================ -->
     <!-- Hero -->
     <string name="settings_hero_title">Instellingen</string>
-    <string name="settings_hero_overline">Overdreven</string>
+    <string name="settings_hero_overline">WHEELSTOP</string>
     <string name="settings_hero_subtitle">Opname, bewaking en gegevens op het apparaat afstemmen.</string>
     <!-- Section overlines -->
     <string name="settings_overline_preferences">Voorbeelden</string>
@@ -1119,7 +1119,7 @@
     </plurals>
     <plurals name="dashboard_insight_uptime_hours">
         <item quantity="one">Wheelstop online voor %1$d uur</item>
-        <item quantity="other">%1$d uur online overdrive</item>
+        <item quantity="other">%1$d uur online Wheelstop</item>
     </plurals>
     <!-- Duration helpers used inside insights (last_charge etc.). -->
     <plurals name="dashboard_insight_minutes">

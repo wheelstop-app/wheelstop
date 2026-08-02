@@ -754,7 +754,7 @@
     <!-- ============================================================== -->
     <!-- Hero card -->
     <!-- SOTA hero headline. Static identity statement (not a time-of-day
-         greeting) — pairs with the OVERDRIVE overline above and the live
+         greeting) — pairs with the WHEELSTOP overline above and the live
          status row of chips below. Locale catalogs auto-translate. -->
     <string name="dashboard_hero_headline">守望中</string>
     <string name="dashboard_subtitle_all_systems">所有系統都在網路上</string>
@@ -804,7 +804,7 @@
     <!-- ============================================================ -->
     <!-- Hero -->
     <string name="settings_hero_title">設定</string>
-    <string name="settings_hero_overline">超越使用量</string>
+    <string name="settings_hero_overline">WHEELSTOP</string>
     <string name="settings_hero_subtitle">調節外觀,錄音,監控和裝置上的數據.</string>
     <!-- Section overlines -->
     <string name="settings_overline_preferences">首頁 &gt; 列表</string>
