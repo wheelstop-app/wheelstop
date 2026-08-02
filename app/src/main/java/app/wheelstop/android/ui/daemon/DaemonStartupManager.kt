@@ -8,6 +8,8 @@ import app.wheelstop.android.launcher.AdbShellExecutor
 import app.wheelstop.android.launcher.ZrokLauncher
 import app.wheelstop.android.launcher.TailscaleLauncher
 import app.wheelstop.android.logging.LogManager
+import app.wheelstop.android.preflight.ExclusivityBlockerActivity
+import app.wheelstop.android.preflight.ExclusivityPreflight
 import app.wheelstop.android.ui.model.DaemonType
 import app.wheelstop.android.ui.util.PreferencesManager
 import app.wheelstop.android.ui.viewmodel.DaemonsViewModel
@@ -194,7 +196,31 @@ class DaemonStartupManager(
         }
     }
 
+    /**
+     * Entry point for MainActivity / the ADB-auth-granted callback. Gated by
+     * [ExclusivityPreflight]: if a live legacy Overdrive install is detected
+     * holding the shared camera/tunnel-ports/MQTT-id/sentinels, this refuses
+     * to start Wheelstop's own daemons and instead shows
+     * [ExclusivityBlockerActivity], which re-probes and calls back into this
+     * same method once the contention is resolved. See
+     * [proceedInitializeOnAppLaunch] for the actual startup sequence.
+     */
     fun initializeOnAppLaunch() {
+        ExclusivityPreflight.check(adbLauncher) { verdict ->
+            handler.post {
+                when (verdict) {
+                    ExclusivityPreflight.Verdict.EXCLUSIVE -> proceedInitializeOnAppLaunch()
+                    ExclusivityPreflight.Verdict.CONTENDED -> {
+                        log.warn(TAG, "Exclusivity preflight: legacy Overdrive is installed " +
+                            "and active — refusing to start Wheelstop daemons until resolved")
+                        ExclusivityBlockerActivity.start(context)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun proceedInitializeOnAppLaunch() {
         log.info(TAG, "=== Initializing daemon startup on app launch ===")
         log.info(TAG, "Waiting 45 seconds before starting daemons (system stabilization)...")
 
@@ -299,10 +325,34 @@ class DaemonStartupManager(
         })
     }*/
 
+    /**
+     * Boot entry point (see [startOnBoot]). Same [ExclusivityPreflight] gate as
+     * [initializeOnAppLaunch]: on CONTENDED this shows [ExclusivityBlockerActivity]
+     * over whatever is on screen (application Context + FLAG_ACTIVITY_NEW_TASK,
+     * since a boot receiver/service has no foreground Activity of its own) and
+     * skips scheduling any daemon startup entirely — the blocker screen's own
+     * resolve path (via [initializeOnAppLaunch]) is what eventually brings the
+     * daemons up, not a resumed boot sequence.
+     */
     private fun initializeOnBoot() {
+        ExclusivityPreflight.check(adbLauncher) { verdict ->
+            handler.post {
+                when (verdict) {
+                    ExclusivityPreflight.Verdict.EXCLUSIVE -> proceedInitializeOnBoot()
+                    ExclusivityPreflight.Verdict.CONTENDED -> {
+                        log.warn(TAG, "Exclusivity preflight (boot): legacy Overdrive is " +
+                            "installed and active — refusing to start Wheelstop daemons until resolved")
+                        ExclusivityBlockerActivity.start(context)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun proceedInitializeOnBoot() {
         log.info(TAG, "=== Initializing daemon startup on boot ===")
         log.info(TAG, "Waiting 45 seconds before starting daemons (system stabilization)...")
-        
+
         // Reset user-stopped flags on boot
         userStoppedDaemons.clear()
 

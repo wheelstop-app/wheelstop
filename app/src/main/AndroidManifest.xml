@@ -334,6 +334,19 @@
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|density|fontScale"
             android:theme="@style/Theme.Overdrive.M3" />
 
+        <!-- Exclusivity preflight blocker — shown when ExclusivityPreflight detects a live
+             legacy Overdrive install (see ExclusivityPreflight.OLD_PKG) holding the shared
+             camera / tunnel ports / MQTT client id / /data/local/tmp sentinels. Not exported:
+             only DaemonStartupManager (this app's own process) ever launches it. -->
+        <activity
+            android:name="app.wheelstop.android.preflight.ExclusivityBlockerActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:excludeFromRecents="true"
+            android:screenOrientation="unspecified"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:theme="@style/Theme.Overdrive.M3" />
+
         <!-- Blocker Activity for Sentry Mode (transparent click blocker) -->
         <activity
             android:name="app.wheelstop.android.BlockerActivity"
