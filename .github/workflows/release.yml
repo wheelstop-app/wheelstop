@@ -1,7 +1,7 @@
 name: Release
 
 # Manually-triggered signed release. Builds :app:assembleRelease with the
-# df8fc138 signing key (loaded from secrets), refuses to publish anything signed
+# release signing key (loaded from secrets), refuses to publish anything signed
 # with a different certificate, and pushes the APK + SHA256SUMS to the rolling
 # "alpha" release the in-app updater reads. Same-cert signing is what lets the
 # car install the update in place (pm install -r) with no data wipe.
@@ -81,9 +81,16 @@ jobs:
 
       - name: Gate on the pinned signing certificate
         env:
-          EXPECTED_CERT: df8fc138481d279c019ff92137d104993de4a37d966504a7b7f78bb274c9a84e
+          # The release signer's cert SHA-256, pinned as a repo/org variable (it's public — the
+          # cert fingerprint, not the key). Set once: `gh variable set RELEASE_SIGNER_SHA256
+          # --org wheelstop-app --body <sha256>`. Rotating keys is then a one-line variable change.
+          EXPECTED_CERT: ${{ vars.RELEASE_SIGNER_SHA256 }}
         run: |
           set -euo pipefail
+          if [ -z "${EXPECTED_CERT:-}" ]; then
+            echo "::error::RELEASE_SIGNER_SHA256 variable is not set — cannot gate the signature"; exit 1
+          fi
+          EXPECTED_CERT=$(printf '%s' "$EXPECTED_CERT" | tr 'A-F' 'a-f' | tr -d ' :')
           APK=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
           if [ -z "$APK" ]; then echo "::error::no release APK produced"; exit 1; fi
           echo "Signed APK: $APK"
@@ -113,7 +120,7 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          NOTES="Signed release ${VERSION}. Cert-gated (df8fc138). Installs in place via same-cert pm install -r."
+          NOTES="Signed release ${VERSION}. Cert-gated to the pinned release signer. Installs in place via same-cert pm install -r."
           if gh release view alpha >/dev/null 2>&1; then
             gh release upload alpha "dist/overdrive-alpha-${VERSION}.apk" dist/SHA256SUMS --clobber
             gh release edit alpha --title "alpha ${VERSION}" --notes "$NOTES" --target "$GITHUB_SHA"

@@ -1,66 +1,84 @@
 # Release signing — operator runbook
 
-The CI (`.github/workflows/release.yml`) signs with the **same** keystore already
-on the car (cert `df8fc138…`), so releases install in place with no data wipe. Two
-steps are manual because they need the private key and a physical car.
+Wheelstop signs with **one dedicated release key**, shared by CI and local dev, so a fast local
+`assembleDebug` and a CI `assembleRelease` carry the *same* certificate and install over each other on
+the car (`pm install -r` requires a matching cert). The key is **not** the old `androiddebugkey`. Its
+cert SHA-256 is pinned in CI via the `RELEASE_SIGNER_SHA256` variable.
 
-## 1. One-time: load the signing secrets
+## 0. ⚠️ Back up the key — the one rule that matters
 
-From a machine with the keystore (`~/.overdrive-build/android/debug.keystore`) and
-`gh` authenticated against `shauneccles/Overdrive-release`:
+`~/.wheelstop/wheelstop-release.jks` + its password. Lose them and you can **never** update the app in
+place again — every user would have to uninstall/reinstall. Keep the keystore + password in a password
+manager AND an encrypted offsite copy. Do this before anything else.
 
-    gh secret set SIGNING_KEYSTORE_B64      --repo shauneccles/Overdrive-release \
-      --body "$(base64 -w0 ~/.overdrive-build/android/debug.keystore)"
-    gh secret set SIGNING_KEYSTORE_PASSWORD --repo shauneccles/Overdrive-release --body "android"
-    gh secret set SIGNING_KEY_PASSWORD      --repo shauneccles/Overdrive-release --body "android"
-    gh secret set SIGNING_KEY_ALIAS         --repo shauneccles/Overdrive-release --body "androiddebugkey"
+## 1. Generate the key (once — already done if the file exists)
 
-The keystore's cert SHA-256 must be
-`df8fc138481d279c019ff92137d104993de4a37d966504a7b7f78bb274c9a84e`
-(check: `keytool -list -v -keystore ~/.overdrive-build/android/debug.keystore -storepass android`).
-CI refuses to publish anything signed with a different cert.
+    mkdir -p ~/.wheelstop && chmod 700 ~/.wheelstop
+    keytool -genkeypair -v -keystore ~/.wheelstop/wheelstop-release.jks \
+      -storetype PKCS12 -alias wheelstop -keyalg RSA -keysize 4096 -validity 10000
+    # cert fingerprint (public — this is the pin):
+    keytool -list -v -keystore ~/.wheelstop/wheelstop-release.jks -alias wheelstop | grep -A1 SHA256
 
-## 2. Before the first real release: validate the R8 build on the car
+PKCS12 uses one password for store and key (so `SIGNING_KEYSTORE_PASSWORD` == `SIGNING_KEY_PASSWORD`).
 
-The car has only ever run **debug** builds. The release build is R8/minified —
-stripping could remove something reflected-into at runtime. Validate once:
+## 2. CI: org secrets + the cert-pin variable
 
-1. Build locally with the signing env (same as CI):
+Secrets live at the **`wheelstop-app` org** (usable by `wheelstop-app/wheelstop` once the repo is there):
 
-       KEYSTORE_FILE=~/.overdrive-build/android/debug.keystore \
-       KEYSTORE_PASSWORD=android KEY_PASSWORD=android KEY_ALIAS=androiddebugkey \
-       ./gradlew :app:assembleRelease
+    base64 -w0 ~/.wheelstop/wheelstop-release.jks | gh secret set SIGNING_KEYSTORE_B64 --org wheelstop-app
+    gh secret set SIGNING_KEYSTORE_PASSWORD --org wheelstop-app   # (your key password)
+    gh secret set SIGNING_KEY_PASSWORD      --org wheelstop-app   # (same value)
+    gh secret set SIGNING_KEY_ALIAS         --org wheelstop-app --body wheelstop
 
-   (No host JDK? Run it in the container from
-   `docs/llm-live-car-debugging.md` §4, adding the four `KEYSTORE_*` env vars to
-   the inner `export` line.)
+Pin the cert (public fingerprint — a **variable**, not a secret; rotating keys is then a one-liner):
 
-2. Install in place over the running debug build (same cert → no wipe):
+    gh variable set RELEASE_SIGNER_SHA256 --org wheelstop-app \
+      --body <the 64-hex SHA-256 from step 1>
 
-       adb install -r app/build/outputs/apk/release/app-arm64-v8a-release.apk
+`release.yml` fails the run if the built APK's signer ≠ this variable, or if the variable is unset.
 
-3. With the vehicle in READY, confirm: app launches; camera daemons start;
-   blind-spot card renders; MQTT entities report to Home Assistant; the in-app
-   updater screen loads and shows the fork as its source.
+## 3. Local rapid iteration (same cert as CI)
 
-Only after this passes should you rely on auto-update. If R8 strips something,
-add the needed `-keep` rules to the ProGuard config and repeat.
+Put the password in a git-ignored local env (e.g. `~/.wheelstop/env`, `chmod 600`) and source it for the
+dockerized build, mounting the keystore. `build.gradle.kts` signs **debug** builds with the release key
+whenever `KEYSTORE_FILE` is set (else it falls back to the default debug key), so `assembleDebug` (no R8,
+fast) still installs over a CI release:
 
-## 3. Cutting a release
+    # ~/.wheelstop/env  (never commit)
+    export KEYSTORE_FILE=/root/.wheelstop/wheelstop-release.jks
+    export KEYSTORE_PASSWORD=... KEY_PASSWORD=... KEY_ALIAS=wheelstop
 
-`gh workflow run release.yml -f version=v<NN.N>` (or the Actions UI). The `version`
-must sort **newer** than the label currently on the car, or the updater won't offer
-it. The run builds, cert-gates, and publishes to the rolling `alpha` release; the
-car picks it up on its next update check.
+    docker run --rm -v "$PWD:/src" -v and-sdk:/sdk -v and-gradle:/gradle \
+      -v ~/.wheelstop:/root/.wheelstop eclipse-temurin:17-jdk bash -c '
+        source /root/.wheelstop/env
+        export ANDROID_HOME=/sdk ANDROID_SDK_ROOT=/sdk GRADLE_USER_HOME=/gradle
+        cd /src && ./gradlew --no-daemon :app:assembleDebug'
+    # containers write as root — afterwards: chown back before touching git.
 
-## What protects the car (security model)
+    adb install -r -d app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
 
-- **Primary:** Android's `pm install -r` rejects any APK not signed with the
-  on-device certificate. A compromised GitHub release lacking the `df8fc138`
-  private key produces an APK the car refuses. The private key never leaves your
-  machine / GH secrets.
-- **Secondary:** the app verifies the downloaded APK's SHA-256 against the
-  release's `SHA256SUMS` before install (catches tamper/corruption early). A
-  missing sums asset degrades gracefully to same-cert-only install.
-- **CI:** the cert gate fails the run if the built APK's signer isn't `df8fc138`,
-  so a mis-provisioned secret can never publish an un-installable release.
+## 4. Before the first Wheelstop release: validate the R8 build on the car
+
+The Wheelstop package (`app.wheelstop.android`) has never run on the car. Build `:app:assembleRelease`
+with the signing env (as §3 but the `release` variant), adb-install it **fresh** (new package installs
+alongside `com.overdrive.app`), then with the vehicle in READY confirm: app launches; **surveillance /
+motion detection works** (validates the JNI rename); camera daemons start; blind-spot renders; MQTT
+entities report under `wheelstop/vehicle/telemetry`; the updater screen shows `wheelstop-app/wheelstop`.
+Only then rely on auto-update. If R8 strips something, add `-keep` rules and repeat.
+
+## 5. Cutting a release
+
+Once release-please is wired, merging its release PR tags a release and triggers `release.yml`
+automatically. Manual fallback: `gh workflow run release.yml -f version=v<N.N>`. The run builds,
+cert-gates against `RELEASE_SIGNER_SHA256`, and publishes the signed APK + `SHA256SUMS` to the rolling
+`alpha` release the updater reads.
+
+## Security model
+
+- **Primary:** `pm install -r` rejects any APK not signed with the on-device cert. A compromised GitHub
+  release without the release private key produces an APK the car refuses. The key never leaves your
+  machine / the org secrets.
+- **Secondary:** the app verifies the downloaded APK's SHA-256 against the release `SHA256SUMS` before
+  install; a missing sums asset degrades to same-cert-only install.
+- **CI:** the cert gate fails the run if the signer ≠ `RELEASE_SIGNER_SHA256`, so a mis-provisioned
+  secret can never publish an un-installable release.

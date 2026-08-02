@@ -399,7 +399,16 @@ android {
         }
         debug {
             isMinifyEnabled = false
-            
+
+            // Rapid local iteration: when the release keystore is available (KEYSTORE_FILE set —
+            // locally or in CI), sign debug builds with the RELEASE key too, so a fast local
+            // `assembleDebug` (no R8) installs in place over a CI release on the car — `pm install -r`
+            // requires the SAME signing certificate. Without the key (e.g. a contributor's clean
+            // checkout), fall back to the default debug key so the build still works.
+            if (!System.getenv("KEYSTORE_FILE").isNullOrEmpty()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+
             // Debug builds also check alpha channel for updates
             buildConfigField("String", "UPDATE_CHANNEL", "\"alpha\"")
             // Auto-update source: this fork's releases, not upstream.

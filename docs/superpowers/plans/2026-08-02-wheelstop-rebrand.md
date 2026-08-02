@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Turn the fork into the independent **Wheelstop** project — new package `app.wheelstop.android` (installs beside `com.overdrive.app`), an exclusivity preflight, MQTT rebrand, and bot-driven release automation — under `wheelstop-app/wheelstop`, keeping the `df8fc138` signing key.
+**Goal:** Turn the fork into the independent **Wheelstop** project — new package `app.wheelstop.android` (installs beside `com.overdrive.app`), an exclusivity preflight, MQTT rebrand, and bot-driven release automation — under `wheelstop-app/wheelstop`, using a dedicated Wheelstop release signing key (shared by CI + local).
 
 **Architecture:** Three phases. **P1 — rebrand the code** (package/namespace move incl. native JNI, string sweep, MQTT root, display/branding, UPDATE_REPO). **P2 — automation** (release-please + Renovate under the `wheelstop-release` bot). **P3 — org migration** (push standalone, attribution, archive old). Verify each code task with the dockerized Gradle (`:app:testDebugUnitTest` + `:app:assembleDebug`); on-device items are flagged for the car.
 
@@ -14,8 +14,8 @@
 
 - Package **and** namespace → `app.wheelstop.android` (full source-package move). `applicationId == namespace`.
 - **Completeness gate (every rebrand task ends on this):** `rg -n 'com\.overdrive\.app|com_overdrive_app' app/src` returns **0** matches — EXCEPT the single intentional old-package reference in the exclusivity preflight (Task 7). This includes runtime-generated shell, ProGuard, and native JNI.
-- Keep the `df8fc138` keystore and the `pm install -r` install flow unchanged.
-- `UPDATE_REPO = "wheelstop-app/wheelstop"`; `df8fc138` cert gate in CI unchanged.
+- Use the dedicated Wheelstop release key (CI + local share it, cert pinned in `vars.RELEASE_SIGNER_SHA256`); keep the `pm install -r` install flow unchanged.
+- `UPDATE_REPO = "wheelstop-app/wheelstop"`; cert gate pins `vars.RELEASE_SIGNER_SHA256`.
 - MQTT topic root → `wheelstop/vehicle/telemetry`.
 - Bot = GitHub App **wheelstop-release**, client id `Iv23livK39Yzp2c9rPlq`, key in org secret `RELEASE_BOT_PRIVATE_KEY`.
 - Build verification uses the dockerized Gradle (no host JDK): the `eclipse-temurin:17-jdk` + `and-sdk`/`and-gradle` + `~/.overdrive-build/android` invocation from the field manual. **Containers write as root** — `chown -R $(id -u):$(id -g) .` via a throwaway container after any build before touching git.
@@ -250,7 +250,7 @@ release-please owns the semver; a step derives `overdriveVersionName` (the semve
 
 - [ ] **Step 3: Retrigger the signed build on the release**
 
-Change `release.yml` to also trigger `on: release: types: [published]` (keep `workflow_dispatch` as a manual fallback). Its cert gate (`df8fc138`) and `SHA256SUMS` upload are unchanged; the version comes from the release tag instead of manual input.
+Change `release.yml` to also trigger `on: release: types: [published]` (keep `workflow_dispatch` as a manual fallback). Its cert gate (`RELEASE_SIGNER_SHA256`) and `SHA256SUMS` upload are unchanged; the version comes from the release tag instead of manual input.
 
 - [ ] **Step 4: Validate** — `python3 -c "import yaml,glob; [yaml.safe_load(open(f)) for f in glob.glob('.github/workflows/*.yml')]; print('ok')"` and `uvx zizmor --persona pedantic .github/workflows/release-please.yml .github/workflows/release.yml`. Commit.
 
@@ -273,7 +273,7 @@ Change `release.yml` to also trigger `on: release: types: [published]` (keep `wo
 - [ ] **Step 2: Create the standalone repo** `wheelstop-app/wheelstop` (empty, NOT via the fork button). Push this branch's history: `git push git@github.com:wheelstop-app/wheelstop.git HEAD:main`.
 - [ ] **Step 3: Remotes** — in the new repo add `upstream = https://github.com/yash-srivastava/Overdrive-release.git`; confirm the sync + completeness workflows run (they reference upstream by URL).
 - [ ] **Step 4: Secrets** — add the signing secrets (release-signing runbook) to the new repo; confirm the `wheelstop-release` App is installed with contents + pull-requests + workflows.
-- [ ] **Step 5: First release** — let release-please open its first release PR; merge; confirm `release.yml` builds a `df8fc138`-signed `app.wheelstop.android` APK + `SHA256SUMS`.
+- [ ] **Step 5: First release** — let release-please open its first release PR; merge; confirm `release.yml` builds a release-key-signed `app.wheelstop.android` APK + `SHA256SUMS`.
 - [ ] **Step 6: On-car cutover** — adb-install the new APK fresh; the preflight retires the old app; re-enter config (MQTT under `wheelstop/vehicle/telemetry`, daemons, vehicle model); verify surveillance/blindspot/daemons/updater; then uninstall/disable `com.overdrive.app`.
 - [ ] **Step 7: Archive** `shauneccles/Overdrive-release` with a README pointer to the new home.
 

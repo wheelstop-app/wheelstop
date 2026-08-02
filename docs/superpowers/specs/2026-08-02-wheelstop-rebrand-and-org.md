@@ -9,8 +9,8 @@ Turn the fork into an independent, community-facing project — **Wheelstop** �
 GitHub **org**, with its own Android package (so it installs *alongside* the original), an
 exclusivity preflight that keeps the two apps from fighting over the car's hardware, and bot-driven
 release automation (release-please + Renovate), mirroring the `glinet4` / `comfort-hub` org pattern.
-Attribution to upstream is preserved throughout; the signing key is preserved so the car keeps
-auto-updating.
+Attribution to upstream is preserved throughout; a dedicated release key (shared by CI + local, cert
+pinned in a repo variable) keeps in-place auto-updates working.
 
 ## Why
 
@@ -26,8 +26,12 @@ the split without confusing the community or claiming authorship of upstream's a
 2. **Package:** `app.wheelstop.android` (reverse-DNS of `wheelstop.app` + `.android`) — a NEW
    `applicationId` = `namespace`, distinct from `com.overdrive.app`, so both apps coexist on the head
    unit.
-3. **Signing:** keep the existing `df8fc138…` keystore. First install of the new package is fresh
-   (adb), then the fork updater self-updates it in place (same cert). No car re-provision of the key.
+3. **Signing:** a dedicated Wheelstop **release key** (PKCS12, not the old `androiddebugkey`), **shared
+   by CI and local dev** so fast local iteration builds and CI releases carry one certificate and
+   install over each other on the car. First install of the new package is fresh (adb), then the
+   updater self-updates it in place (same cert). The cert SHA-256 is pinned in CI via the
+   `RELEASE_SIGNER_SHA256` repo/org variable. Debug builds sign with the release key when
+   `KEYSTORE_FILE` is present (guarded fallback to the debug key otherwise).
 4. **Org:** GitHub org **`wheelstop-app`**, standalone (NOT a GitHub fork). Upstream becomes a git
    remote only; the sync assistant already fetches it by URL.
 5. **Automation identity:** a **GitHub App** ("wheelstop-release") whose token drives release-please
@@ -116,7 +120,7 @@ lists what to copy (MQTT host/creds, enabled daemons, vehicle model). Revisit on
   replacing #10's manual `workflow_dispatch(version)`.
 - **Reconcile with #10's signed build:** merging the release PR creates a tag/GitHub release; the
   existing `release.yml` retriggers on that release event (instead of manual dispatch) → builds
-  `:app:assembleRelease`, **cert-gates on `df8fc138`**, and uploads the signed APK + `SHA256SUMS` to
+  `:app:assembleRelease`, **cert-gates on the pinned release signer (`RELEASE_SIGNER_SHA256`)**, and uploads the signed APK + `SHA256SUMS` to
   the release the updater reads. The cert gate and same-cert guarantee are unchanged.
 - Runs under the wheelstop-release App token so the release PR triggers CI.
 
@@ -140,7 +144,7 @@ lists what to copy (MQTT host/creds, enabled daemons, vehicle model). Revisit on
 
 - **Install-coexistence:** the new package installs alongside `com.overdrive.app`; the user can keep or
   remove the original. Nothing about the original is modified.
-- **Update chain intact:** same `df8fc138` cert → after the first fresh install, the fork updater (#10)
+- **Update chain intact:** same release cert → after the first fresh install, the fork updater (#10)
   updates `app.wheelstop.android` in place. Cert gate in CI unchanged.
 - **Attribution:** MIT `LICENSE` retained; README states Wheelstop is an independent fork of
   Overdrive by yash-srivastava, that the app is upstream's work, and what the fork adds and why.
