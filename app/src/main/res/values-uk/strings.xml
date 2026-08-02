@@ -978,14 +978,14 @@
     <!-- Process uptime. Days form takes (days, hours); hours form takes hours only. -->
     <plurals name="dashboard_insight_uptime_days_hours">
         <item quantity="one">Wheelstop онлайн для %1$d дня, %2$d год</item>
-        <item quantity="few">Дозволити використання онлайн для %1$d днів, %2$d год</item>
-        <item quantity="many">Дозволити використання онлайн для %1$d днів, %2$d год</item>
+        <item quantity="few">Wheelstop онлайн для %1$d днів, %2$d год</item>
+        <item quantity="many">Wheelstop онлайн для %1$d днів, %2$d год</item>
         <item quantity="other">Wheelstop онлайн для %1$d днів, %2$d год</item>
     </plurals>
     <plurals name="dashboard_insight_uptime_hours">
         <item quantity="one">Wheelstop онлайн для %1$d за годину</item>
-        <item quantity="few">Дозволити використання онлайн для %1$d годин</item>
-        <item quantity="many">Дозволити використання онлайн для %1$d годин</item>
+        <item quantity="few">Wheelstop онлайн для %1$d годин</item>
+        <item quantity="many">Wheelstop онлайн для %1$d годин</item>
         <item quantity="other">Wheelstop онлайн для %1$d годин</item>
     </plurals>
     <!-- Duration helpers used inside insights (last_charge etc.). -->

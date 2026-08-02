@@ -987,19 +987,19 @@
     </plurals>
     <!-- Process uptime. Days form takes (days, hours); hours form takes hours only. -->
     <plurals name="dashboard_insight_uptime_days_hours">
-        <item quantity="zero">تجاوز على الإنترنت لمدة %1$d أيام، %2$d ساعة</item>
+        <item quantity="zero">Wheelstop على الإنترنت لمدة %1$d أيام، %2$d ساعة</item>
         <item quantity="one">Wheelstop على الإنترنت لـ %1$d يوم، %2$d ساعة</item>
-        <item quantity="two">تجاوز على الإنترنت لمدة %1$d أيام، %2$d ساعة</item>
-        <item quantity="few">تجاوز على الإنترنت لمدة %1$d أيام، %2$d ساعة</item>
-        <item quantity="many">تجاوز على الإنترنت لمدة %1$d أيام، %2$d ساعة</item>
+        <item quantity="two">Wheelstop على الإنترنت لمدة %1$d أيام، %2$d ساعة</item>
+        <item quantity="few">Wheelstop على الإنترنت لمدة %1$d أيام، %2$d ساعة</item>
+        <item quantity="many">Wheelstop على الإنترنت لمدة %1$d أيام، %2$d ساعة</item>
         <item quantity="other">Wheelstop على الإنترنت لمدة %1$d أيام، %2$d ساعة</item>
     </plurals>
     <plurals name="dashboard_insight_uptime_hours">
-        <item quantity="zero">فوق على الإنترنت لساعات %1$d</item>
+        <item quantity="zero">Wheelstop على الإنترنت لساعات %1$d</item>
         <item quantity="one">Wheelstop على الإنترنت لـ %1$d ساعة</item>
-        <item quantity="two">فوق على الإنترنت لساعات %1$d</item>
-        <item quantity="few">فوق على الإنترنت لساعات %1$d</item>
-        <item quantity="many">فوق على الإنترنت لساعات %1$d</item>
+        <item quantity="two">Wheelstop على الإنترنت لساعات %1$d</item>
+        <item quantity="few">Wheelstop على الإنترنت لساعات %1$d</item>
+        <item quantity="many">Wheelstop على الإنترنت لساعات %1$d</item>
         <item quantity="other">Wheelstop على الإنترنت لساعات %1$d</item>
     </plurals>
     <!-- Duration helpers used inside insights (last_charge etc.). -->

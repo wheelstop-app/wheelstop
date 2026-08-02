@@ -978,7 +978,7 @@
     </plurals>
     <plurals name="dashboard_insight_uptime_hours">
         <item quantity="one">Wheelstop online pentru %1$d oră</item>
-        <item quantity="few">Depăşire online pentru %1$d ore</item>
+        <item quantity="few">Wheelstop online pentru %1$d ore</item>
         <item quantity="other">Wheelstop online pentru %1$d ore</item>
     </plurals>
     <!-- Duration helpers used inside insights (last_charge etc.). -->
