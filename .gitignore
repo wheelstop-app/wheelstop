@@ -21,5 +21,9 @@
 # (BsCoefficients, PR #8), so the blob is gone.
 /app/src/main/jniLibs/arm64-v8a/libod.so
 
+# Legal notices, copied into the APK by the copyLegalAssets Gradle task from the repo-root
+# THIRD_PARTY_NOTICES.md and LICENSES/. Generated at build time — not committed.
+/app/src/main/assets/legal/
+
 # Internal planning docs (specs/plans) — not for the public repo
 docs/superpowers/
