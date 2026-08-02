@@ -132,7 +132,7 @@ BYD.automations = {
             a.href = url;
             // Uptime-ish suffix (no Date dependency issues in this WebView): the daemon
             // already stamped exportedAt inside; the filename just needs to be unique-ish.
-            a.download = 'overdrive-automations.json';
+            a.download = 'wheelstop-automations.json';
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);

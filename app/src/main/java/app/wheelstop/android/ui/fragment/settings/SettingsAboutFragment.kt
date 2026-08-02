@@ -517,7 +517,7 @@ class SettingsAboutFragment : Fragment() {
             val dir = publicBackupDir()
             if (!dir.exists()) return null
             val safeName = name.replace(Regex("[^A-Za-z0-9._-]"), "_")
-                .ifEmpty { "overdrive-backup.json" }
+                .ifEmpty { "wheelstop-backup.json" }
             val out = File(dir, safeName)
             FileOutputStream(out).use { it.write(text.toByteArray(Charsets.UTF_8)) }
             out.absolutePath
@@ -531,7 +531,7 @@ class SettingsAboutFragment : Fragment() {
             val m = bundle?.optJSONObject("manifest")
             val ver = (m?.optString("appVersion") ?: "").replace(Regex("[^A-Za-z0-9._-]"), "")
             val model = (m?.optString("deviceModel") ?: "").replace(Regex("[^A-Za-z0-9._-]"), "")
-            val parts = listOfNotNull("overdrive-backup",
+            val parts = listOfNotNull("wheelstop-backup",
                 model.ifEmpty { null }, ver.ifEmpty { null })
             parts.joinToString("-") + ".json"
         } catch (e: Exception) {
