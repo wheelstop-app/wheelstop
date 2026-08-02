@@ -52,6 +52,18 @@ class DaemonStartupManager(
         private const val TAG = "DaemonStartup"
         private const val HEALTH_CHECK_INTERVAL_MS = 30_000L  // 30 seconds
 
+        // ExclusivityPreflight.check()'s underlying dadb.shell() call has no
+        // socket timeout once the shared ADB connection exists — if the
+        // transport stalls, the check's callback simply never fires. Before
+        // the exclusivity gate existed, initializeOnAppLaunch/initializeOnBoot
+        // scheduled daemon startup unconditionally; gating the whole core
+        // daemon stack behind one unbounded ADB round-trip would let a single
+        // stuck probe leave the dashcam/surveillance stack permanently dark.
+        // checkExclusivityWithTimeout bounds it and biases toward
+        // availability on timeout — same convention as this file's other
+        // probe-failure handling (see ifNotUserStopped / relaunchDaemon).
+        private const val EXCLUSIVITY_CHECK_TIMEOUT_MS = 5_000L
+
         val CORE_DAEMONS: List<DaemonType> = listOf(
             DaemonType.CAMERA_DAEMON,
             DaemonType.SENTRY_DAEMON,
@@ -206,15 +218,44 @@ class DaemonStartupManager(
      * [proceedInitializeOnAppLaunch] for the actual startup sequence.
      */
     fun initializeOnAppLaunch() {
+        checkExclusivityWithTimeout { verdict ->
+            when (verdict) {
+                ExclusivityPreflight.Verdict.EXCLUSIVE -> proceedInitializeOnAppLaunch()
+                ExclusivityPreflight.Verdict.CONTENDED -> {
+                    log.warn(TAG, "Exclusivity preflight: legacy Overdrive is installed " +
+                        "and active — refusing to start Wheelstop daemons until resolved")
+                    ExclusivityBlockerActivity.start(context)
+                }
+            }
+        }
+    }
+
+    /**
+     * Run [ExclusivityPreflight.check] bounded by [EXCLUSIVITY_CHECK_TIMEOUT_MS].
+     * [onVerdict] is guaranteed to fire exactly once, on the main looper,
+     * whichever comes first — the real probe result or the timeout. A
+     * timeout delivers EXCLUSIVE (bias toward availability, matching
+     * ifNotUserStopped / relaunchDaemon's existing probe-failure handling
+     * in this file): the alternative — an unbounded gate — would mean a
+     * single stuck ADB round-trip permanently blocks every daemon Wheelstop
+     * owns, including the core surveillance stack.
+     */
+    private fun checkExclusivityWithTimeout(onVerdict: (ExclusivityPreflight.Verdict) -> Unit) {
+        val delivered = java.util.concurrent.atomic.AtomicBoolean(false)
+        val timeoutRunnable = Runnable {
+            if (delivered.compareAndSet(false, true)) {
+                log.warn(TAG, "Exclusivity preflight timed out after " +
+                    "${EXCLUSIVITY_CHECK_TIMEOUT_MS}ms — biasing toward availability " +
+                    "(treating as EXCLUSIVE)")
+                onVerdict(ExclusivityPreflight.Verdict.EXCLUSIVE)
+            }
+        }
+        handler.postDelayed(timeoutRunnable, EXCLUSIVITY_CHECK_TIMEOUT_MS)
         ExclusivityPreflight.check(adbLauncher) { verdict ->
-            handler.post {
-                when (verdict) {
-                    ExclusivityPreflight.Verdict.EXCLUSIVE -> proceedInitializeOnAppLaunch()
-                    ExclusivityPreflight.Verdict.CONTENDED -> {
-                        log.warn(TAG, "Exclusivity preflight: legacy Overdrive is installed " +
-                            "and active — refusing to start Wheelstop daemons until resolved")
-                        ExclusivityBlockerActivity.start(context)
-                    }
+            if (delivered.compareAndSet(false, true)) {
+                handler.post {
+                    handler.removeCallbacks(timeoutRunnable)
+                    onVerdict(verdict)
                 }
             }
         }
@@ -335,15 +376,13 @@ class DaemonStartupManager(
      * daemons up, not a resumed boot sequence.
      */
     private fun initializeOnBoot() {
-        ExclusivityPreflight.check(adbLauncher) { verdict ->
-            handler.post {
-                when (verdict) {
-                    ExclusivityPreflight.Verdict.EXCLUSIVE -> proceedInitializeOnBoot()
-                    ExclusivityPreflight.Verdict.CONTENDED -> {
-                        log.warn(TAG, "Exclusivity preflight (boot): legacy Overdrive is " +
-                            "installed and active — refusing to start Wheelstop daemons until resolved")
-                        ExclusivityBlockerActivity.start(context)
-                    }
+        checkExclusivityWithTimeout { verdict ->
+            when (verdict) {
+                ExclusivityPreflight.Verdict.EXCLUSIVE -> proceedInitializeOnBoot()
+                ExclusivityPreflight.Verdict.CONTENDED -> {
+                    log.warn(TAG, "Exclusivity preflight (boot): legacy Overdrive is " +
+                        "installed and active — refusing to start Wheelstop daemons until resolved")
+                    ExclusivityBlockerActivity.start(context)
                 }
             }
         }

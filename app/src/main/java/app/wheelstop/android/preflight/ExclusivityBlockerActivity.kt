@@ -45,6 +45,18 @@ class ExclusivityBlockerActivity : Activity() {
     companion object {
         private const val TAG = "ExclusivityBlocker"
 
+        // ExclusivityPreflight.check()'s ADB round-trip has no socket
+        // timeout — if the transport stalls, its callback simply never
+        // fires. Without a bound here, a stuck probe would leave the
+        // action buttons disabled forever on a fullscreen,
+        // FLAG_KEEP_SCREEN_ON, back/keys-swallowed blocker: nothing on
+        // screen the user could do anything with. Deliberately NOT
+        // fail-open like DaemonStartupManager's equivalent timeout — a
+        // slow probe here isn't evidence the contention resolved, so on
+        // timeout we just re-enable the buttons and let the user retry,
+        // rather than silently dismissing the gate.
+        private const val RECHECK_TIMEOUT_MS = 5_000L
+
         /**
          * Launch the blocker over whatever is currently on screen. [context]
          * may be an Activity or an application Context (the boot path only
@@ -157,15 +169,33 @@ class ExclusivityBlockerActivity : Activity() {
         recheck()
     }
 
-    /** Re-probe over the self ADB connection and update the screen (or unblock) accordingly. */
+    /**
+     * Re-probe over the self ADB connection and update the screen (or
+     * unblock) accordingly. Bounded by [RECHECK_TIMEOUT_MS] with a
+     * single-fire guard so the probe and the timeout can't both act — see
+     * the constant's doc for why a timeout here re-enables the buttons
+     * rather than failing open.
+     */
     private fun recheck() {
+        val delivered = java.util.concurrent.atomic.AtomicBoolean(false)
+        val timeoutRunnable = Runnable {
+            if (delivered.compareAndSet(false, true)) {
+                log.warn(TAG, "Exclusivity re-check timed out after ${RECHECK_TIMEOUT_MS}ms")
+                setActionsEnabled(true)
+                statusText.text = "Check timed out — tap an action to retry.\n\n" + reasonText()
+            }
+        }
+        handler.postDelayed(timeoutRunnable, RECHECK_TIMEOUT_MS)
         ExclusivityPreflight.check(adbLauncher) { verdict ->
-            handler.post {
-                when (verdict) {
-                    ExclusivityPreflight.Verdict.EXCLUSIVE -> onExclusive()
-                    ExclusivityPreflight.Verdict.CONTENDED -> {
-                        setActionsEnabled(true)
-                        statusText.text = reasonText()
+            if (delivered.compareAndSet(false, true)) {
+                handler.post {
+                    handler.removeCallbacks(timeoutRunnable)
+                    when (verdict) {
+                        ExclusivityPreflight.Verdict.EXCLUSIVE -> onExclusive()
+                        ExclusivityPreflight.Verdict.CONTENDED -> {
+                            setActionsEnabled(true)
+                            statusText.text = reasonText()
+                        }
                     }
                 }
             }
