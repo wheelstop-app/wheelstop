@@ -1,6 +1,6 @@
 # 04 — OTA Update Integrity
 
-*Permalink base:* `https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/`
+*Permalink base:* `https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/`
 
 The updater downloads an APK and installs it with elevated privilege. On a device that controls a car, the update channel is a code-execution channel — its trust chain matters as much as the vehicle API itself.
 
@@ -15,24 +15,24 @@ The updater downloads an APK and installs it with elevated privilege. On a devic
 
 The APK URL comes from the GitHub releases API (`browser_download_url`) and is fetched over HTTPS — but that fetch **transits the hard-coded proxy** from [doc 03](03-proxy-mitm-and-infrastructure.md) (`ProxyHelper.getHttpProxy()`), and the shell download builder uses `wget -q` / `curl -sL` (both validate certificates by default) with **no certificate *pinning*** on top. TLS validation means the forwarding proxy cannot silently swap the APK for a differently-signed one; the gap is the absence of an *app-level* integrity check layered on top, which pinning or a signed digest would provide:
 
-- Shell install/download one-liner (URL interpolated): [`AppUpdater.java#L1304`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/updater/AppUpdater.java#L1304)
+- Shell install/download one-liner (URL interpolated): [`AppUpdater.java#L1304`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/updater/AppUpdater.java#L1304)
 
 ### "Verification" is a file-size check
 
 The only check applied to the downloaded APK before install is that it is larger than 1 MB:
 
-- [`AppUpdater.java#L844`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/updater/AppUpdater.java#L844):
+- [`AppUpdater.java#L844`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/updater/AppUpdater.java#L844):
   ```java
   if (fileSize < 1_000_000) {
       // treat as failed download
   }
   ```
 
-There is **no SHA-256 comparison, no signature verification, no pinned certificate, and no comparison against a release-signed digest**. Contrast this with the 3D-model download path, which *does* verify SHA-256 ([`ModelsApiHandler.java`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/server/ModelsApiHandler.java)) — so the primitive exists in the codebase but is not applied to the far more sensitive APK.
+There is **no SHA-256 comparison, no signature verification, no pinned certificate, and no comparison against a release-signed digest**. Contrast this with the 3D-model download path, which *does* verify SHA-256 ([`ModelsApiHandler.java`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/server/ModelsApiHandler.java)) — so the primitive exists in the codebase but is not applied to the far more sensitive APK.
 
 ### Install is silent, elevated, and allows downgrade
 
-- [`AppUpdater.java#L932`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/updater/AppUpdater.java#L932) and [`#L1304`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/updater/AppUpdater.java#L1304):
+- [`AppUpdater.java#L932`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/updater/AppUpdater.java#L932) and [`#L1304`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/updater/AppUpdater.java#L1304):
   ```
   pm install -r -d <apk>
   ```
@@ -53,7 +53,7 @@ Android's `PackageManager` enforces that a `-r` replacement APK is **signed by t
 
 The install/channel endpoints are reachable over the tunnel and are gated only by a soft "public mode" flag rather than a per-request privilege check:
 
-- Install/channel gating on `CameraDaemon.isPublicMode()` (a mutable string compare), not authentication: [`UpdateApiHandler.java`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/server/UpdateApiHandler.java)
+- Install/channel gating on `CameraDaemon.isPublicMode()` (a mutable string compare), not authentication: [`UpdateApiHandler.java`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/server/UpdateApiHandler.java)
 
 So a remote actor who passes JWT auth over a tunnel (see F19) can trigger an OTA install whenever public mode happens to be off — and the Telegram `/update install` command can do the same for an owner-position attacker (see [doc 07](07-telegram-bot.md)).
 

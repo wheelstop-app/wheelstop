@@ -19,13 +19,13 @@ A defensive security review of the **OverDrive** vehicle-control / surveillance 
 
 | | |
 |---|---|
-| Repository | `shauneccles/Overdrive-release` |
-| Commit (pinned) | [`a6ecca5324a4c5d9b7676b4a9a120b03baceab19`](https://github.com/shauneccles/Overdrive-release/commit/a6ecca5324a4c5d9b7676b4a9a120b03baceab19) |
+| Repository | `wheelstop-app/wheelstop` |
+| Commit (pinned) | [`a6ecca5324a4c5d9b7676b4a9a120b03baceab19`](https://github.com/wheelstop-app/wheelstop/commit/a6ecca5324a4c5d9b7676b4a9a120b03baceab19) |
 | Default branch | `main` (this commit was `main`'s HEAD **at audit time** — later commits will advance `main`, but the pinned commit above stays the durable reference) |
 | Scope | `app/src/main` — ~192 Kotlin + ~413 Java source files |
 
 All permalinks in these documents use the form:
-`https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/<path>#L<line>`
+`https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/<path>#L<line>`
 
 > **Revision note:** several findings were refined after automated PR review (CodeRabbit + Codex) flagged over-broad claims. Corrections applied in-place and marked with *"(per PR review)"*: F2/F3 (a forwarding proxy cannot MITM validated HTTPS — the OTA-forgery chain was overstated; both downgraded Critical→High), F7 (scoped to *application-level* auth with an anonymous-broker precondition; HiveMQ is a UI placeholder, not a default), F10 (MQTT is **not** in the backup bundle — corrected to the Telegram/community/tunnel sections that are), plus wording fixes (`/data/local/tmp` is shell-writable not world-writable; storage exposure scoped to external-storage access; F17 is a fingerprint, not a cracking input).
 
@@ -93,11 +93,11 @@ The design contains some genuinely sound elements (see [What is done well](#what
 
 For calibrated trust, the audit also records the controls that *do* hold:
 
-- **JWT validation is not vulnerable to `alg:none` / algorithm confusion** — it always recomputes HS256 and compares ([`AuthManager.java#L454`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/auth/AuthManager.java#L454)).
-- **The local PIN uses PBKDF2-HMAC-SHA256, 120 000 rounds, 32-byte salt**, with escalating lockout — a reasonable KDF choice ([`PinManager.java`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/auth/PinManager.java)). Its weakness is only that the hash lives in the world-readable config and that it gates the app UI, not the network APIs.
-- **The Telegram bot enforces a real single-owner allowlist** — an unknown chat id is dropped ([`TelegramBotDaemon.java#L2063`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/daemon/TelegramBotDaemon.java#L2063)).
-- **Community automations cannot carry `shell` actions and cannot hit arbitrary endpoints** — a path allowlist bounds them to a curated catalog ([`CommunityApiHandler.kt#L142`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/community/CommunityApiHandler.kt#L142)).
-- **3D model assets are SHA-256 verified** before use ([`ModelsApiHandler.java`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/server/ModelsApiHandler.java)), and automation action parameters are type-validated (enum allowlists, int clamping) — no deserialization-gadget RCE was found.
+- **JWT validation is not vulnerable to `alg:none` / algorithm confusion** — it always recomputes HS256 and compares ([`AuthManager.java#L454`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/auth/AuthManager.java#L454)).
+- **The local PIN uses PBKDF2-HMAC-SHA256, 120 000 rounds, 32-byte salt**, with escalating lockout — a reasonable KDF choice ([`PinManager.java`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/auth/PinManager.java)). Its weakness is only that the hash lives in the world-readable config and that it gates the app UI, not the network APIs.
+- **The Telegram bot enforces a real single-owner allowlist** — an unknown chat id is dropped ([`TelegramBotDaemon.java#L2063`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/daemon/TelegramBotDaemon.java#L2063)).
+- **Community automations cannot carry `shell` actions and cannot hit arbitrary endpoints** — a path allowlist bounds them to a curated catalog ([`CommunityApiHandler.kt#L142`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/community/CommunityApiHandler.kt#L142)).
+- **3D model assets are SHA-256 verified** before use ([`ModelsApiHandler.java`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/server/ModelsApiHandler.java)), and automation action parameters are type-validated (enum allowlists, int clamping) — no deserialization-gadget RCE was found.
 
 These are noted so the reader does not over-correct: the problem is specific and fixable, not that every line is wrong.
 
@@ -105,4 +105,4 @@ These are noted so the reader does not over-correct: the problem is specific and
 
 ## Disclosure
 
-The project's own [`SECURITY.md`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/SECURITY.md) asks that vulnerabilities be reported privately (Discord/Telegram `@irshsay`) rather than via public issues, and requests time to remediate before public disclosure. If any part of this audit is taken upstream, please follow that process. This document set is intended for the vehicle owner evaluating whether to run the software.
+The project's own [`SECURITY.md`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/SECURITY.md) asks that vulnerabilities be reported privately (Discord/Telegram `@irshsay`) rather than via public issues, and requests time to remediate before public disclosure. If any part of this audit is taken upstream, please follow that process. This document set is intended for the vehicle owner evaluating whether to run the software.

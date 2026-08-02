@@ -1,6 +1,6 @@
 # 02 — Local RCE & IPC
 
-*Permalink base:* `https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/`
+*Permalink base:* `https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/`
 
 This document covers code-execution and control primitives reachable by **another process on the head unit** — a sideloaded app, a second ADB session, or anything running in the shell domain. On an in-car Android head unit these are realistic: side-loaded apps, a passenger's connected device, or a malicious APK delivered through the OTA weakness in [doc 04](04-ota-integrity.md).
 
@@ -11,12 +11,12 @@ This document covers code-execution and control primitives reachable by **anothe
 
 `TcpCommandServer` binds `127.0.0.1:19876` and dispatches JSON commands **with no authentication whatsoever** — `handleClient` reads a line and hands it straight to `processCommand`:
 
-- Bind: [`TcpCommandServer.java#L40`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/server/TcpCommandServer.java#L40)
-- Dispatch with no token/UID check: [`TcpCommandServer.java#L83`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/server/TcpCommandServer.java#L83)
+- Bind: [`TcpCommandServer.java#L40`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/server/TcpCommandServer.java#L40)
+- Dispatch with no token/UID check: [`TcpCommandServer.java#L83`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/server/TcpCommandServer.java#L83)
 
 One of the commands is `shell`, which executes arbitrary input via `sh -c`:
 
-- [`TcpCommandServer.java#L463`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/server/TcpCommandServer.java#L463):
+- [`TcpCommandServer.java#L463`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/server/TcpCommandServer.java#L463):
   ```java
   case "shell":
       String shellCmd = cmd.optString("command", "");
@@ -47,12 +47,12 @@ The daemons are launched as UID 2000 (shell) via `app_process`:
 
 > **Correction (added in review, per Codex PR review — verified):** an earlier version of this finding said the sentry daemon runs "optionally through a UID 1000 (system) path." In the audited build that path is **disabled**: `DaemonLauncher` sets `USE_PRIVILEGED_SHELL_FOR_SENTRY = false`, and `OverdriveApplication` comments out `PrivilegedShellSetup.init/setup` with the note *"Privileged shell (UID 1000) DISABLED … All daemons now run via ADB shell (UID 2000)."* So **all daemons run as UID 2000 (shell), not system/UID 1000**. The file-plant → respawn RCE chain is unchanged, but the code it gains executes as **shell**, not system.
 
-- `app_process` launch line: [`DaemonLauncher.kt#L251`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/launcher/DaemonLauncher.kt#L251)
-- It **disables Android's phantom-process cap** — a deliberate removal of an OS guardrail: [`DaemonLauncher.kt#L218`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/launcher/DaemonLauncher.kt#L218) (`device_config put activity_manager max_phantom_processes 2147483647`)
+- `app_process` launch line: [`DaemonLauncher.kt#L251`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/launcher/DaemonLauncher.kt#L251)
+- It **disables Android's phantom-process cap** — a deliberate removal of an OS guardrail: [`DaemonLauncher.kt#L218`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/launcher/DaemonLauncher.kt#L218) (`device_config put activity_manager max_phantom_processes 2147483647`)
 
 The privilege these daemons hold is extensive. `PermissionGranter` *attempts* to grant ~140 permissions with `pm grant`, including `WRITE_SECURE_SETTINGS` and the declared `BYDAUTO_*` HAL set (door lock get/set, engine, gearbox, charging, ADAS, speed):
 
-- [`PermissionGranter.java#L40`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/daemon/PermissionGranter.java#L40) (`WRITE_SECURE_SETTINGS` and the grant list)
+- [`PermissionGranter.java#L40`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/daemon/PermissionGranter.java#L40) (`WRITE_SECURE_SETTINGS` and the grant list)
 
 > **Accuracy caveat (added in review — see [doc 10, Part 3](../10-review-and-verification.md#part-3--direct-answer-to-the-owners-concern)):** the signature-protected `BYDAUTO_*_SET` (write) permissions are **not actually granted** on a non-platform-signed APK — `pm grant` skips them and `CarPropertyBridge`/the manifest both note that local `setProperties()` writes return `STATUS_FAILED`. The `GET` and shell-grantable permissions (e.g. `WRITE_SECURE_SETTINGS`) *are* granted. Real vehicle actuation runs through the **BYD-cloud leg** (`VehicleCommandRouter`) with the owner's stored credentials, not through a locally-held HAL write capability. The RCE/privilege-escalation chain in this finding stands; only the "holds the full HAL *write* set locally" framing is corrected.
 
@@ -67,7 +67,7 @@ The watchdog scripts, the `sing-box` binary, the `zrok` binary, the sing-box con
 
 Across the launchers, shell command strings are assembled by direct interpolation and run via `sh -c` / the ADB shell:
 
-- The OTA download URL is placed straight into a shell one-liner: [`AppUpdater.java#L1304`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/updater/AppUpdater.java#L1304) and the `wget`/`curl` builder around it.
+- The OTA download URL is placed straight into a shell one-liner: [`AppUpdater.java#L1304`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/updater/AppUpdater.java#L1304) and the `wget`/`curl` builder around it.
 
 Today the interpolated values are constrained upstream (allowlisted daemon names, `parseInt`-guarded numbers, `File.getName()`-sanitised filenames), so **no reachable injection was found**. In particular, the **OTA `browser_download_url`** — the one value that originates off-device — comes from a GitHub API response over **validated HTTPS**, which (per the F2/F3 correction in [doc 03](03-proxy-mitm-and-infrastructure.md) / [doc 04](04-ota-integrity.md)) a forwarding proxy **cannot** modify. So there is **no** present proxy→shell injection chain; an earlier draft that framed this as an active F2/F3 exploit was wrong and is corrected here.
 
@@ -79,7 +79,7 @@ Today the interpolated values are constrained upstream (allowlisted daemon names
 
 The surveillance and audio-ingest IPC sockets are also loopback-bound with no caller authentication; they are covered in [doc 05](05-surveillance-and-camera.md) (F9) because their primary impact is footage/location disclosure and surveillance control:
 
-- Surveillance IPC (`127.0.0.1:19877`): [`SurveillanceIpcServer.java#L18`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/server/SurveillanceIpcServer.java#L18)
+- Surveillance IPC (`127.0.0.1:19877`): [`SurveillanceIpcServer.java#L18`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/server/SurveillanceIpcServer.java#L18)
 
 The common root cause across all of these: **loopback binding is treated as an authorisation boundary**, but on a multi-app device it is not — any co-resident process is "local".
 

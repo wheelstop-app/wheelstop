@@ -1,6 +1,6 @@
 # 06 — MQTT Telemetry & Control
 
-*Permalink base:* `https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/`
+*Permalink base:* `https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/`
 
 OverDrive is a pure MQTT **client** — it has no broker of its own — so every security property here rests on the broker the user points it at, and the app does very little to harden that choice. This whole surface is **opt-in**: MQTT is disabled by default (`enabled=false`, `brokerUrl=""`) and control requires the user to actively enable it. The concern is that when a user *does* enable it, the app nudges toward a public, plaintext, anonymous broker and adds no application-level command authentication of its own.
 
@@ -15,13 +15,13 @@ OverDrive is a pure MQTT **client** — it has no broker of its own — so every
 
 When control is enabled, the client subscribes with wildcards to a command topic and executes inbound messages against the vehicle **with no *application-level* authentication of the sender**:
 
-- Subscriptions: [`MqttPublisherService.java#L235`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/mqtt/MqttPublisherService.java#L235):
+- Subscriptions: [`MqttPublisherService.java#L235`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/mqtt/MqttPublisherService.java#L235):
   ```java
   client.subscribe(config.topic + "/+/set", config.qos);
   client.subscribe(config.topic + "/+/+/set", config.qos);
   ```
 
-> **Precondition correction (added in review, per Codex PR review — verified):** the command subscriptions require **both** `allowControl` **and** `homeAssistantDiscovery` to be on — not `allowControl` alone. `MqttConnectionConfig.isControlEnabled()` returns `allowControl && homeAssistantDiscovery`, and the `/+/set` subscribes sit inside the `if (config.isHomeAssistant())` → `if (config.isControlEnabled())` branch ([`MqttPublisherService.java`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/mqtt/MqttPublisherService.java#L224)). An owner who enables control against an anonymous broker but leaves Home Assistant discovery **off** subscribes to no command topics, so the actuation surface does not exist. The full precondition is therefore: **anonymous/weak-ACL broker + `allowControl` + `homeAssistantDiscovery`** (and HA discovery *also* retains-advertises the whole command vocabulary — see F7-topic — so the two are usually enabled together, but both are required).
+> **Precondition correction (added in review, per Codex PR review — verified):** the command subscriptions require **both** `allowControl` **and** `homeAssistantDiscovery` to be on — not `allowControl` alone. `MqttConnectionConfig.isControlEnabled()` returns `allowControl && homeAssistantDiscovery`, and the `/+/set` subscribes sit inside the `if (config.isHomeAssistant())` → `if (config.isControlEnabled())` branch ([`MqttPublisherService.java`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/mqtt/MqttPublisherService.java#L224)). An owner who enables control against an anonymous broker but leaves Home Assistant discovery **off** subscribes to no command topics, so the actuation surface does not exist. The full precondition is therefore: **anonymous/weak-ACL broker + `allowControl` + `homeAssistantDiscovery`** (and HA discovery *also* retains-advertises the whole command vocabulary — see F7-topic — so the two are usually enabled together, but both are required).
 
 MQTT carries no per-message sender identity, and the app adds none — no HMAC, nonce, shared-secret topic segment, or publisher allowlist. The "allow control" switch is a **local owner** toggle deciding whether the client listens at all, **not who may command it**. Authorisation therefore collapses entirely to **broker ACLs** — which is fine *if* the broker authenticates and restricts publishers, and a full anonymous-actuation exposure *only if* the broker is anonymous or weakly ACL'd (as the promoted public broker is).
 
@@ -42,8 +42,8 @@ On an open or weakly-ACL'd broker (F7-broker) that is fully anonymous inbound co
 
 ## F7-broker — 🟠 the UI nudges toward a public, plaintext, anonymous broker (not an out-of-box default)
 
-- Default port is plaintext MQTT: [`MqttConnectionConfig.java#L69`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/mqtt/MqttConnectionConfig.java#L69) (`DEFAULT_PORT = 1883`), and a bare hostname is coerced to `tcp://` (plaintext).
-- The setup UI's placeholder **suggests** the public shared broker: [`mqtt.html#L236`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/assets/web/local/mqtt.html#L236) → `placeholder="tcp://broker.hivemq.com"`. This is an HTML placeholder hint, **not** a configured value: a new `MqttConnectionConfig` has `brokerUrl=""` and `enabled=false` ([`MqttConnectionConfig.java#L92`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/mqtt/MqttConnectionConfig.java#L92)), so a fresh install connects to nothing until the owner types in and enables a broker.
+- Default port is plaintext MQTT: [`MqttConnectionConfig.java#L69`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/mqtt/MqttConnectionConfig.java#L69) (`DEFAULT_PORT = 1883`), and a bare hostname is coerced to `tcp://` (plaintext).
+- The setup UI's placeholder **suggests** the public shared broker: [`mqtt.html#L236`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/assets/web/local/mqtt.html#L236) → `placeholder="tcp://broker.hivemq.com"`. This is an HTML placeholder hint, **not** a configured value: a new `MqttConnectionConfig` has `brokerUrl=""` and `enabled=false` ([`MqttConnectionConfig.java#L92`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/mqtt/MqttConnectionConfig.java#L92)), so a fresh install connects to nothing until the owner types in and enables a broker.
 
 `broker.hivemq.com` has no ACLs and no auth — every subscriber sees every publisher's topics. A user who *follows the suggestion and enables control* publishes their car's live location and exposes its command topics to the entire internet, in cleartext. Nothing requires `ssl://`/`8883`, requires credentials, or warns when a plaintext/public broker is chosen — so the finding is about a **dangerous nudge the app doesn't guard against**, not an out-of-box exposure.
 
@@ -53,7 +53,7 @@ On an open or weakly-ACL'd broker (F7-broker) that is fully anonymous inbound co
 
 Telemetry — including live **GPS lat/lon** and **VIN** — is published **retained** to `<topic>/<key>`, where `<topic>` defaults to `overdrive/vehicle/telemetry` with no secret component. Because the messages are retained, a subscriber that connects *after the fact* immediately receives the last-known **location and VIN**:
 
-- Broker config store (plaintext creds on disk): [`MqttConnectionStore.java#L28`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/mqtt/MqttConnectionStore.java#L28) (`/data/local/tmp/mqtt_connections.json`)
+- Broker config store (plaintext creds on disk): [`MqttConnectionStore.java#L28`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/mqtt/MqttConnectionStore.java#L28) (`/data/local/tmp/mqtt_connections.json`)
 
 Home Assistant discovery additionally **auto-advertises the full command surface** (retained) — every command topic, payload vocabulary, and the exact base topic — to anyone subscribed to the discovery prefix, removing even the weak obscurity.
 
@@ -68,7 +68,7 @@ Home Assistant discovery additionally **auto-advertises the full command surface
 
 A UI toggle (promoted "for Home Assistant") routes TLS through a trust-all `X509TrustManager` whose `checkServerTrusted` is empty:
 
-- [`ProxyHelper.java#L189`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/mqtt/ProxyHelper.java#L189) (`getTrustAllSslFactory`), empty check at [`#L197`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/mqtt/ProxyHelper.java#L197)
+- [`ProxyHelper.java#L189`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/mqtt/ProxyHelper.java#L189) (`getTrustAllSslFactory`), empty check at [`#L197`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/mqtt/ProxyHelper.java#L197)
 
 When set, TLS provides encryption but **zero authentication** — any MITM cert is accepted — and even the non-trust-all path never enables Paho HTTPS hostname verification. An on-path attacker (rogue AP / upstream, or the bundled proxy in [doc 03](03-proxy-mitm-and-infrastructure.md)) terminates TLS with a self-signed cert, then observes telemetry and injects `…/set` commands (F7).
 

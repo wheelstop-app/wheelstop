@@ -1,14 +1,14 @@
 # 07 — Telegram Bot Daemon
 
-*Permalink base:* `https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/`
+*Permalink base:* `https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/`
 
 The Telegram bot is the **best-designed** remote surface in the app — it enforces a genuine single-owner allowlist, so a random Telegram user who merely finds the bot cannot command it. The findings here are about the weaknesses *around and beneath* that gate, not a wide-open door.
 
 ## The authorisation model (context)
 
 - Long-polling (not webhook): the daemon calls `getUpdates`.
-- Inbound messages are gated on `chatId == ownerChatId`; **an unknown chat id is silently dropped**: [`TelegramBotDaemon.java#L2063`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/daemon/TelegramBotDaemon.java#L2063).
-- The owner is established via `/pair <6-digit PIN>`, handled at [`TelegramBotDaemon.java#L2158`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/daemon/TelegramBotDaemon.java#L2158).
+- Inbound messages are gated on `chatId == ownerChatId`; **an unknown chat id is silently dropped**: [`TelegramBotDaemon.java#L2063`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/daemon/TelegramBotDaemon.java#L2063).
+- The owner is established via `/pair <6-digit PIN>`, handled at [`TelegramBotDaemon.java#L2158`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/daemon/TelegramBotDaemon.java#L2158).
 
 This is fundamentally sound. No pre-auth command injection and no auth-bypass race were found. The gate's problem is that it is **single-factor** and that the factors are weak.
 
@@ -19,9 +19,9 @@ This is fundamentally sound. No pre-auth command injection and no auth-bypass ra
 
 ### The pairing PIN has no brute-force protection
 
-`/pair` is processed *before* the owner check ([`TelegramBotDaemon.java#L2053`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/daemon/TelegramBotDaemon.java#L2053)), so any chat can attempt to pair before an owner is bound. The PIN is 6 digits (keyspace 900 000):
+`/pair` is processed *before* the owner check ([`TelegramBotDaemon.java#L2053`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/daemon/TelegramBotDaemon.java#L2053)), so any chat can attempt to pair before an owner is bound. The PIN is 6 digits (keyspace 900 000):
 
-- [`PairingManager.java#L36`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/telegram/impl/PairingManager.java#L36) → `random.nextInt(900000) + 100000`
+- [`PairingManager.java#L36`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/telegram/impl/PairingManager.java#L36) → `random.nextInt(900000) + 100000`
 
 `handlePairCommand` validates it with **no attempt counter, no rate limit, no lockout, and no alert** to the owner on failed attempts. An attacker who knows the bot and is online during the user's ~5-minute pairing window can make `/pair NNNNNN` guesses **without any application-enforced attempt limit**; whoever pairs first becomes the sole owner and inherits the full command surface below.
 

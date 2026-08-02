@@ -1,6 +1,6 @@
 # 03 — Proxy, Tunnels & Third-Party Infrastructure
 
-*Permalink base:* `https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/`
+*Permalink base:* `https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/`
 
 This is the single most important document for the question *"could this app be used maliciously against me?"* — because it identifies the **third-party infrastructure the app routes your vehicle's traffic through by design**, none of which you own or control.
 
@@ -13,7 +13,7 @@ This is the single most important document for the question *"could this app be 
 
 The app bundles **sing-box** and, when the proxy is running, routes app HTTP/MQTT traffic through a local `127.0.0.1:8119` inbound that forwards to a remote **VLESS-Reality** server. The server endpoint is written into the sing-box config **in plaintext** and is **not user-configurable**:
 
-- [`SingboxLauncher.kt#L172`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/launcher/SingboxLauncher.kt#L172):
+- [`SingboxLauncher.kt#L172`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/launcher/SingboxLauncher.kt#L172):
   ```
   "server": "80.225.224.92",
   "server_port": 443,
@@ -22,13 +22,13 @@ The app bundles **sing-box** and, when the proxy is running, routes app HTTP/MQT
   "public_key": "fxNUGiLzVwAk89RgogDrMq2u4pzyWAe_wx8D2frOPAQ",
   "short_id": "3ca47a3f8fb71e13"
   ```
-  (uuid [L174](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/launcher/SingboxLauncher.kt#L174), public_key [L182](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/launcher/SingboxLauncher.kt#L182), short_id [L183](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/launcher/SingboxLauncher.kt#L183))
+  (uuid [L174](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/launcher/SingboxLauncher.kt#L174), public_key [L182](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/launcher/SingboxLauncher.kt#L182), short_id [L183](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/launcher/SingboxLauncher.kt#L183))
 
 The consumers that call `ProxyHelper.getHttpProxy()` / `getMqttSocketFactory()` route through the proxy whenever sing-box is up — this covers **the BYD-cloud calls (login + credentials, `BydCloudTransport`), the OTA APK download (`AppUpdater`), geocoding/ABRP (`GeocodingResolver`), MQTT (`MqttPublisherService`), the community/RoadSense sync, weather, push, analytics, and the app's `/api/telegram` send path (`TelegramApiHandler`)**:
 
-> **Scope correction (per PR review):** an earlier draft said "*every* consumer, including the Telegram [bot]." That is inaccurate. The **Telegram bot daemon's** long-poll client does **not** use `ProxyHelper` — `TelegramBotDaemon.refreshHttpClient()` reads Android's *device-global* HTTP proxy via `getGlobalProxy()` ([`TelegramBotDaemon.java#L823`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/daemon/TelegramBotDaemon.java#L823) → `settings get global http_proxy`). Since `setupSystemProxy()` is disabled (no device-global proxy is set — [doc 03 note below](#f2)), that returns null and the **bot connects directly**, *not* through sing-box, unless the owner separately configured a device-global proxy. So "all app egress" is corrected to "the `ProxyHelper` consumers listed above"; the Telegram *bot* traffic is not among them.
+> **Scope correction (per PR review):** an earlier draft said "*every* consumer, including the Telegram [bot]." That is inaccurate. The **Telegram bot daemon's** long-poll client does **not** use `ProxyHelper` — `TelegramBotDaemon.refreshHttpClient()` reads Android's *device-global* HTTP proxy via `getGlobalProxy()` ([`TelegramBotDaemon.java#L823`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/daemon/TelegramBotDaemon.java#L823) → `settings get global http_proxy`). Since `setupSystemProxy()` is disabled (no device-global proxy is set — [doc 03 note below](#f2)), that returns null and the **bot connects directly**, *not* through sing-box, unless the owner separately configured a device-global proxy. So "all app egress" is corrected to "the `ProxyHelper` consumers listed above"; the Telegram *bot* traffic is not among them.
 
-- Proxy accessor consulted by all clients: [`ProxyHelper.java#L125`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/mqtt/ProxyHelper.java#L125) (`getHttpProxy()`), host constant [`ProxyHelper.java#L39`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/mqtt/ProxyHelper.java#L39)
+- Proxy accessor consulted by all clients: [`ProxyHelper.java#L125`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/mqtt/ProxyHelper.java#L125) (`getHttpProxy()`), host constant [`ProxyHelper.java#L39`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/mqtt/ProxyHelper.java#L39)
 
 The proxy is a **forwarding proxy** (local HTTP/SOCKS inbound → VLESS tunnel → the operator's exit node), not a TLS terminator for the sessions it carries. **Correction (per PR review):** an earlier draft claimed the operator could "read and rewrite all traffic including BYD-cloud credentials and the OTA APK." That overstates it. For an HTTPS endpoint that the client validates normally (GitHub, `api.telegram.org`, the BYD-cloud API), the tunnel carries **end-to-end TLS** — the operator sees ciphertext plus metadata (destination, SNI, sizes, timing) and cannot decrypt or forge content without a certificate the client already trusts. Lack of certificate *pinning* is not the same as disabling validation.
 
@@ -47,7 +47,7 @@ The chain to a forged OTA APK ([doc 04](04-ota-integrity.md)) therefore requires
 
 **Impact:** **when the sing-box proxy is enabled** (see the opt-in note below), a non-owner routing point for the OverDrive HTTP/MQTT clients that route via `ProxyHelper` (BYD-cloud login/credentials, the OTA download, MQTT, geocoding/ABRP, community/RoadSense sync, weather, push, analytics — **not** the Telegram bot daemon) — able to surveil their metadata, selectively block updates/telemetry on a safety device, and fully MITM any non-validated channel (trust-all MQTT, plaintext). Not "reads everything," and not on by default — but once enabled it is a single point of trust the owner does not control for those flows.
 
-> **Opt-in scope (per PR review):** the proxy is **not mandatory**. `ProxyHelper.getHttpProxy()` returns `Proxy.NO_PROXY` when sing-box is not running ([`ProxyHelper.java#L140`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/mqtt/ProxyHelper.java#L140)), and sing-box is an **optional daemon** started only when the user enables it. Installations that never enable it send this traffic directly and are unaffected by F2. The finding applies to users who turn the proxy on — at which point the hard-coded, non-owner endpoint (F2's core concern) is what their traffic flows through.
+> **Opt-in scope (per PR review):** the proxy is **not mandatory**. `ProxyHelper.getHttpProxy()` returns `Proxy.NO_PROXY` when sing-box is not running ([`ProxyHelper.java#L140`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/mqtt/ProxyHelper.java#L140)), and sing-box is an **optional daemon** started only when the user enables it. Installations that never enable it send this traffic directly and are unaffected by F2. The finding applies to users who turn the proxy on — at which point the hard-coded, non-owner endpoint (F2's core concern) is what their traffic flows through.
 
 ---
 
@@ -59,7 +59,7 @@ You asked specifically *who owns the IP, and where it is.* Here is what could an
 
 | Attribute | Value | Basis |
 |---|---|---|
-| IPv4 | `80.225.224.92` | Hard-coded in [`SingboxLauncher.kt#L172`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/launcher/SingboxLauncher.kt#L172) |
+| IPv4 | `80.225.224.92` | Hard-coded in [`SingboxLauncher.kt#L172`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/launcher/SingboxLauncher.kt#L172) |
 | Port / protocol | `443/tcp`, VLESS-Reality (Xray/sing-box) | Same config block |
 | Reality UUID | `ce8591be-9fa8-4361-90f3-427e9b5e8b85` | Client credential; anyone with the APK has it |
 | Fronting SNI | `google.com` | Config `server_name` |
@@ -106,10 +106,10 @@ These are hard-coded destinations the app talks to. Recorded here as a reference
 
 | Purpose | Endpoint | Source |
 |---|---|---|
-| VLESS proxy | `80.225.224.92:443` | [`SingboxLauncher.kt#L172`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/launcher/SingboxLauncher.kt#L172) |
-| Community backend | `https://community-edge.yash321sri.workers.dev` | [`CommunityConfig.kt#L47`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/community/config/CommunityConfig.kt#L47) |
-| Telegram Bot API | `https://api.telegram.org/bot…` | [`Enc.java#L149`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/daemon/proxy/Enc.java#L149) |
-| Proxy DNS | `tcp://8.8.8.8` | [`Enc.java#L165`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/daemon/proxy/Enc.java#L165) |
+| VLESS proxy | `80.225.224.92:443` | [`SingboxLauncher.kt#L172`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/launcher/SingboxLauncher.kt#L172) |
+| Community backend | `https://community-edge.yash321sri.workers.dev` | [`CommunityConfig.kt#L47`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/community/config/CommunityConfig.kt#L47) |
+| Telegram Bot API | `https://api.telegram.org/bot…` | [`Enc.java#L149`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/daemon/proxy/Enc.java#L149) |
+| Proxy DNS | `tcp://8.8.8.8` | [`Enc.java#L165`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/daemon/proxy/Enc.java#L165) |
 
 The **community backend** was confirmed (via DNS) to resolve to Cloudflare anycast addresses (`2606:4700::/32`) — i.e. it is a **Cloudflare-hosted `*.workers.dev` subdomain**. (What DNS proves is Cloudflare hosting on the free `workers.dev` namespace; it does *not* by itself establish the account tier or who operates it — stated per the no-fabrication rule.) All OverDrive installs pool into that one backend. Community content is **not signed** (see [doc 08](08-community-and-backup.md)), so trust rests on TLS-to-that-origin and on whoever controls that Cloudflare account. Because it is a `workers.dev` subdomain, the relevant control-plane risk is **compromise of that Cloudflare account**, not independent DNS takeover.
 
@@ -120,8 +120,8 @@ The **community backend** was confirmed (via DNS) to resolve to Cloudflare anyca
 
 `zrok share public http://localhost:8080` (and the cloudflared equivalent) publishes the local `HttpServer` — the entire vehicle-control API — at a public URL:
 
-- Zrok share of `localhost:8080`: [`ZrokLauncher.kt#L120`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/launcher/ZrokLauncher.kt#L120)
-- Reserved share names are `overdrive` + 6 chars — low entropy, enumerable: [`ZrokLauncher.kt#L261`](https://github.com/shauneccles/Overdrive-release/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/launcher/ZrokLauncher.kt#L261)
+- Zrok share of `localhost:8080`: [`ZrokLauncher.kt#L120`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/launcher/ZrokLauncher.kt#L120)
+- Reserved share names are `overdrive` + 6 chars — low entropy, enumerable: [`ZrokLauncher.kt#L261`](https://github.com/wheelstop-app/wheelstop/blob/a6ecca5324a4c5d9b7676b4a9a120b03baceab19/app/src/main/java/com/overdrive/app/launcher/ZrokLauncher.kt#L261)
 
 The tunnel layer adds **no authentication of its own** — anyone with the URL reaches the login page and API, gated only by the JWT/PIN. This is defensible *if* the JWT were strong, but combined with F5 (41-bit signing key) and F17 (`deviceId` leak) it means the internet-facing gate is weaker than it looks. To zrok's credit, the loopback bypass (F8) is correctly disabled for zrok because zrok injects `X-Forwarded-*` headers — but a tunnel that does not (see F8) would be worse.
 
