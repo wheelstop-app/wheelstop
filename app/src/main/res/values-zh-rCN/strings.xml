@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">OverDrive</string>
+    <string name="app_name">Wheelstop</string>
     <!-- Accessibility Service -->
-    <string name="accessibility_service_description">讓 Overdrive 的車輛監控在背景持續運作。本服務不會讀取或與螢幕內容互動。</string>
+    <string name="accessibility_service_description">讓 Wheelstop 的車輛監控在背景持續運作。本服務不會讀取或與螢幕內容互動。</string>
     <!-- Recording Mode Labels -->
     <!-- Proximity Guard Settings Labels -->
     <!-- Quality Settings Labels -->
@@ -134,7 +134,7 @@
     <string name="camera_selection_hint">自動選取對照相機的裝置.相機 1 = BYD Seal,相機 0 = Atto 裝置.</string>
     <!-- OEM Dashcam camera ID picker (Phase 5: separate forward-sensor pipeline) -->
     <string name="camera_oem_dashcam_title">OEM Dashcam 摄像头 ID</string>
-    <string name="camera_oem_dashcam_hint">选择指向前向行车记录仪传感器的 AVMCamera id。行车记录仪与全景相反：Seal/Han 全景 = 1 → 行车记录仪 = 0；Atto / Tang 全景 = 0 → 行车记录仪 = 1。保持“自动”可让 OverDrive 自动选择。</string>
+    <string name="camera_oem_dashcam_hint">选择指向前向行车记录仪传感器的 AVMCamera id。行车记录仪与全景相反：Seal/Han 全景 = 1 → 行车记录仪 = 0；Atto / Tang 全景 = 0 → 行车记录仪 = 1。保持“自动”可让 Wheelstop 自动选择。</string>
     <string name="camera_oem_dashcam_auto_resolved">自动-使用 id %1$d (pano id %2$d)</string>
     <string name="camera_oem_dashcam_auto_unavailable">自动-pano id 是 %1$d，不能推断控制摄像头</string>
     <string name="camera_oem_dashcam_save">保存</string>
@@ -162,7 +162,7 @@
     <string name="camera_mapping_summary_probing">全景流:傳承自動檢測/探測</string>
     <string name="camera_mapping_current_format">目前的映射:%1$s</string>
     <string name="camera_mapping_current_none">目前映射:自动 /默认</string>
-    <string name="camera_mapping_hint">OverDrive默認保留舊的啟動行為, 但現在讓你正確校對合并的全景帶. 預覽每個原始合并的片段, 將 logical 360 角色映射到實際上顯示你的車輛前/右/後/左的片段,</string>
+    <string name="camera_mapping_hint">Wheelstop默認保留舊的啟動行為, 但現在讓你正確校對合并的全景帶. 預覽每個原始合并的片段, 將 logical 360 角色映射到實際上顯示你的車輛前/右/後/左的片段,</string>
     <!-- fragment_dashboard -->
     <string name="dashboard_scan_to_connect">掃描至連接</string>
     <string name="dashboard_qr_waiting">在等待道...</string>
@@ -179,15 +179,15 @@
     <string name="setup_step_two_label">其他國家</string>
     <string name="setup_step_three_label">其他國家</string>
     <string name="setup_language_title">選擇自己的語言</string>
-    <string name="setup_language_body">預設使用您車機主機的語言。輕觸即可為 OverDrive 應用程式和網頁通道選擇其他語言。</string>
+    <string name="setup_language_body">預設使用您車機主機的語言。輕觸即可為 Wheelstop 應用程式和網頁通道選擇其他語言。</string>
     <string name="setup_language_button">選擇語言</string>
     <string name="setup_autostart_title">禁用自動啟動限制</string>
-    <string name="setup_autostart_body">按下來打開BYD自动啟動. 在列表中找到OverDrive,然後卸下欄位.BYD在每次安裝都擦除了這個.</string>
+    <string name="setup_autostart_body">按下來打開BYD自动啟動. 在列表中找到Wheelstop,然後卸下欄位.BYD在每次安裝都擦除了這個.</string>
     <string name="setup_autostart_button">打開BYD自動啟動</string>
     <string name="setup_overlay_title">在其他應用程式上允許顯示</string>
     <string name="setup_overlay_body">在其他應用程式上顯示浮動狀態指標,</string>
     <string name="setup_overlay_button">打開覆蓋設定</string>
-    <!-- Onboarding guide (novice track). Parked-only, glanceable. Overdrive is a
+    <!-- Onboarding guide (novice track). Parked-only, glanceable. Wheelstop is a
          protected brand name — keep it verbatim. -->
     <!-- Shared button labels -->
     <string name="onboarding_next">下一个</string>
@@ -198,22 +198,22 @@
     <string name="onboarding_exit">退出游览</string>
     <string name="onboarding_done_short">明白了</string>
     <!-- Step 0: authorize the daemon (system ADB popup) -->
-    <string name="onboarding_authorize_title">唤醒 Overdrive</string>
-    <string name="onboarding_authorize_body">Overdrive runs your cameras through a small on-device helper. Android will ask once to allow USB debugging — tap <b>Allow</b> and check <b>Always allow from this device</b> so it stays on after every restart.</string>
+    <string name="onboarding_authorize_title">唤醒 Wheelstop</string>
+    <string name="onboarding_authorize_body">Wheelstop runs your cameras through a small on-device helper. Android will ask once to allow USB debugging — tap <b>Allow</b> and check <b>Always allow from this device</b> so it stays on after every restart.</string>
     <string name="onboarding_authorize_button">允许访问</string>
     <string name="onboarding_authorize_waiting_title">等待权限…</string>
     <string name="onboarding_authorize_waiting_body">接受安卓弹出窗口。如果您看不到它，它可能已经被授予了 — — 这将继续单独进行。</string>
     <string name="onboarding_authorize_retry_title">仍未连接</string>
     <string name="onboarding_authorize_retry_body">助手尚未运行。Android 权限可能已被取消。请重试并记住检查 <b>总是允许</b>。</string>
     <string name="onboarding_authorize_retry_button">再试一次</string>
-    <string name="onboarding_mode_title">Overdrive 应在何时运行？</string>
-    <string name="onboarding_mode_body">选择关闭车辆后 Overdrive 的行为方式。\n\n<b>开机 &amp; 关机</b> 会在停车时持续守护 — 监控和后台监测保持启用，因此车辆夜间会消耗少量电量。\n\n<b>仅开机</b> 会在您离开后完全关闭 Overdrive。行车记录仪、行程和充电在您行车期间仍然正常工作，下次开启车辆时一切都会自动重新启动。您可以随时在设置中更改此项。</string>
+    <string name="onboarding_mode_title">Wheelstop 应在何时运行？</string>
+    <string name="onboarding_mode_body">选择关闭车辆后 Wheelstop 的行为方式。\n\n<b>开机 &amp; 关机</b> 会在停车时持续守护 — 监控和后台监测保持启用，因此车辆夜间会消耗少量电量。\n\n<b>仅开机</b> 会在您离开后完全关闭 Wheelstop。行车记录仪、行程和充电在您行车期间仍然正常工作，下次开启车辆时一切都会自动重新启动。您可以随时在设置中更改此项。</string>
     <string name="onboarding_mode_on_off_button">开机 &amp; 关机</string>
     <string name="onboarding_mode_on_only_button">仅开机</string>
     <!-- Camera mapping chapter -->
     <string name="onboarding_camera_step_label">相机 · 步长 %1$d ，共 %2$d</string>
     <string name="onboarding_camera_intro_title">设置您的摄像头</string>
-    <string name="onboarding_camera_intro_body">让我们告诉 Overdrive 哪个摄像头是您的 360 全景视图，哪个是您的 dashcam。大约需要一分钟，稍后您也可以更改。</string>
+    <string name="onboarding_camera_intro_body">让我们告诉 Wheelstop 哪个摄像头是您的 360 全景视图，哪个是您的 dashcam。大约需要一分钟，稍后您也可以更改。</string>
     <string name="onboarding_camera_intro_primary">开始</string>
     <string name="onboarding_camera_opening_title">打开相机设置…</string>
     <string name="onboarding_camera_opening_body">从您的摄像头加载现场预览。这可能需要几秒钟。</string>
@@ -222,7 +222,7 @@
     <string name="onboarding_camera_dashcam_title">现在找到前方摄像头</string>
     <string name="onboarding_camera_dashcam_body">步过照相机的箭头并停止显示风盾/前进视图。 注意它的数字 — — 你下一步会挑选它。</string>
     <string name="onboarding_camera_pick_title">选择您的360个摄像头</string>
-    <string name="onboarding_camera_pick_body">在顶部卡片中，选择您的 360 / 普通摄像头对应的编号。不确定？保持 AUTO 设置，Overdrive 会自动识别。</string>
+    <string name="onboarding_camera_pick_body">在顶部卡片中，选择您的 360 / 普通摄像头对应的编号。不确定？保持 AUTO 设置，Wheelstop 会自动识别。</string>
     <string name="onboarding_camera_pick_primary">下一个</string>
     <string name="onboarding_camera_pick_dash_title">选择您的摄像头摄像头</string>
     <string name="onboarding_camera_pick_dash_body">在这张卡片中选择您早些时候发现的 dashcam 号码 — 或将它留在AUTO上。</string>
@@ -238,7 +238,7 @@
     <string name="onboarding_camera_windshield_primary">显示我</string>
     <string name="onboarding_camera_windshield_skip">不要谢谢。</string>
     <!-- Vehicle profile chapter -->
-    <string name="onboarding_vehicle_title">告诉 Overdrive 您的电池信息</string>
+    <string name="onboarding_vehicle_title">告诉 Wheelstop 您的电池信息</string>
     <string name="onboarding_vehicle_body">选择您的模型，我们填充了 kWh，或者输入自己(15-120)。 这使得范围和充电估计准确。您可以跳过并稍后设置。</string>
     <string name="onboarding_vehicle_primary">设置电池</string>
     <!-- Dashboard orientation chapter -->
@@ -508,7 +508,7 @@
     <string name="update_picker_current_suffix">%1$s (已安裝)</string>
     <string name="update_picker_older_suffix">%1$s (舊版本)</string>
     <!-- Update progress (title + per-step status; no emoji — state icon carries the cue) -->
-    <string name="update_progress_title">正在更新 Overdrive</string>
+    <string name="update_progress_title">正在更新 Wheelstop</string>
     <string name="update_step_downloading">正在下載更新…</string>
     <string name="update_step_verifying">正在驗證下載…</string>
     <string name="update_step_stopping">正在停止守護程式…</string>
@@ -690,7 +690,7 @@
     <!-- Setup guide — post-setup tips section -->
     <string name="setup_tips_header">解決問題的建議</string>
     <string name="setup_traffic_title">禁用BYD 交通監控器</string>
-    <string name="setup_traffic_body">BYD 交通監測器阻止第三方應用程序進入網路. 禁用它,讓 OverDrive 和您安裝的任何其他應用程式實際上使用網路.</string>
+    <string name="setup_traffic_body">BYD 交通監測器阻止第三方應用程序進入網路. 禁用它,讓 Wheelstop 和您安裝的任何其他應用程式實際上使用網路.</string>
     <string name="setup_traffic_button">公開的交通監測器</string>
     <string name="setup_camera_fix_title">攝影機提供黑色或不正确的訊息?</string>
     <string name="setup_camera_fix_body">打開診斷 → 攝影機探測器,設定攝影機ID為0,按 Save,然後重新啟動攝影機模擬器. 如果傳遞仍錯誤,請使用攝影機ID重複.</string>
@@ -714,16 +714,16 @@
     <string name="nav_page_mqtt">MQTT</string>
     <string name="nav_page_byd_cloud">BYD Cloud</string>
     <!-- StatusOverlayService persistent notification (foreground service) -->
-    <string name="status_overlay_notif_title">OverDrive 狀態</string>
+    <string name="status_overlay_notif_title">Wheelstop 狀態</string>
     <string name="status_overlay_notif_text">狀態覆蓋活動</string>
     <!-- DaemonKeepaliveService persistent notification (foreground service)
          and the group-summary row that collapses Overdrive's three FGS
          notifications into one shade entry. The summary text is intentionally
          generic so it stays accurate whether all three services are running
          or only the keepalive survived an OOM respawn. -->
-    <string name="daemon_keepalive_notif_title">Overdrive 激活</string>
+    <string name="daemon_keepalive_notif_title">Wheelstop 激活</string>
     <string name="daemon_keepalive_notif_text">监测车辆系统</string>
-    <string name="overdrive_status_summary_title">Overdrive</string>
+    <string name="overdrive_status_summary_title">Wheelstop</string>
     <string name="overdrive_status_summary_text">后台服务运行</string>
     <!-- ============================================================== -->
     <!-- M3 Revamp: navigation rail + settings sub-rail + theme picker  -->
@@ -765,7 +765,7 @@
     <string name="settings_privacy_title">隱私與資料</string>
     <string name="settings_privacy_body">復元清除錄音索引,預存資料,惡魔狀態和裝置上偏好.</string>
     <!-- Settings → About pane copy -->
-    <string name="settings_about_title">關於OverDrive</string>
+    <string name="settings_about_title">關於Wheelstop</string>
     <string name="settings_about_version_label">版本</string>
     <string name="settings_about_package_label">建構</string>
     <string name="settings_about_check_update_value">檢查最新的GitHub版本，如果較新，請安裝。</string>
@@ -784,13 +784,13 @@
     <string name="settings_backup_pick_file">选择备份以恢复</string>
     <string name="settings_backup_no_files">未找到备份文件。先导出一个或复制一个备份.json到 %1$s，然后重试。</string>
     <string name="settings_backup_read_failed">无法读取文件</string>
-    <string name="settings_backup_invalid_file">该文件不是有效的 Overdrive 备份</string>
+    <string name="settings_backup_invalid_file">该文件不是有效的 Wheelstop 备份</string>
     <string name="settings_backup_restoring">正在恢复…</string>
     <string name="settings_backup_restored">设置已恢复</string>
     <string name="settings_backup_restore_failed">还原失败</string>
     <string name="settings_backup_daemon_down">相机服务必须运行到备份或还原。从守护进程启动，然后重试。</string>
     <string name="settings_backup_restore_confirm_title">还原设置？</string>
-    <string name="settings_backup_restore_confirm_msg">此操作将用备份替换您当前的 Overdrive 设置并重新加载服务。它仅适用于创建该备份时所用的同一台车机。</string>
+    <string name="settings_backup_restore_confirm_msg">此操作将用备份替换您当前的 Wheelstop 设置并重新加载服务。它仅适用于创建该备份时所用的同一台车机。</string>
     <string name="settings_backup_restore_confirm_btn">恢复</string>
     <string name="settings_backup_restart_hint">设置已恢复。重启相机守护进程 (Daemons = 相机-> 重启) 以确保每个恢复的设置都已应用。</string>
     <string name="settings_backup_trips_prompt">包括您的旅行历史记录(距离、能源、成本、分数、起始/结束位置？不包括每次旅行的详细遥测数据。 该文件将包含您的位置历史记录——保持其隐私。</string>
@@ -801,9 +801,9 @@
          personality without being corny — short, warm, specific. -->
     <string name="settings_about_support_section">靠像你這樣的人動力</string>
     <string name="settings_about_support_share_title">告訴另一位車主</string>
-    <string name="settings_about_support_share_value">每個共享的連結都幫助另一位BYD老板發現Overdrive.</string>
-    <string name="settings_about_support_share_message">查看Overdrive 開放源監控和Dashcam的BYD: https://overdrive-5lc.pages.dev/</string>
-    <string name="settings_about_support_share_chooser">分享 Overdrive</string>
+    <string name="settings_about_support_share_value">每個共享的連結都幫助另一位BYD老板發現Wheelstop.</string>
+    <string name="settings_about_support_share_message">查看Wheelstop 開放源監控和Dashcam的BYD: https://overdrive-5lc.pages.dev/</string>
+    <string name="settings_about_support_share_chooser">分享 Wheelstop</string>
     <string name="settings_about_open_link_failed">沒有辦法打開連結.</string>
     <string name="settings_about_open_link_copied">沒有搜尋器. URL複製: %1$s</string>
     <string name="settings_about_support_kofi_title">在下次發行中,</string>
@@ -881,7 +881,7 @@
     <string name="diagnostics_settings_subtitle">應用程式偏好,主題和語言.</string>
     <!-- SOTA Integrations page -->
     <string name="integrations_hero_title">集成</string>
-    <string name="integrations_hero_subtitle">聯繫Overdrive與您的服務.</string>
+    <string name="integrations_hero_subtitle">聯繫Wheelstop與您的服務.</string>
     <string name="integrations_status_unknown">點擊設定</string>
     <string name="integrations_status_configured">配置</string>
     <string name="integrations_status_not_set_up">沒有設置</string>
@@ -894,7 +894,7 @@
     <string name="settings_action_check_update">查看是否有更新</string>
     <string name="settings_action_reset_data">請重新設定資料.</string>
     <!-- Content descriptions for rail / segmented controls -->
-    <string name="cd_brand_logo">OverDrive</string>
+    <string name="cd_brand_logo">Wheelstop</string>
     <!-- ============================================================== -->
     <!-- Dashboard SOTA revamp                                            -->
     <!-- ============================================================== -->
@@ -963,11 +963,11 @@
     <string name="settings_section_surveillance_subtitle">檢測區域,時間表,運動敏感性.</string>
     <string name="settings_section_daemons_subtitle">Cloudflared、Zrok、Telegram、MQTT 執行程式。</string>
     <!-- About / data row subtitles -->
-    <string name="settings_about_row_title">關於OverDrive</string>
+    <string name="settings_about_row_title">關於Wheelstop</string>
     <string name="settings_about_row_subtitle">版本,授權,支持開發.</string>
     <string name="settings_reset_row_subtitle">或是所有隱藏資料.</string>
     <!-- Footer -->
-    <string name="settings_footer_format">OverDrive %1$s · %2$s</string>
+    <string name="settings_footer_format">Wheelstop %1$s · %2$s</string>
     <!-- ============================================================ -->
     <!-- Appearance pane — SOTA visual theme picker                    -->
     <!-- ============================================================ -->
@@ -984,7 +984,7 @@
     <!-- Privacy pane — stance + storage summary + reset               -->
     <!-- ============================================================ -->
     <string name="settings_privacy_stance_title">預設在裝置上</string>
-    <string name="settings_privacy_stance_body">OverDrive 完全在車機主機上運作。除了透過您明確設定的通道與整合之外，沒有任何遙測資料會離開您的車輛。</string>
+    <string name="settings_privacy_stance_body">Wheelstop 完全在車機主機上運作。除了透過您明確設定的通道與整合之外，沒有任何遙測資料會離開您的車輛。</string>
     <string name="settings_privacy_overline_storage">地方儲存</string>
     <string name="settings_privacy_overline_reset">數據重置</string>
     <string name="settings_privacy_storage_clips_label">在磁盤上的剪辑</string>
@@ -998,14 +998,14 @@
          surveillance, recording, Telegram alerts, status overlay, and the
          deterrent screen all run independently regardless of this state. -->
     <string name="settings_security_title">安全</string>
-    <string name="settings_security_subtitle">锁定OverDrive应用，否则乘客和阀无法在没有您的 PIN 码的情况下打开它。</string>
+    <string name="settings_security_subtitle">锁定Wheelstop应用，否则乘客和阀无法在没有您的 PIN 码的情况下打开它。</string>
     <string name="settings_security_stance_title">仅锁定界面</string>
-    <string name="settings_security_stance_body">监视、录制、威慑、警报和后台服务在锁定应用程序时继续运行。PIN码仅锁定 OverDrive 界面，别无其他。</string>
+    <string name="settings_security_stance_body">监视、录制、威慑、警报和后台服务在锁定应用程序时继续运行。PIN码仅锁定 Wheelstop 界面，别无其他。</string>
     <string name="settings_security_overline_lock">应用锁</string>
     <string name="settings_security_overline_recovery">如果您忘记了您的 PIN</string>
     <string name="settings_security_toggle_title">需要 PIN</string>
-    <string name="settings_security_toggle_subtitle_off">关闭 — 任何人都可以打开OverDrive。</string>
-    <string name="settings_security_toggle_subtitle_on">开启-需要打开OverDrive的 PIN 码。</string>
+    <string name="settings_security_toggle_subtitle_off">关闭 — 任何人都可以打开Wheelstop。</string>
+    <string name="settings_security_toggle_subtitle_on">开启-需要打开Wheelstop的 PIN 码。</string>
     <string name="settings_security_change_title">更改 PIN</string>
     <string name="settings_security_change_subtitle">确认当前PIN，然后设置一个新PIN。</string>
     <string name="settings_security_autolock_title">自动锁定</string>
@@ -1042,7 +1042,7 @@
          the app lock is enabled and the session isn\'t fresh. -->
     <string name="pin_lock_title">输入 PIN 码</string>
     <string name="pin_lock_title_unlocked">已解锁</string>
-    <string name="pin_lock_subtitle_default">解锁OverDrive以继续。</string>
+    <string name="pin_lock_subtitle_default">解锁Wheelstop以继续。</string>
     <string name="pin_lock_subtitle_wrong">错误的 PIN，请重试。</string>
     <string name="pin_lock_subtitle_locked_out">尝试次数过多，请稍后再试。</string>
     <!-- %1$s is a formatted countdown like "30s" or "2:45". -->
@@ -1084,7 +1084,7 @@
          provider, so translators should keep numeric placeholders intact
          (do not spell out the digits). -->
     <!-- First-launch welcome — only shown on the very first dashboard visit. -->
-    <string name="dashboard_insight_welcome">歡迎使用 — Overdrive 現在是您的第二雙眼睛。</string>
+    <string name="dashboard_insight_welcome">歡迎使用 — Wheelstop 現在是您的第二雙眼睛。</string>
     <!-- Parking delta. %1$s = absolute SOC delta string ("8%"); %2$s = absolute kWh string ("4 kWh"). -->
     <string name="dashboard_insight_parked_charged_kwh">在停車場上, 接收了%1$s (≈%2$s)</string>
     <string name="dashboard_insight_parked_charged">在停車場上拿起%1$s</string>

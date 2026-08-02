@@ -1,5 +1,5 @@
 /**
- * OverDrive Service Worker
+ * Wheelstop Service Worker
  *
  * Two responsibilities:
  *
@@ -146,14 +146,14 @@ self.addEventListener('push', (event) => {
   try {
     payload = event.data ? event.data.json() : {};
   } catch (e) {
-    payload = { title: 'OverDrive', body: '(unreadable payload)', severity: 'info' };
+    payload = { title: 'Wheelstop', body: '(unreadable payload)', severity: 'info' };
   }
 
   event.waitUntil(showFromPayload(payload));
 });
 
 function showFromPayload(payload) {
-  const title = payload.title || 'OverDrive';
+  const title = payload.title || 'Wheelstop';
   const severity = payload.severity || 'info';
 
   const options = {

@@ -1,6 +1,6 @@
 {
-  "name": "OverDrive Dashboard",
-  "short_name": "OverDrive",
+  "name": "Wheelstop Dashboard",
+  "short_name": "Wheelstop",
   "description": "Vehicle dashboard, surveillance, and alerts for your BYD",
   "start_url": "/",
   "scope": "/",

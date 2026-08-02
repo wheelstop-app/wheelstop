@@ -1,5 +1,5 @@
 /**
- * Overdrive — Web app shell.
+ * Wheelstop — Web app shell.
  *
  * Each in-app web page used to copy-paste the same ~250-line <aside class="sidebar">
  * block. This script mounts it once at runtime so every page shares one source
@@ -140,13 +140,13 @@
         // dashboard, the canonical "home"). The close-X stays for mobile.
         var header = ''
             + '<div class="sidebar-header">'
-            +   '<a href="index.html" class="brand brand-link" aria-label="OverDrive — open Dashboard" data-i18n-attr="aria-label:nav.brand_home">'
+            +   '<a href="index.html" class="brand brand-link" aria-label="Wheelstop — open Dashboard" data-i18n-attr="aria-label:nav.brand_home">'
             +     '<div class="brand-logo">'
-            +       '<img src="../shared/app-icon-glyph-dark.webp" alt="OverDrive">'
+            +       '<img src="../shared/app-icon-glyph-dark.webp" alt="Wheelstop">'
             +       '<span class="brand-online-pulse" aria-hidden="true"></span>'
             +     '</div>'
             +     '<div class="brand-text">'
-            +       '<span class="brand-name" data-i18n="app.name">OverDrive</span>'
+            +       '<span class="brand-name" data-i18n="app.name">Wheelstop</span>'
             +       '<span class="brand-tagline" data-i18n="app.tagline">Surveillance System</span>'
             +       '<span class="brand-version" id="appVersion"></span>'
             +     '</div>'
