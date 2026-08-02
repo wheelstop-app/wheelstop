@@ -504,7 +504,7 @@ class RecordingLibraryFragment : Fragment() {
         // Dismiss any leftover sheet from a previous open (e.g. config change).
         filterSheet?.dismiss()
         val ctx = context ?: return
-        val sheet = BottomSheetDialog(ctx, R.style.Theme_Overdrive_M3_BottomSheet)
+        val sheet = BottomSheetDialog(ctx, R.style.Theme_Wheelstop_M3_BottomSheet)
         val sheetView = LayoutInflater.from(ctx)
             .inflate(R.layout.sheet_recording_library_filters, null, false)
         sheet.setContentView(sheetView)
@@ -1372,7 +1372,7 @@ class RecordingLibraryFragment : Fragment() {
     }
 
     private fun confirmDelete(recording: RecordingFile) {
-        MaterialAlertDialogBuilder(requireContext(), R.style.Theme_Overdrive_M3_Dialog)
+        MaterialAlertDialogBuilder(requireContext(), R.style.Theme_Wheelstop_M3_Dialog)
             .setIcon(R.drawable.ic_delete)
             .setTitle(getString(R.string.dialog_delete_recording_title))
             .setMessage(getString(R.string.dialog_delete_recording_message, recording.name))
@@ -1399,7 +1399,7 @@ class RecordingLibraryFragment : Fragment() {
         val selected = recordingAdapter.getSelectedRecordings()
         if (selected.isEmpty()) return
 
-        MaterialAlertDialogBuilder(requireContext(), R.style.Theme_Overdrive_M3_Dialog)
+        MaterialAlertDialogBuilder(requireContext(), R.style.Theme_Wheelstop_M3_Dialog)
             .setIcon(R.drawable.ic_delete)
             .setTitle(resources.getQuantityString(R.plurals.delete_recordings_title, selected.size, selected.size))
             .setMessage(resources.getQuantityString(R.plurals.delete_recordings_message, selected.size, selected.size))

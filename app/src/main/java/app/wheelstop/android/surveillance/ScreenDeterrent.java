@@ -553,7 +553,7 @@ public final class ScreenDeterrent {
     }
 
     /**
-     * Decode the OverDrive glyph from the APK asset bundle once, cache it
+     * Decode the Wheelstop glyph from the APK asset bundle once, cache it
      * for subsequent fire() calls, and return null on any failure (caller
      * falls back to the synthetic camera icon).
      *
@@ -614,7 +614,7 @@ public final class ScreenDeterrent {
      *   │           │   [camera]    │   ← rounded-rect icon, light grey
      *   │           └───────────────┘              │
      *   │                                          │
-     *   │             OVERDRIVE                    │   ← wordmark, light grey
+     *   │             WHEELSTOP                    │   ← wordmark, light grey
      *   │                                          │
      *   │       YOU ARE ON CAMERA                  │   ← 144pt BOLD headline
      *   │                                          │
@@ -641,10 +641,10 @@ public final class ScreenDeterrent {
         float minRatio = Math.min((float) dispW / FALLBACK_DISPLAY_W,
                                   (float) dispH / FALLBACK_DISPLAY_H);
 
-        // 1. OverDrive glyph, centered upper-third. Painted INSIDE a white
+        // 1. Wheelstop glyph, centered upper-third. Painted INSIDE a white
         //    rounded-rectangle "card" so the green glyph has its own surface
         //    against the red deterrent background. The card uses iOS-style
-        //    squircle radius (~22%) to match the OverDrive launcher icon.
+        //    squircle radius (~22%) to match the Wheelstop launcher icon.
         //
         //    Falls back to a hand-drawn camera icon if the APK asset can't
         //    be loaded (asset path renamed, context lost, OOM on decode)
@@ -682,11 +682,11 @@ public final class ScreenDeterrent {
         p.setColor(FG);
         p.setTextAlign(Paint.Align.CENTER);
 
-        // 2. OVERDRIVE wordmark — white, sits below the card.
+        // 2. WHEELSTOP wordmark — white, sits below the card.
         p.setTextSize(56f * minRatio);
         p.setTypeface(Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD));
         p.setLetterSpacing(0.20f);
-        c.drawText("OVERDRIVE", dispW / 2f, dispH * 0.50f, p);
+        c.drawText("WHEELSTOP", dispW / 2f, dispH * 0.50f, p);
 
         // 3. Headline — BIG, BOLD. Authored at 144pt against 1080p; scaled
         //    proportionally to the panel's shorter axis so portrait or

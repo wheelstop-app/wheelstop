@@ -13,8 +13,8 @@ import java.util.Map;
 /**
  * External Storage API Handler - manages SD card and CDR cleanup settings.
  * 
- * SOTA: Auto-cleanup of BYD dashcam (CDR) files to ensure Overdrive has space on SD card.
- * When Overdrive uses SD card for recordings/surveillance, this automatically manages
+ * SOTA: Auto-cleanup of BYD dashcam (CDR) files to ensure Wheelstop has space on SD card.
+ * When Wheelstop uses SD card for recordings/surveillance, this automatically manages
  * the BYD dashcam files to maintain reserved space.
  * 
  * Endpoints:
@@ -141,7 +141,7 @@ public class ExternalStorageApiHandler {
         response.put("totalFilesDeleted", cleaner.getTotalFilesDeleted());
         response.put("lastCleanupTime", cleaner.getLastCleanupTime());
         
-        // SOTA: Show if Overdrive is using SD card (auto-enable recommendation)
+        // SOTA: Show if Wheelstop is using SD card (auto-enable recommendation)
         boolean overdriveUsesSdCard = storage.getRecordingsStorageType() == StorageManager.StorageType.SD_CARD ||
                                        storage.getSurveillanceStorageType() == StorageManager.StorageType.SD_CARD;
         response.put("overdriveUsesSdCard", overdriveUsesSdCard);

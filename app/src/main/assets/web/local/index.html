@@ -59,7 +59,7 @@
                   Vehicle hero card. Renders the user's selected GLB tinted in
                   their selected paint colour, framed front-on so the front
                   fascia faces the camera. mountVehicleCanvas + the existing
-                  applyVehicleSelection / overdrive:vehicle-changed pipeline
+                  applyVehicleSelection / wheelstop:vehicle-changed pipeline
                   drive (model, colour) — same source of truth as the sidebar
                   EV-card. yawOffset = π/2 reuses the side rig and rotates the
                   GLB to face the camera (no new view in ev-card-3d.js).
@@ -920,7 +920,7 @@
             setInterval(function() { BYD.dashboard.refreshVehicleState(); }, 6000);
         });
 
-        // Hero 3D vehicle. Mounts via OverdriveAppShell.mountVehicleCanvas
+        // Hero 3D vehicle. Mounts via WheelstopAppShell.mountVehicleCanvas
         // (same pipeline as the sidebar EV-card), passing only `view`
         // — the dashboard hero gets the identical side-profile framing
         // the sidebar uses. (model, colour) come from the daemon's
@@ -945,7 +945,7 @@
                 if (didMount) return;
                 var canvas = document.getElementById('dashHero3d');
                 if (!canvas) return;
-                var shell = window.OverdriveAppShell;
+                var shell = window.WheelstopAppShell;
                 if (!shell || typeof shell.mountVehicleCanvas !== 'function') return;
                 didMount = true;
                 shell.mountVehicleCanvas(canvas, { view: 'three-quarter' });
@@ -981,7 +981,7 @@
         //     class (e.g. .dash-card-full spans all columns), so a
         //     full-width card looks full-width regardless of order.
         (function () {
-            var STORAGE_KEY = 'overdrive.dashboard.cardOrder';
+            var STORAGE_KEY = 'wheelstop.dashboard.cardOrder';
             var grid = document.getElementById('dashCards');
             if (!grid) return;
 

@@ -10,7 +10,7 @@ import android.util.Log
  * Handles SCREEN_OFF events to ensure daemon survival during sleep.
  * 
  * NOTE: SCREEN_OFF cannot be registered in manifest - must be registered dynamically.
- * This receiver is registered in OverdriveApplication.
+ * This receiver is registered in WheelstopApplication.
  * 
  * Delegates to BootReceiver to reuse the same daemon startup logic.
  */

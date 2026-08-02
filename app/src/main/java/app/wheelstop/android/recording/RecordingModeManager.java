@@ -1816,7 +1816,7 @@ public class RecordingModeManager {
             // surveillance / safe-zone / schedule gate the prior wiring
             // had — none of those gates exist in esco. If the user has
             // surveillance off, esco still keeps the camera open for the
-            // user's preview path; OverDrive must do the same.
+            // user's preview path; Wheelstop must do the same.
             //
             // Legacy mode (non-dilink4) keeps the original teardown
             // behaviour — the close+reopen race is dilink4-firmware-

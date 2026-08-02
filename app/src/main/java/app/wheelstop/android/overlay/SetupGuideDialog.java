@@ -142,7 +142,7 @@ public class SetupGuideDialog {
             });
         }
 
-        AlertDialog dialog = new com.google.android.material.dialog.MaterialAlertDialogBuilder(context, R.style.Theme_Overdrive_M3_Dialog)
+        AlertDialog dialog = new com.google.android.material.dialog.MaterialAlertDialogBuilder(context, R.style.Theme_Wheelstop_M3_Dialog)
                 .setView(view)
                 .setCancelable(true)
                 .create();
@@ -169,7 +169,7 @@ public class SetupGuideDialog {
      * Open the BYD autostart-management activity directly. Falls back through:
      *   1. com.byd.appstartmanagement/.frame.AppStartManagement (canonical deep link)
      *   2. Default launcher intent for com.byd.appstartmanagement
-     *   3. ACTION_APPLICATION_DETAILS_SETTINGS for OverDrive (legacy fallback)
+     *   3. ACTION_APPLICATION_DETAILS_SETTINGS for Wheelstop (legacy fallback)
      *   4. ACTION_APPLICATION_SETTINGS / ACTION_SETTINGS
      */
     private static void openAutoStartSettings(Context context) {

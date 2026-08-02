@@ -1,5 +1,5 @@
 /**
- * Overdrive — EV-card sprite cache.
+ * Wheelstop — EV-card sprite cache.
  *
  * IndexedDB-backed cache of pre-rendered EV-card images keyed by
  * (modelId, paint colour, view, dpr-bucket). The sidebar EV card is
@@ -34,7 +34,7 @@
 (function (root) {
     'use strict';
 
-    if (root.OverdriveEvSpriteCache) return;
+    if (root.WheelstopEvSpriteCache) return;
 
     var DB_NAME    = 'overdrive-ev-sprites';
     var DB_VERSION = 1;
@@ -344,7 +344,7 @@
         });
     }
 
-    root.OverdriveEvSpriteCache = {
+    root.WheelstopEvSpriteCache = {
         supported: supported,
         get: get,
         put: put,

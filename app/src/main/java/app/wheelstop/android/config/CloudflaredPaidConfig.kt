@@ -146,7 +146,7 @@ object CloudflaredPaidConfig {
             tilToken.isEnabled = isChecked
         }
 
-        MaterialAlertDialogBuilder(context, R.style.Theme_Overdrive_M3_Dialog)
+        MaterialAlertDialogBuilder(context, R.style.Theme_Wheelstop_M3_Dialog)
             .setTitle(context.getString(R.string.dialog_cloudflared_settings_title))
             .setMessage(context.getString(R.string.dialog_cloudflared_settings_message))
             .setView(dialogView)

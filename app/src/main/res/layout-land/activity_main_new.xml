@@ -250,7 +250,7 @@
                     </LinearLayout>
                 </com.google.android.material.appbar.MaterialToolbar>
 
-                <!-- Overdrive accent stripe (mirrors portrait + web app bar). -->
+                <!-- Wheelstop accent stripe (mirrors portrait + web app bar). -->
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="3dp"

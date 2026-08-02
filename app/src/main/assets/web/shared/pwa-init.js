@@ -1,5 +1,5 @@
 /**
- * OverDrive PWA bootstrap.
+ * Wheelstop PWA bootstrap.
  *
  * Loaded after auth.js on every dashboard page. Skips entirely on the
  * in-app WebView (loopback host) so notification permission prompts never
@@ -86,7 +86,7 @@
         if (existing) {
             // Verify the existing sub is bound to the SERVER'S CURRENT
             // VAPID key. If the daemon was reinstalled (key file lost) or
-            // a different OverDrive install ever ran on this origin, the
+            // a different Wheelstop install ever ran on this origin, the
             // browser is holding a sub bound to a stale key. Calling
             // subscribe() again with a new key while a sub with a
             // different key exists is the canonical cause of "AbortError:
@@ -308,7 +308,7 @@
 
     // Expose minimal API for the settings page to drive permission prompts
     // and explicit (re)subscribe flow.
-    window.OverdrivePush = {
+    window.WheelstopPush = {
         async requestAndSubscribe() {
             // Permission prompt happens OUTSIDE the serial chain — it's a
             // user-gesture-bound API and queueing it would lose the

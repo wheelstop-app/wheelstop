@@ -284,7 +284,7 @@ public class MqttConnectionManager {
             // because VIN only appears once the BYD SDK has been read at least once).
             if (config.isHomeAssistant()) {
                 String vin = payload.optString("vin", null);
-                publisher.setHaMeta(vin, null, "OverDrive " + app.wheelstop.android.BuildConfig.VERSION_NAME);
+                publisher.setHaMeta(vin, null, "Wheelstop " + app.wheelstop.android.BuildConfig.VERSION_NAME);
             }
 
             // Change-gated publish (per-field for HA, full snapshot for aggregate).

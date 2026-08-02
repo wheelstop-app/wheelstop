@@ -288,7 +288,7 @@ public final class KeymapApiHandler {
      * service — the clean bind we verified a fresh process always gets.
      *
      * We respawn via the keep-alive foreground service (NOT MainActivity) so the
-     * UI isn't pulled to the foreground mid-drive; OverdriveApplication.onCreate
+     * UI isn't pulled to the foreground mid-drive; WheelstopApplication.onCreate
      * runs on ANY process start, so the daemon-startup + a11y-enable path fires
      * regardless of which component brought the process up. The daemon runs as
      * UID 2000, so `am force-stop app.wheelstop.android` (UID 10xxx) does not take

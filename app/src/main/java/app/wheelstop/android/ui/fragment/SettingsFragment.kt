@@ -419,7 +419,7 @@ class SettingsFragment : Fragment() {
 
     /**
      * Footer line at the bottom of the portrait hub. Read-only. Shows
-     * "OverDrive vX.Y · app.wheelstop.android" so power users can confirm
+     * "Wheelstop vX.Y · app.wheelstop.android" so power users can confirm
      * the running version + package id without diving into About.
      */
     private fun setupFooter(view: View) {

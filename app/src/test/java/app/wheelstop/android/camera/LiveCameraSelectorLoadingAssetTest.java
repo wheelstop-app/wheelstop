@@ -26,7 +26,7 @@ public class LiveCameraSelectorLoadingAssetTest {
     public void auxiliaryCanvasWaitsForSelectionBeforeCheckingSpriteCache() throws Exception {
         String appShell = readWebAsset("shared/app-shell.js");
         int mountStart = appShell.indexOf(
-                "window.OverdriveAppShell.mountVehicleCanvas");
+                "window.WheelstopAppShell.mountVehicleCanvas");
         int resolvedMount = appShell.indexOf(
                 "function mountResolvedSelection()", mountStart);
         int cacheCheck = appShell.indexOf(

@@ -16,7 +16,7 @@ import app.wheelstop.android.launcher.AdbShellExecutor
 import java.io.File
 
 /**
- * StorageSetup - Creates Overdrive directories from the App (UID 10xxx)
+ * StorageSetup - Creates Wheelstop directories from the App (UID 10xxx)
  * 
  * On Android 11+, directories created by the daemon (UID 2000) cannot be
  * written to by the app. By creating directories from the app with
@@ -31,8 +31,8 @@ import java.io.File
 object StorageSetup {
     private const val TAG = "StorageSetup"
     
-    // Base directory for all Overdrive files
-    private const val BASE_DIR = "/storage/emulated/0/Overdrive"
+    // Base directory for all Wheelstop files
+    private const val BASE_DIR = "/storage/emulated/0/Wheelstop"
     
     // Subdirectories to create
     private val SUBDIRS = listOf("recordings", "surveillance", "proximity")
@@ -160,7 +160,7 @@ object StorageSetup {
     }
     
     /**
-     * Setup all Overdrive directories.
+     * Setup all Wheelstop directories.
      * App creates the directories so it becomes the OWNER.
      * 
      * @return true if all directories were created/exist successfully

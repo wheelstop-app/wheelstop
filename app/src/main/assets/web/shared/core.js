@@ -960,11 +960,11 @@ BYD.core = {
             }
 
             // Body-mesh emissive glow. The teal/amber/red ramp + intensity
-            // scaling lives in OverdriveEvCard3D — see ev-card-3d.js
+            // scaling lives in WheelstopEvCard3D — see ev-card-3d.js
             // socRampColor + _applyEmissive. No-op on pages where the 3D
             // shell isn't loaded yet (login.html, dev-only pages).
-            if (window.OverdriveAppShell && window.OverdriveAppShell.setSoc) {
-                window.OverdriveAppShell.setSoc(soc);
+            if (window.WheelstopAppShell && window.WheelstopAppShell.setSoc) {
+                window.WheelstopAppShell.setSoc(soc);
             }
         }
 
@@ -1035,8 +1035,8 @@ BYD.core = {
         // visibly snaps; AC trickle crawls.
         if (isCharging) evCard.classList.add('charging');
         else            evCard.classList.remove('charging');
-        if (window.OverdriveAppShell && window.OverdriveAppShell.setCharging) {
-            window.OverdriveAppShell.setCharging(isCharging, powerKW);
+        if (window.WheelstopAppShell && window.WheelstopAppShell.setCharging) {
+            window.WheelstopAppShell.setCharging(isCharging, powerKW);
         }
 
         // SOH display

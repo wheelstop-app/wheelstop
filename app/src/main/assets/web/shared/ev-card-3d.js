@@ -1,5 +1,5 @@
 /**
- * Overdrive — EV-card 3D body shell.
+ * Wheelstop — EV-card 3D body shell.
  *
  * Mounts a tiny three.js scene inside the sidebar's EV-card and renders the
  * user's selected vehicle (GLB) tinted in their selected paint colour. Runs
@@ -22,7 +22,7 @@
  *     forcibly disposed so navigation never leaks contexts.
  *
  * Public API:
- *   var card = new OverdriveEvCard3D(canvasElement);
+ *   var card = new WheelstopEvCard3D(canvasElement);
  *   card.setModel('seal');         // model id from manifest
  *   card.setColor('#1A1A1E');      // any #RRGGBB
  *   card.dispose();                // call before navigating away
@@ -42,9 +42,9 @@
     // sprite renderer) both lazily inject this script on first need.
     // Without this guard a race between them would run the IIFE twice,
     // double-load three.min.js (which complains "Multiple instances of
-    // Three.js"), and double-define OverdriveEvCard3D. Bail if we've
+    // Three.js"), and double-define WheelstopEvCard3D. Bail if we've
     // already initialised.
-    if (root.OverdriveEvCard3D) return;
+    if (root.WheelstopEvCard3D) return;
 
     var VENDOR = '../shared/vendor/';
     var SCRIPTS = [VENDOR + 'three.min.js',
@@ -54,22 +54,22 @@
     // Vendor-load state lives on `window` so a second include of this
     // module (caught by the idempotency guard above, but defensive
     // anyway) wouldn't kick off a parallel vendor download.
-    if (!root.__overdriveEvCard3dVendorPromise) {
-        root.__overdriveEvCard3dVendorPromise = null;
+    if (!root.__wheelstopEvCard3dVendorPromise) {
+        root.__wheelstopEvCard3dVendorPromise = null;
     }
 
     function loadVendor() {
-        if (root.__overdriveEvCard3dVendorPromise) return root.__overdriveEvCard3dVendorPromise;
+        if (root.__wheelstopEvCard3dVendorPromise) return root.__wheelstopEvCard3dVendorPromise;
         // Some other surface (vehicle-control.html bundles three.js
         // directly via <script> tags) may have THREE on the page already
         // — adopt those globals instead of reloading.
         if (typeof root.THREE !== 'undefined'
                 && typeof root.THREE.GLTFLoader === 'function'
                 && typeof root.THREE.DRACOLoader === 'function') {
-            root.__overdriveEvCard3dVendorPromise = Promise.resolve();
-            return root.__overdriveEvCard3dVendorPromise;
+            root.__wheelstopEvCard3dVendorPromise = Promise.resolve();
+            return root.__wheelstopEvCard3dVendorPromise;
         }
-        root.__overdriveEvCard3dVendorPromise = new Promise(function (resolve, reject) {
+        root.__wheelstopEvCard3dVendorPromise = new Promise(function (resolve, reject) {
             // Already fully loaded by another page (vehicle-control.html
             // bundles all three eagerly). Verify EACH dependency, not just
             // THREE+GLTFLoader — older snapshots of this code only checked
@@ -144,7 +144,7 @@
                 resolve();
             }, reject);
         });
-        return root.__overdriveEvCard3dVendorPromise;
+        return root.__wheelstopEvCard3dVendorPromise;
     }
 
     // Minimal ModelStore. The real one in vehicle-control.js handles
@@ -301,7 +301,7 @@
      *   view='three-quarter' — slightly angled profile for dashboard
      *     hero cards: keeps side readability while adding depth.
      */
-    function OverdriveEvCard3D(canvasEl, opts) {
+    function WheelstopEvCard3D(canvasEl, opts) {
         this.canvas = canvasEl;
         this.view = 'side';
         if (opts && opts.view === 'top') this.view = 'top';
@@ -359,7 +359,7 @@
         return { w: w, h: h };
     }
 
-    OverdriveEvCard3D.prototype._initThree = function () {
+    WheelstopEvCard3D.prototype._initThree = function () {
         var T = window.THREE;
         var sz = readCanvasSize(this.canvas, 280, 200);
         var w = sz.w, h = sz.h;
@@ -475,7 +475,7 @@
         }
     };
 
-    OverdriveEvCard3D.prototype._handleResize = function () {
+    WheelstopEvCard3D.prototype._handleResize = function () {
         if (!this.renderer) return;
         // Use ONLY the CSS client size for resize. The canvas-attribute
         // fallback was a layout-bootstrap convenience for _initThree;
@@ -503,7 +503,7 @@
     // resize on the preview server). Idempotent: applies a fresh scale
     // computed from the cached natural size, never multiplying onto
     // whatever scale was in effect.
-    OverdriveEvCard3D.prototype._autoFit = function () {
+    WheelstopEvCard3D.prototype._autoFit = function () {
         if (!this.carModel || !this._naturalSize || !this.camera) return;
         var T = window.THREE;
         var canvasSz = readCanvasSize(this.canvas, 1, 1);
@@ -546,7 +546,7 @@
         }
     };
 
-    OverdriveEvCard3D.prototype._observeVisibility = function () {
+    WheelstopEvCard3D.prototype._observeVisibility = function () {
         var self = this;
         if (typeof IntersectionObserver === 'undefined') return;
         this._observer = new IntersectionObserver(function (entries) {
@@ -572,7 +572,7 @@
     // changes (model load, colour change, resize, visibility flip back on).
     // No continuous loop = zero idle GPU/CPU cost while the user reads
     // dashboards on a non-vehicle-control page.
-    OverdriveEvCard3D.prototype._renderOnce = function () {
+    WheelstopEvCard3D.prototype._renderOnce = function () {
         if (this._disposed || !this.renderer || !this.scene || !this.camera) return;
         if (this._paused || document.hidden) {
             // Defer until visible — the visibility/IntersectionObserver
@@ -608,7 +608,7 @@
     // triggers a render. preserveOnRebuild=false (default) drops queued
     // callbacks if setModel changes mid-flight, since the snapshot
     // would no longer match the requested (model,colour).
-    OverdriveEvCard3D.prototype.onceAfterRender = function (cb) {
+    WheelstopEvCard3D.prototype.onceAfterRender = function (cb) {
         if (this._disposed || typeof cb !== 'function') return;
         if (!this._afterRenderCbs) this._afterRenderCbs = [];
         this._afterRenderCbs.push(cb);
@@ -619,7 +619,7 @@
 
     // Schedule one render on the next animation frame. Coalesces multiple
     // mutations within the same frame into a single render.
-    OverdriveEvCard3D.prototype._scheduleRender = function () {
+    WheelstopEvCard3D.prototype._scheduleRender = function () {
         if (this._disposed) return;
         this._needsRender = true;
         if (this._renderScheduled) return;
@@ -631,7 +631,7 @@
         });
     };
 
-    OverdriveEvCard3D.prototype.setColor = function (hexColor) {
+    WheelstopEvCard3D.prototype.setColor = function (hexColor) {
         this.pendingColor = hexColor;
         if (!window.THREE || !this.bodyPaintMeshes) return;
         var T = window.THREE;
@@ -645,7 +645,7 @@
         this._scheduleRender();
     };
 
-    OverdriveEvCard3D.prototype.setModel = function (modelId) {
+    WheelstopEvCard3D.prototype.setModel = function (modelId) {
         this.pendingModel = modelId;
         // Vendor must be FULLY loaded — three.min.js + GLTFLoader.js +
         // DRACOLoader.js — before we can call into the loader chain.
@@ -677,7 +677,7 @@
         });
     };
 
-    OverdriveEvCard3D.prototype._loadGlb = function (url, gen) {
+    WheelstopEvCard3D.prototype._loadGlb = function (url, gen) {
         var self = this;
         var T = window.THREE;
         var loader = new T.GLTFLoader();
@@ -745,7 +745,7 @@
         });
     };
 
-    OverdriveEvCard3D.prototype._disposeCarModel = function () {
+    WheelstopEvCard3D.prototype._disposeCarModel = function () {
         if (!this.carModel) return;
         var T = window.THREE;
         this.scene.remove(this.carModel);
@@ -763,7 +763,7 @@
         this.bodyPaintMeshes = [];
     };
 
-    OverdriveEvCard3D.prototype.dispose = function () {
+    WheelstopEvCard3D.prototype.dispose = function () {
         if (this._disposed) return;
         this._disposed = true;
         if (this._observer) this._observer.disconnect();
@@ -784,5 +784,5 @@
         this.camera = null;
     };
 
-    root.OverdriveEvCard3D = OverdriveEvCard3D;
+    root.WheelstopEvCard3D = WheelstopEvCard3D;
 }(window));

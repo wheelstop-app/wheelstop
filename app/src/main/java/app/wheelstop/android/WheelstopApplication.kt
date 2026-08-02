@@ -12,16 +12,28 @@ import app.wheelstop.android.logging.LogManager
 import app.wheelstop.android.server.LocaleManager
 import app.wheelstop.android.services.DaemonKeepaliveService
 // import app.wheelstop.android.shell.PrivilegedShellSetup
+import app.wheelstop.android.storage.LegacyMediaMigration
 import app.wheelstop.android.ui.util.PreferencesManager
 
 /**
- * Application class for Overdrive.
+ * Application class for Wheelstop.
  * Initializes global singletons before any Activity is created.
  */
-class OverdriveApplication : Application() {
-    
+class WheelstopApplication : Application() {
+
     override fun onCreate() {
         super.onCreate()
+
+        // One-time, best-effort move of legacy `Overdrive`-named media dirs
+        // to their `Wheelstop` counterparts. MUST run before anything below
+        // (or anything DaemonKeepaliveService.start() kicks off) touches
+        // StorageManager.getInstance() — that singleton's constructor
+        // creates the Wheelstop dirs as a side effect, which would close
+        // the "destination doesn't exist yet" window this migration needs.
+        // See LegacyMediaMigration's kdoc for the full data-loss scenario
+        // this prevents (RecordingsIndex.reconcile() purging pre-existing
+        // recordings that are still on disk under the old Overdrive/ roots).
+        LegacyMediaMigration.runIfNeeded(this)
 
         // Apply the user-picked locale before any Activity/Fragment is created.
         // Auto-mode (or unset) writes an empty list so AppCompat falls back to
@@ -89,9 +101,9 @@ class OverdriveApplication : Application() {
                     val live = merged(newValue)
                     LogManager.getInstance().updateConfig(live)
                     try {
-                        LogCleaner.schedule(this@OverdriveApplication, live.cleanupIntervalHours.toLong())
+                        LogCleaner.schedule(this@WheelstopApplication, live.cleanupIntervalHours.toLong())
                     } catch (e: Exception) {
-                        Log.w("OverdriveApplication", "LogCleaner re-schedule failed: ${e.message}")
+                        Log.w("WheelstopApplication", "LogCleaner re-schedule failed: ${e.message}")
                     }
                 }
             }
@@ -103,7 +115,7 @@ class OverdriveApplication : Application() {
         try {
             LogCleaner.schedule(this, persisted.cleanupIntervalHours.toLong())
         } catch (e: Exception) {
-            Log.w("OverdriveApplication", "LogCleaner schedule failed: ${e.message}")
+            Log.w("WheelstopApplication", "LogCleaner schedule failed: ${e.message}")
         }
     }
 
@@ -117,7 +129,7 @@ class OverdriveApplication : Application() {
             }
             AppCompatDelegate.setApplicationLocales(locales)
         } catch (e: Exception) {
-            Log.w("OverdriveApplication", "applyPersistedLocale failed: ${e.message}")
+            Log.w("WheelstopApplication", "applyPersistedLocale failed: ${e.message}")
         }
     }
 }

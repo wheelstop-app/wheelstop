@@ -71,7 +71,7 @@
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:singleLine="true"
-            android:textAppearance="@style/TextAppearance.Overdrive.NavRow.Title"
+            android:textAppearance="@style/TextAppearance.Wheelstop.NavRow.Title"
             tools:text="Marina Bay Sands" />
 
         <TextView
@@ -81,7 +81,7 @@
             android:layout_marginTop="1dp"
             android:ellipsize="end"
             android:singleLine="true"
-            android:textAppearance="@style/TextAppearance.Overdrive.NavRow.Subtitle"
+            android:textAppearance="@style/TextAppearance.Wheelstop.NavRow.Subtitle"
             android:visibility="gone"
             tools:text="Bayfront Avenue, Singapore"
             tools:visibility="visible" />

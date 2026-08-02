@@ -2001,13 +2001,13 @@
         // Top-down 3D vehicle in the camera selector. Replaces the static
         // car-icon.webp PNG with the user's actual GLB tinted in their
         // chosen paint colour, kept in sync with the sidebar EV-card via
-        // OverdriveAppShell.mountVehicleCanvas. Hotspot CSS positions
+        // WheelstopAppShell.mountVehicleCanvas. Hotspot CSS positions
         // (FRONT/REAR/LEFT/RIGHT around a 72×150 silhouette) align with
         // the auto-fit roof-down render.
         function mountLiveCarCanvas() {
             const canvas = document.getElementById('liveCarCanvas');
             if (!canvas) return;
-            const shell = window.OverdriveAppShell;
+            const shell = window.WheelstopAppShell;
             if (!shell || typeof shell.mountVehicleCanvas !== 'function') return;
             const container = canvas.parentElement;
             shell.mountVehicleCanvas(canvas, {
@@ -2021,7 +2021,7 @@
         // sidebar and dispatches `app-shell:ready`. Listen for that
         // event AND check synchronously in case the shell already
         // initialised (script-load order on cached pages can flip).
-        if (window.OverdriveAppShell && window.OverdriveAppShell.mountVehicleCanvas) {
+        if (window.WheelstopAppShell && window.WheelstopAppShell.mountVehicleCanvas) {
             mountLiveCarCanvas();
         } else {
             document.addEventListener('app-shell:ready', mountLiveCarCanvas);

@@ -1266,8 +1266,19 @@ public final class RecordingsIndex {
             boolean wantInternal = f.storages.contains("INTERNAL");
             boolean wantSd = f.storages.contains("SD_CARD");
             if (wantInternal) {
+                // Storage-type classifier for legacy (pre-v2) rows whose `storage`
+                // column is still NULL: any NULL row under '/storage/emulated/%' is
+                // classified as INTERNAL for filtering purposes. This is a query-time
+                // filter only — it has no bearing on which directories reconcile()
+                // scans on disk (see StorageManager.getAll*Dirs()) or on whether a
+                // legacy Overdrive/ file's index row survives reconcile(); that is
+                // handled separately by LegacyMediaMigration, which moves the legacy
+                // Overdrive/ roots to Wheelstop/ on first boot. The second, more
+                // specific LIKE is redundant with the first (Wheelstop/ is itself
+                // under /storage/emulated/) and is kept only as inline documentation
+                // of the current internal base dir.
                 clause.append(" OR (storage IS NULL AND (abs_path LIKE '/storage/emulated/%'"
-                        + " OR abs_path LIKE '/storage/emulated/0/Overdrive/%'))");
+                        + " OR abs_path LIKE '/storage/emulated/0/Wheelstop/%'))");
             }
             if (wantSd) {
                 clause.append(" OR (storage IS NULL AND abs_path NOT LIKE '/storage/emulated/%'"

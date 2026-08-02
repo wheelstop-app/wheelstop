@@ -787,7 +787,7 @@ public class BydDataCollector {
                 }
             }
         } catch (Exception e) {
-            logger.debug("Multimedia strategy 2 (overdrive package context) failed: " + e.getMessage());
+            logger.debug("Multimedia strategy 2 (wheelstop package context) failed: " + e.getMessage());
         }
 
         // Strategy 3: Try with system context directly (with timeout — can deadlock)

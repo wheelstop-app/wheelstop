@@ -292,10 +292,10 @@ public class AppAudioCaptureController {
         // SecurityException (which is then caught by start() and routed to the
         // 5 s static back-off). Currently this controller does not hold a
         // Context — callers (StatusOverlayService) construct it via the no-arg
-        // ctor, and OverdriveApplication has no public getInstance() singleton.
+        // ctor, and WheelstopApplication has no public getInstance() singleton.
         // Adding the up-front check requires either threading a Context through
         // the ctor (touches StatusOverlayService) or exposing an Application
-        // singleton (touches OverdriveApplication.kt) — out of scope for this
+        // singleton (touches WheelstopApplication.kt) — out of scope for this
         // file-local fix. The current path still works: SecurityException is
         // caught in start() and the back-off engages. This TODO documents the
         // cleaner error message we'd get with a Context.

@@ -1,5 +1,5 @@
 /*
- * Overdrive — Automations UI controller.
+ * Wheelstop — Automations UI controller.
  *
  * ES5 / Chrome 58 floor (BYD DiLink head-unit WebView, Android 7.1). Assets
  * ship raw — there is NO transpile/build step — so this file must parse and
@@ -132,7 +132,7 @@ BYD.automations = {
             a.href = url;
             // Uptime-ish suffix (no Date dependency issues in this WebView): the daemon
             // already stamped exportedAt inside; the filename just needs to be unique-ish.
-            a.download = 'overdrive-automations.json';
+            a.download = 'wheelstop-automations.json';
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);

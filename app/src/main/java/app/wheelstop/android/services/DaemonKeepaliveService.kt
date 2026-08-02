@@ -37,12 +37,12 @@ class DaemonKeepaliveService : Service() {
         private const val CHANNEL_ID = "daemon_keepalive_channel"
 
         // Shared notification grouping. The three foreground services that
-        // Overdrive runs (this one + LocationSidecarService + StatusOverlay
+        // Wheelstop runs (this one + LocationSidecarService + StatusOverlay
         // Service) each post their own ongoing notification — Android needs
         // the FGS notification to remain visible per service. Tagging them
         // all with the same group key, plus a 4th `setGroupSummary(true)`
         // notification posted by this service, collapses the four entries
-        // into a single expandable shade row. The user sees one "Overdrive
+        // into a single expandable shade row. The user sees one "Wheelstop
         // Active" tile with the per-service lines available on tap-to-expand.
         //
         // The summary notification is *not* a foreground-service notification
@@ -53,7 +53,7 @@ class DaemonKeepaliveService : Service() {
         // killing LocationSidecarService).
         const val NOTIFICATION_GROUP_KEY = "app.wheelstop.android.STATUS"
         private const val SUMMARY_NOTIFICATION_ID = 19875
-        private const val SUMMARY_CHANNEL_ID = "overdrive_status_summary"
+        private const val SUMMARY_CHANNEL_ID = "wheelstop_status_summary"
 
         fun start(context: Context) {
             val intent = Intent(context, DaemonKeepaliveService::class.java)
@@ -195,7 +195,7 @@ class DaemonKeepaliveService : Service() {
     override fun onDestroy() {
         Log.i(TAG, "Service onDestroy")
 
-        // Drop the group-summary so the user doesn't see a stale "Overdrive"
+        // Drop the group-summary so the user doesn't see a stale "Wheelstop"
         // row after the keepalive service stops. The per-service FGS notifs
         // are auto-removed by the framework when their service stops; only
         // the summary (posted via NotificationManager.notify) needs an
@@ -291,10 +291,10 @@ class DaemonKeepaliveService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 SUMMARY_CHANNEL_ID,
-                "Overdrive Status",
+                "Wheelstop Status",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Combined status row for Overdrive's background services"
+                description = "Combined status row for Wheelstop's background services"
                 setShowBadge(false)
             }
             val manager = getSystemService(NotificationManager::class.java)
@@ -339,8 +339,8 @@ class DaemonKeepaliveService : Service() {
             Notification.Builder(this)
         }
         val notification = builder
-            .setContentTitle(getString(R.string.overdrive_status_summary_title))
-            .setContentText(getString(R.string.overdrive_status_summary_text))
+            .setContentTitle(getString(R.string.wheelstop_status_summary_title))
+            .setContentText(getString(R.string.wheelstop_status_summary_text))
             .setSmallIcon(R.drawable.ic_sentry)
             .setContentIntent(pendingIntent)
             .setOngoing(true)

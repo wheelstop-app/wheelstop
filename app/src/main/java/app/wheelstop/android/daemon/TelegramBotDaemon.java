@@ -1775,7 +1775,7 @@ public class TelegramBotDaemon {
     // 2-thread pool so two notifyTunnel calls can race in the post-update
     // window: both peek the hint file present, both bypass the throttle,
     // both consume the hint via consumePostUpdateHint() (which delete()s
-    // the file). First call sends the "Overdrive updated to vX.Y" message,
+    // the file). First call sends the "Wheelstop updated to vX.Y" message,
     // second call sees postUpdateVersion=null and sends a generic "URL
     // changed" — TWO user-facing notifications instead of one. Locking the
     // peek+throttle+consume+send+stamp sequence under one mutex makes the

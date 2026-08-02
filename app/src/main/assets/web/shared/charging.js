@@ -1,5 +1,5 @@
 /**
- * OverDrive - Charging Analytics Module
+ * Wheelstop - Charging Analytics Module
  *
  * Mirrors the Trips pattern (trips.js): a session-card list + a per-session
  * detail drill-in, plus a stats tab with hand-rolled Canvas2D charts.

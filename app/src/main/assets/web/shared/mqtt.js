@@ -1,5 +1,5 @@
 /**
- * OverDrive - MQTT Connections Module
+ * Wheelstop - MQTT Connections Module
  * Manages multiple MQTT broker connections, configuration, and live status display.
  */
 

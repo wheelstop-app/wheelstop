@@ -240,7 +240,7 @@
       "error": "⚠️ Erro: {0}"
     },
     "help": {
-      "text": "📖 *Comandos*\n*OverDrive {0}*\n\n*Vigilância*\n`/start` - Iniciar vigilância\n`/stop` - Parar vigilância\n`/status` - Status do sistema\n\n*Eventos*\n`/events [horas] [página]` - Listar gravações\n`/download <file>` - Baixar vídeo\n\n*Daemons*\n`/daemons` - Listar todos os daemons\n`/daemon <name>  start|stop` - Iniciar/Parar daemon\n\n*Sistema*\n`/url` - URL do túnel\n`/update` - Verificar atualizações do app\n`/backup` - Exportar backup das configurações\n`/backup trips` - Backup incluindo histórico de viagens\n`/help` - Esta mensagem"
+      "text": "📖 *Comandos*\n*Wheelstop {0}*\n\n*Vigilância*\n`/start` - Iniciar vigilância\n`/stop` - Parar vigilância\n`/status` - Status do sistema\n\n*Eventos*\n`/events [horas] [página]` - Listar gravações\n`/download <file>` - Baixar vídeo\n\n*Daemons*\n`/daemons` - Listar todos os daemons\n`/daemon <name>  start|stop` - Iniciar/Parar daemon\n\n*Sistema*\n`/url` - URL do túnel\n`/update` - Verificar atualizações do app\n`/backup` - Exportar backup das configurações\n`/backup trips` - Backup incluindo histórico de viagens\n`/help` - Esta mensagem"
     },
     "surveillance": {
       "started": "✅ Vigilância iniciada",
@@ -300,7 +300,7 @@
       "service_unreachable": "O daemon da câmera pode não estar em execução. Tente '/daemon camera start'",
       "check_failed": "⚠️ A verificação da atualização falhou: {0}",
       "switch_alpha_all_button": "📚 Mudar para Alfa (todas as versões)",
-      "up_to_date": "✅ *Atualizado*\n_OverDrive {0} · Braveheart_",
+      "up_to_date": "✅ *Atualizado*\n_Wheelstop {0} · Braveheart_",
       "available": "⬆️ *Atualização disponível* _(Braveheart)_\n\n*Atual:* {0}\n*Última:* {1}\n\n_Instalação leva cerca de 2 minutos. O bot irá reiniciar e enviar uma nova URL do túnel ao terminar._",
       "available_with_notes": "⬆️ *Atualização disponível* _(Braveheart)_\n\n*Atual:* {0}\n*Última:* {1}\n\n*Notas de lançamento:*\n{2}\n\n_Instalação leva cerca de 2 minutos. O bot irá reiniciar e enviar uma nova URL do túnel ao terminar._",
       "install_now_button": "🔄 Instalar Agora",
@@ -322,24 +322,24 @@
       "installing": "⏳ *Instalando atualização…*\n\nOs daemons serão parados, o APK será instalado e o dispositivo será reiniciado. Esse bot será silencioso por cerca de 2 minutos. Uma nova mensagem de URL do túnel chegará quando estiver online.",
       "install_service_unreachable": "⚠️ Não foi possível iniciar a instalação porque o daemon da câmera está inacessível.",
       "install_rejected": "⚠️ Instalação rejeitada: {0}",
-      "install_failed": "⚠️ *Overdrive update falhou*\nO dispositivo ainda está na versão anterior.\nMotivo: {0}",
+      "install_failed": "⚠️ *Wheelstop update falhou*\nO dispositivo ainda está na versão anterior.\nMotivo: {0}",
       "unknown_reason": "desconhecido (ver unidade de cabeça)",
       "installed": "🔄 *Sobrecarga atualizada para {0}*",
       "installed_new_tunnel": "🔄 *Sobrecarga atualizada para {0}*\nNovo túnel URL:\n{1}\n\n_O link cloudflared rotaciona após cada instalação._",
       "installed_tunnel_online": "🔄 *Sobrecarga atualizada para {0}*\nTúnel de volta online:\n{1}"
     },
     "backup": {
-      "restore_unavailable": "i *Restauração não está disponível através do Telegram. U\n\nAbra o Overdrive na unidade principal ou no aplicativo, vá em *Configurações → Fazer backup e restaurar* e selecione o arquivo de backup. O backup só pode ser restaurado no mesmo dispositivo e requer confirmação lá.",
+      "restore_unavailable": "i *Restauração não está disponível através do Telegram. U\n\nAbra o Wheelstop na unidade principal ou no aplicativo, vá em *Configurações → Fazer backup e restaurar* e selecione o arquivo de backup. O backup só pode ser restaurado no mesmo dispositivo e requer confirmação lá.",
       "building_with_trips": "💾 Fazendo backup com configurações e histórico de trip…",
       "building_settings": "💾 Fazendo backup das configurações…",
       "service_unreachable": "⚠️ Não foi possível conectar ao serviço de backup.\n\nO daemon da câmera pode não estar em execução. Tente '/daemon camera start'.",
       "failed": "⚠️ Backup falhou: {0}",
       "no_data": "⚠️ O backup não retornou dados.",
       "write_failed": "⚠️ Não foi possível escrever o arquivo de backup: {0}",
-      "document_settings": "💾 Overdrive settings backup\n\n⚠️ Este arquivo contém credenciais e a chave do dispositivo. Guarde sua privacidade. Restaure na mesma unidade de cabeça em Configurações → Backup e Restauração.",
-      "document_settings_version": "💾 Backup das configurações do Overdrive · {0}\n\n⚠️ Este arquivo contém credenciais e a chave do dispositivo. Guarde sua privacidade. Restaure na mesma unidade de cabeça em Configurações → Backup e Restauração.",
-      "document_with_trips": "💾 Backup Overdrive (configurações + histórico de percursões: {0})\n\n⚠️ Este arquivo contém credenciais, a chave do dispositivo e o histórico de localização. Guarde sua privacidade. Restaure na mesma unidade de cabeça em Configurações → Backup e Restauração.",
-      "document_with_trips_version": "💾 Backup no Overdrive (configurações + histórico de percursões: {0}) · {1}\n\n⚠️ Este arquivo contém credenciais, a chave do dispositivo e histórico de localização. Guarde sua privacidade. Restaure na mesma unidade de cabeça em Configurações → Backup e Restauração.",
+      "document_settings": "💾 Wheelstop settings backup\n\n⚠️ Este arquivo contém credenciais e a chave do dispositivo. Guarde sua privacidade. Restaure na mesma unidade de cabeça em Configurações → Backup e Restauração.",
+      "document_settings_version": "💾 Backup das configurações do Wheelstop · {0}\n\n⚠️ Este arquivo contém credenciais e a chave do dispositivo. Guarde sua privacidade. Restaure na mesma unidade de cabeça em Configurações → Backup e Restauração.",
+      "document_with_trips": "💾 Backup Wheelstop (configurações + histórico de percursões: {0})\n\n⚠️ Este arquivo contém credenciais, a chave do dispositivo e o histórico de localização. Guarde sua privacidade. Restaure na mesma unidade de cabeça em Configurações → Backup e Restauração.",
+      "document_with_trips_version": "💾 Backup no Wheelstop (configurações + histórico de percursões: {0}) · {1}\n\n⚠️ Este arquivo contém credenciais, a chave do dispositivo e histórico de localização. Guarde sua privacidade. Restaure na mesma unidade de cabeça em Configurações → Backup e Restauração.",
       "upload_failed": "⚠️ Não foi possível carregar o arquivo de backup no Telegram."
     },
     "sendlog": {

@@ -64,7 +64,7 @@ object LanguagePickerDialog {
         val rv = view.findViewById<RecyclerView>(R.id.rvLanguages)
         rv.layoutManager = LinearLayoutManager(context)
 
-        val dialog = BottomSheetDialog(context, R.style.Theme_Overdrive_M3_BottomSheet).apply {
+        val dialog = BottomSheetDialog(context, R.style.Theme_Wheelstop_M3_BottomSheet).apply {
             setContentView(view)
             setCancelable(true)
         }

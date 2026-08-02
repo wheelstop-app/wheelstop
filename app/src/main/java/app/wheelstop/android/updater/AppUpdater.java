@@ -1608,7 +1608,7 @@ public class AppUpdater {
         // Delete the Telegram post-update hint planted at install-time (it's
         // written unconditionally BEFORE pm install in handleInstallUpdate).
         // On FAILURE it would otherwise survive, and the reborn Telegram bot's
-        // consumePostUpdateHint() would send a FALSE "Overdrive updated to X"
+        // consumePostUpdateHint() would send a FALSE "Wheelstop updated to X"
         // confirmation for an install that never landed. Remove it so a failed
         // Telegram-triggered install stays silent on the SUCCESS channel (the
         // failure is instead surfaced via the FAILURE hint planted just above,
@@ -1642,7 +1642,7 @@ public class AppUpdater {
         // Clear any stale FAILURE hint from a PRIOR failed install so the reborn
         // bot doesn't send a failure message on top of this success. (The
         // success hint is intentionally KEPT here so notifyTunnel frames the
-        // "Overdrive updated to X" message.)
+        // "Wheelstop updated to X" message.)
         script.append("  rm -f ").append(UpdateLifecycle.TELEGRAM_INSTALL_FAILED_HINT_FILE).append("\n");
         script.append("fi\n");
         // Step 5: relaunch. Runs in both success and failure cases so the user

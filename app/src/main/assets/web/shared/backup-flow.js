@@ -181,7 +181,7 @@
             model = (m.deviceModel || '').replace(/[^a-zA-Z0-9._-]/g, '');
         } catch (e) {}
         var stamp = new Date().toISOString().slice(0, 10);
-        return 'overdrive-backup' + (model ? '-' + model : '') + (ver ? '-' + ver : '') + '-' + stamp + '.json';
+        return 'wheelstop-backup' + (model ? '-' + model : '') + (ver ? '-' + ver : '') + '-' + stamp + '.json';
     }
 
     // Blob download — supported on the Chrome 58 head-unit WebView.

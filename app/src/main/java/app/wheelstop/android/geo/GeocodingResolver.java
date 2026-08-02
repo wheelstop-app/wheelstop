@@ -57,7 +57,7 @@ public final class GeocodingResolver {
 
     /** OpenStreetMap-friendly UA string. Uses build-time version. */
     private static final String USER_AGENT_TEMPLATE =
-            "OverDrive/%s (https://github.com/wheelstop-app/wheelstop)";
+            "Wheelstop/%s (https://github.com/wheelstop-app/wheelstop)";
 
     private static final String NOMINATIM_DEFAULT =
             "https://nominatim.openstreetmap.org";

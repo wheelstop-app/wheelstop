@@ -722,14 +722,14 @@ Questa azione non puo essere annullata.</string>
     <string name="status_overlay_notif_title">Stato Wheelstop</string>
     <string name="status_overlay_notif_text">Overlay di stato attivo</string>
     <!-- DaemonKeepaliveService persistent notification (foreground service)
-         and the group-summary row that collapses Overdrive's three FGS
+         and the group-summary row that collapses Wheelstop's three FGS
          notifications into one shade entry. The summary text is intentionally
          generic so it stays accurate whether all three services are running
          or only the keepalive survived an OOM respawn. -->
     <string name="daemon_keepalive_notif_title">Wheelstop Attivo</string>
     <string name="daemon_keepalive_notif_text">Monitoraggio dei sistemi dei veicoli</string>
-    <string name="overdrive_status_summary_title">Wheelstop</string>
-    <string name="overdrive_status_summary_text">Servizi in background in esecuzione</string>
+    <string name="wheelstop_status_summary_title">Wheelstop</string>
+    <string name="wheelstop_status_summary_text">Servizi in background in esecuzione</string>
     <!-- ============================================================== -->
     <!-- M3 Revamp: navigation rail + settings sub-rail + theme picker  -->
     <!-- ============================================================== -->
@@ -999,7 +999,7 @@ Questa azione non puo essere annullata.</string>
     <string name="settings_privacy_storage_count_format_plural">%1$d clip</string>
     <string name="settings_privacy_reset_subtitle">Scegli categorie: registrazioni, eventi, configurazioni daemon, telemetria cache...</string>
     <!-- Settings → Security pane copy + PIN unlock screen.
-         The lock guards the OverDrive UI only. Cam daemon, AccSentry,
+         The lock guards the Wheelstop UI only. Cam daemon, AccSentry,
          surveillance, recording, Telegram alerts, status overlay, and the
          deterrent screen all run independently regardless of this state. -->
     <string name="settings_security_title">Sicurezza</string>

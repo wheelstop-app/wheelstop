@@ -22,7 +22,7 @@
 
     <ImageView
         android:id="@+id/ivResultIcon"
-        style="@style/Widget.Overdrive.NavRow.LeadingIcon"
+        style="@style/Widget.Wheelstop.NavRow.LeadingIcon"
         android:layout_marginEnd="14dp"
         android:contentDescription="@null"
         android:src="@drawable/ic_location_pin"
@@ -40,7 +40,7 @@
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:singleLine="true"
-            android:textAppearance="@style/TextAppearance.Overdrive.NavRow.Title"
+            android:textAppearance="@style/TextAppearance.Wheelstop.NavRow.Title"
             tools:text="Changi Airport" />
 
         <TextView
@@ -50,7 +50,7 @@
             android:layout_marginTop="1dp"
             android:ellipsize="end"
             android:singleLine="true"
-            android:textAppearance="@style/TextAppearance.Overdrive.NavRow.Subtitle"
+            android:textAppearance="@style/TextAppearance.Wheelstop.NavRow.Subtitle"
             android:visibility="gone"
             tools:text="Airport Boulevard, Singapore"
             tools:visibility="visible" />

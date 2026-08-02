@@ -240,7 +240,7 @@
       "error": "⚠️ Error: {0}"
     },
     "help": {
-      "text": "📖 *Commands*\n_OverDrive {0}_\n\n*Surveillance*\n`/start` - Start surveillance\n`/stop` - Stop surveillance\n`/status` - System status\n\n*Events*\n`/events [hours] [page]` - List recordings\n`/download <file>` - Download video\n\n*Daemons*\n`/daemons` - List all daemons\n`/daemon <name> start|stop`\n\n*System*\n`/url` - Tunnel URL\n`/update` - Check for app update\n`/backup` - Export settings backup\n`/backup trips` - Backup incl. trip history\n`/help` - This message"
+      "text": "📖 *Commands*\n_Wheelstop {0}_\n\n*Surveillance*\n`/start` - Start surveillance\n`/stop` - Stop surveillance\n`/status` - System status\n\n*Events*\n`/events [hours] [page]` - List recordings\n`/download <file>` - Download video\n\n*Daemons*\n`/daemons` - List all daemons\n`/daemon <name> start|stop`\n\n*System*\n`/url` - Tunnel URL\n`/update` - Check for app update\n`/backup` - Export settings backup\n`/backup trips` - Backup incl. trip history\n`/help` - This message"
     },
     "surveillance": {
       "started": "✅ Surveillance started",
@@ -300,7 +300,7 @@
       "service_unreachable": "⚠️ Could not reach the update service.\n\nThe camera daemon may not be running. Try `/daemon camera start`.",
       "check_failed": "⚠️ Update check failed: {0}",
       "switch_alpha_all_button": "📚 Switch to Alpha (all versions)",
-      "up_to_date": "✅ *Up to date*\n_OverDrive {0} · Braveheart_",
+      "up_to_date": "✅ *Up to date*\n_Wheelstop {0} · Braveheart_",
       "available": "⬆️ *Update available* _(Braveheart)_\n\n*Current:* {0}\n*Latest:* {1}\n\n_Installation takes about 2 minutes. The bot will restart and send a new tunnel URL when it finishes._",
       "available_with_notes": "⬆️ *Update available* _(Braveheart)_\n\n*Current:* {0}\n*Latest:* {1}\n\n*Release notes:*\n{2}\n\n_Installation takes about 2 minutes. The bot will restart and send a new tunnel URL when it finishes._",
       "install_now_button": "🔄 Install Now",
@@ -322,24 +322,24 @@
       "installing": "⏳ *Installing update…*\n\nThe daemons will stop, the APK will be installed, and the device will restart. This bot will be silent for about 2 minutes. A new tunnel URL message will arrive when it is back online.",
       "install_service_unreachable": "⚠️ Could not start the installation because the camera daemon is unreachable.",
       "install_rejected": "⚠️ Installation rejected: {0}",
-      "install_failed": "⚠️ *Overdrive update failed*\nThe device is still on the previous version.\nReason: {0}",
+      "install_failed": "⚠️ *Wheelstop update failed*\nThe device is still on the previous version.\nReason: {0}",
       "unknown_reason": "unknown (see head unit)",
-      "installed": "🔄 *Overdrive updated to {0}*",
-      "installed_new_tunnel": "🔄 *Overdrive updated to {0}*\nNew tunnel URL:\n{1}\n\n_The cloudflared link rotates after every install._",
-      "installed_tunnel_online": "🔄 *Overdrive updated to {0}*\nTunnel back online:\n{1}"
+      "installed": "🔄 *Wheelstop updated to {0}*",
+      "installed_new_tunnel": "🔄 *Wheelstop updated to {0}*\nNew tunnel URL:\n{1}\n\n_The cloudflared link rotates after every install._",
+      "installed_tunnel_online": "🔄 *Wheelstop updated to {0}*\nTunnel back online:\n{1}"
     },
     "backup": {
-      "restore_unavailable": "ℹ️ *Restore is not available through Telegram.*\n\nOpen Overdrive on the head unit or in the app, then go to *Settings → Backup & Restore* and select the backup file. Backups can only be restored on the same device and require confirmation there.",
+      "restore_unavailable": "ℹ️ *Restore is not available through Telegram.*\n\nOpen Wheelstop on the head unit or in the app, then go to *Settings → Backup & Restore* and select the backup file. Backups can only be restored on the same device and require confirmation there.",
       "building_with_trips": "💾 Building backup with settings and trip history…",
       "building_settings": "💾 Building settings backup…",
       "service_unreachable": "⚠️ Could not reach the backup service.\n\nThe camera daemon may not be running. Try `/daemon camera start`.",
       "failed": "⚠️ Backup failed: {0}",
       "no_data": "⚠️ The backup returned no data.",
       "write_failed": "⚠️ Could not write the backup file: {0}",
-      "document_settings": "💾 Overdrive settings backup\n\n⚠️ This file contains credentials and the device key. Keep it private. Restore it on this same head unit from Settings → Backup & Restore.",
-      "document_settings_version": "💾 Overdrive settings backup · {0}\n\n⚠️ This file contains credentials and the device key. Keep it private. Restore it on this same head unit from Settings → Backup & Restore.",
-      "document_with_trips": "💾 Overdrive backup (settings + trip history: {0})\n\n⚠️ This file contains credentials, the device key, and location history. Keep it private. Restore it on this same head unit from Settings → Backup & Restore.",
-      "document_with_trips_version": "💾 Overdrive backup (settings + trip history: {0}) · {1}\n\n⚠️ This file contains credentials, the device key, and location history. Keep it private. Restore it on this same head unit from Settings → Backup & Restore.",
+      "document_settings": "💾 Wheelstop settings backup\n\n⚠️ This file contains credentials and the device key. Keep it private. Restore it on this same head unit from Settings → Backup & Restore.",
+      "document_settings_version": "💾 Wheelstop settings backup · {0}\n\n⚠️ This file contains credentials and the device key. Keep it private. Restore it on this same head unit from Settings → Backup & Restore.",
+      "document_with_trips": "💾 Wheelstop backup (settings + trip history: {0})\n\n⚠️ This file contains credentials, the device key, and location history. Keep it private. Restore it on this same head unit from Settings → Backup & Restore.",
+      "document_with_trips_version": "💾 Wheelstop backup (settings + trip history: {0}) · {1}\n\n⚠️ This file contains credentials, the device key, and location history. Keep it private. Restore it on this same head unit from Settings → Backup & Restore.",
       "upload_failed": "⚠️ Could not upload the backup file to Telegram."
     },
     "sendlog": {

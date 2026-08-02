@@ -367,7 +367,7 @@ class SettingsAboutFragment : Fragment() {
         val found = LinkedHashMap<String, File>()
         val dirs = listOf(
             publicBackupDir(),
-            File(android.os.Environment.getExternalStorageDirectory(), "Overdrive"),
+            File(android.os.Environment.getExternalStorageDirectory(), "Wheelstop"),
             android.os.Environment.getExternalStoragePublicDirectory(
                 android.os.Environment.DIRECTORY_DOWNLOADS)
         )
@@ -419,7 +419,7 @@ class SettingsAboutFragment : Fragment() {
             val bundle = resp?.optJSONObject("bundle")
             val ok = resp != null && resp.optBoolean("success", false) && bundle != null
             if (ok && !safAvailable(Intent.ACTION_CREATE_DOCUMENT)) {
-                // Direct path: write to /sdcard/Overdrive/backups/<name>.json.
+                // Direct path: write to /sdcard/Wheelstop/backups/<name>.json.
                 val name = suggestedBackupName(bundle)
                 val savedPath = writeBundleToPublicDir(bundle!!.toString(2), name)
                 mainHandler.post {
@@ -497,12 +497,12 @@ class SettingsAboutFragment : Fragment() {
 
     /**
      * Public directory where backups are written when SAF is unavailable:
-     * {@code /sdcard/Overdrive/backups}. Same external root the app already
+     * {@code /sdcard/Wheelstop/backups}. Same external root the app already
      * uses for recordings/trips, so it's user-reachable from the BYD file
      * manager. Created on demand.
      */
     private fun publicBackupDir(): File {
-        val base = File(android.os.Environment.getExternalStorageDirectory(), "Overdrive")
+        val base = File(android.os.Environment.getExternalStorageDirectory(), "Wheelstop")
         val dir = File(base, "backups")
         if (!dir.exists()) dir.mkdirs()
         return dir
@@ -517,7 +517,7 @@ class SettingsAboutFragment : Fragment() {
             val dir = publicBackupDir()
             if (!dir.exists()) return null
             val safeName = name.replace(Regex("[^A-Za-z0-9._-]"), "_")
-                .ifEmpty { "overdrive-backup.json" }
+                .ifEmpty { "wheelstop-backup.json" }
             val out = File(dir, safeName)
             FileOutputStream(out).use { it.write(text.toByteArray(Charsets.UTF_8)) }
             out.absolutePath
@@ -531,7 +531,7 @@ class SettingsAboutFragment : Fragment() {
             val m = bundle?.optJSONObject("manifest")
             val ver = (m?.optString("appVersion") ?: "").replace(Regex("[^A-Za-z0-9._-]"), "")
             val model = (m?.optString("deviceModel") ?: "").replace(Regex("[^A-Za-z0-9._-]"), "")
-            val parts = listOfNotNull("overdrive-backup",
+            val parts = listOfNotNull("wheelstop-backup",
                 model.ifEmpty { null }, ver.ifEmpty { null })
             parts.joinToString("-") + ".json"
         } catch (e: Exception) {

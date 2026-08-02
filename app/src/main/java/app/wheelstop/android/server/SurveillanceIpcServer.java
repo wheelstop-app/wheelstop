@@ -2152,7 +2152,7 @@ public class SurveillanceIpcServer implements Runnable {
         // onError/onSuccess/crash handlers own it).
         try {
             // Plant the Telegram post-update hint so the new process's first
-            // notifyTunnel handler frames the message as "Overdrive updated to X".
+            // notifyTunnel handler frames the message as "Wheelstop updated to X".
             // Best-effort: failure here just falls back to the generic "URL
             // changed" copy. We're already in the daemon process (UID 2000), and
             // /data/local/tmp/ is world-writable for shell, so a direct
@@ -2163,7 +2163,7 @@ public class SurveillanceIpcServer implements Runnable {
                 // resolved label is non-canonical (e.g. the literal "unknown"
                 // sentinel from a version-less APK on a bare tag), fall back to
                 // the running build's BuildConfig identity so the Telegram
-                // message never reads "Overdrive updated to unknown".
+                // message never reads "Wheelstop updated to unknown".
                 String hintVersion =
                         app.wheelstop.android.updater.AppUpdater.channelOfLabel(versionRef[0]) != null
                                 ? versionRef[0]
@@ -2288,7 +2288,7 @@ public class SurveillanceIpcServer implements Runnable {
      * deletes the success hint and surfaces the failure) never runs. That left
      * two defects on this path: (1) the stale success hint persisted for up to
      * 24h, so the NEXT unrelated tunnel rotation made the reborn bot send a
-     * FALSE "Overdrive updated to X"; (2) the Telegram owner was never told the
+     * FALSE "Wheelstop updated to X"; (2) the Telegram owner was never told the
      * install failed (the app/web pollers see phase=error, but the bot already
      * replied "scheduled" and waits silently for a hint). Fix both here:
      *   1. Delete the success hint so it can't later fire a false success.
