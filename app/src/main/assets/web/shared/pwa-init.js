@@ -308,7 +308,7 @@
 
     // Expose minimal API for the settings page to drive permission prompts
     // and explicit (re)subscribe flow.
-    window.OverdrivePush = {
+    window.WheelstopPush = {
         async requestAndSubscribe() {
             // Permission prompt happens OUTSIDE the serial chain — it's a
             // user-gesture-bound API and queueing it would lose the

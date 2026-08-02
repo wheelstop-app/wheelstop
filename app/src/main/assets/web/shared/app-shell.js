@@ -167,7 +167,7 @@
         // fuelBarFill) are read by core.js, vehicle-control.js, performance.js
         // — must match the legacy DOM. Battery+charging state moved off the
         // SVG bar onto the GLB body's emissive channel; core.js calls
-        // OverdriveAppShell.setSoc / setCharging instead of writing rect widths.
+        // WheelstopAppShell.setSoc / setCharging instead of writing rect widths.
         var footer = ''
             + '<div class="sidebar-footer">'
             +   '<div class="status-card">'
@@ -753,7 +753,7 @@
             try {
                 var ev;
                 if (typeof CustomEvent === 'function') {
-                    ev = new CustomEvent('overdrive:vehicle-changed', {
+                    ev = new CustomEvent('wheelstop:vehicle-changed', {
                         detail: {
                             modelId: modelId,  color: hexColor,
                             prevModelId: prevModel, prevColor: prevColor
@@ -761,7 +761,7 @@
                     });
                 } else {
                     ev = document.createEvent('CustomEvent');
-                    ev.initCustomEvent('overdrive:vehicle-changed', true, true, {
+                    ev.initCustomEvent('wheelstop:vehicle-changed', true, true, {
                         modelId: modelId,  color: hexColor,
                         prevModelId: prevModel, prevColor: prevColor
                     });
@@ -891,11 +891,11 @@
         if (currentGroup) groups.push(currentGroup);
 
         function readState(slug) {
-            try { return localStorage.getItem('overdrive.navGroup.' + slug) === '1'; }
+            try { return localStorage.getItem('wheelstop.navGroup.' + slug) === '1'; }
             catch (e) { return false; }
         }
         function writeState(slug, collapsed) {
-            try { localStorage.setItem('overdrive.navGroup.' + slug, collapsed ? '1' : '0'); }
+            try { localStorage.setItem('wheelstop.navGroup.' + slug, collapsed ? '1' : '0'); }
             catch (e) { /* ignore */ }
         }
 
@@ -977,17 +977,17 @@
 
     // Re-apply on demand (for pages that change the selection live, like
     // vehicle-control.html itself). Pages can call:
-    //     window.OverdriveAppShell.refreshVehicle()
+    //     window.WheelstopAppShell.refreshVehicle()
     // after they save a new model/colour to /api/models/selected.
-    window.OverdriveAppShell = window.OverdriveAppShell || {};
-    window.OverdriveAppShell.refreshVehicle = applyVehicleSelection;
+    window.WheelstopAppShell = window.WheelstopAppShell || {};
+    window.WheelstopAppShell.refreshVehicle = applyVehicleSelection;
 
     // Mount an additional OverdriveEvCard3D on a custom canvas (e.g. the
     // Live View camera selector). Reuses the sidebar's vendor download —
     // ev-card-3d.js is idempotent and adopts already-loaded THREE — and
     // tracks whatever (model, colour) the user has selected, replaying
     // the latest values once the renderer module is in place.
-    window.OverdriveAppShell.mountVehicleCanvas = function (canvasEl, opts) {
+    window.WheelstopAppShell.mountVehicleCanvas = function (canvasEl, opts) {
         if (!canvasEl) return null;
         var view = 'side';
         if (opts && opts.view === 'top') view = 'top';
@@ -1141,7 +1141,7 @@
         if (pct <= 50) return 'warning';
         return 'healthy';
     }
-    window.OverdriveAppShell.setSoc = function (pct) {
+    window.WheelstopAppShell.setSoc = function (pct) {
         var fill = document.getElementById('evBatteryFill');
         var bar  = document.getElementById('evBatteryBar');
         var clamped = Math.max(0, Math.min(100, pct));
@@ -1161,7 +1161,7 @@
         if (kw <= 150)   return 1.0;              // DC hyper
         return 0.8;                                // ultra-rapid (>150 kW)
     }
-    window.OverdriveAppShell.setCharging = function (on, powerKw) {
+    window.WheelstopAppShell.setCharging = function (on, powerKw) {
         // The .charging class on the EV card root gates the CSS keyframes
         // (battery sweep + bolt icon scale-in). core.js already toggles
         // this class before calling us — forwarding here keeps the
@@ -1181,7 +1181,7 @@
     // update-flow.js's "Check for Updates" link). The function is
     // idempotent — already-wired headers skip the click bind, and every
     // run re-applies the persisted collapsed state to current members.
-    window.OverdriveAppShell.rewireNavGroups = function () {
+    window.WheelstopAppShell.rewireNavGroups = function () {
         var aside = wireGroupCollapse._lastAside ||
                     document.getElementById('sidebar') ||
                     document.querySelector('.sidebar');

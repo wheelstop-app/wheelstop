@@ -1937,13 +1937,13 @@
         async function removeDevice(id, isThisDevice) {
             if (!confirm(BYD.i18n.t('notif.remove_device_confirm'))) return;
             try {
-                if (isThisDevice && window.OverdrivePush) {
+                if (isThisDevice && window.WheelstopPush) {
                     // Full unsubscribe path: clears the browser-side push
                     // manager subscription AND the server row. Without this,
                     // removing your own row used to leave the browser
                     // holding a live subscription that any subsequent
                     // /api/push/subscribe POST would resurrect server-side.
-                    await window.OverdrivePush.unsubscribe();
+                    await window.WheelstopPush.unsubscribe();
                     await loadSubscriptions();
                 } else {
                     // Peer-device removal: server-only is correct (we can't
@@ -1985,12 +1985,12 @@
         if (enableBtnEl) enableBtnEl.addEventListener('click', async function () {
             hideStatus();
             if (!ORIGIN_OK) return;
-            if (!window.OverdrivePush) {
+            if (!window.WheelstopPush) {
                 showStatus('error', BYD.i18n.t('notif.pwa_not_loaded'));
                 return;
             }
             try {
-                var result = await window.OverdrivePush.requestAndSubscribe();
+                var result = await window.WheelstopPush.requestAndSubscribe();
                 if (!result.ok) {
                     // subscribe-failed is the only reason that carries a
                     // browser-level DOMException — Samsung Internet without
@@ -2026,7 +2026,7 @@
         if (disableBtnEl) disableBtnEl.addEventListener('click', async function () {
             hideStatus();
             try {
-                if (window.OverdrivePush) await window.OverdrivePush.unsubscribe();
+                if (window.WheelstopPush) await window.WheelstopPush.unsubscribe();
                 state.currentSubscriptionId = null;
                 // Reset per-device prefs so the category toggles revert to the
                 // registry default paint and the min-importance control shows

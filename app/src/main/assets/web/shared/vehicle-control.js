@@ -195,8 +195,8 @@ var VC = {
         // to re-fetch so the silhouette + paint colour update instantly,
         // without waiting for a page navigation.
         try {
-            if (window.OverdriveAppShell && typeof window.OverdriveAppShell.refreshVehicle === 'function') {
-                window.OverdriveAppShell.refreshVehicle();
+            if (window.WheelstopAppShell && typeof window.WheelstopAppShell.refreshVehicle === 'function') {
+                window.WheelstopAppShell.refreshVehicle();
             }
         } catch(e) {}
     },

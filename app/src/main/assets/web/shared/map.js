@@ -113,14 +113,14 @@ BYD.map = {
      * DOM contents we returned).
      *
      * If the user's vehicle selection changes (e.g. they pick a new
-     * model on vehicle-control.html and call OverdriveAppShell.refresh
+     * model on vehicle-control.html and call WheelstopAppShell.refresh
      * Vehicle()), app-shell.js fans the change out to all aux instances
      * — so the marker stays in sync without us re-mounting.
      */
     _mountCarIcon3d() {
         const canvas = document.getElementById('carIconCanvas');
         if (!canvas) return;
-        const shell = window.OverdriveAppShell;
+        const shell = window.WheelstopAppShell;
         if (!shell || typeof shell.mountVehicleCanvas !== 'function') {
             // Shell loaded after map.init — listen for the ready event
             // so we still get the 3D render once the API exists.
