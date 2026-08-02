@@ -42,11 +42,11 @@
             padding: 22px 16px;
             border: 1px dashed var(--brand-primary);
             border-radius: 14px;
-            background: rgba(0, 212, 170, 0.06);
+            background: rgba(var(--primary-rgb), 0.06);
             text-align: center;
         }
         .km-capture > * + * { margin-top: 6px; }
-        .km-capture.armed { border-style: solid; background: rgba(0, 212, 170, 0.12); }
+        .km-capture.armed { border-style: solid; background: rgba(var(--primary-rgb), 0.12); }
         .km-capture .km-keycode {
             font-family: 'JetBrains Mono', monospace;
             font-size: 40px;
@@ -80,7 +80,7 @@
             min-width: 46px;
             text-align: center;
             padding: 6px 8px;
-            background: rgba(0, 212, 170, 0.08);
+            background: rgba(var(--primary-rgb), 0.08);
             border-radius: 8px;
         }
         .km-binding .km-meta { flex: 1; min-width: 0; }

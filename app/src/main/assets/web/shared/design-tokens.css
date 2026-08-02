@@ -10,6 +10,7 @@
  */
 
 :root {
+    --primary-rgb: 255, 189, 88;
     --primary: #FFBD58;
     --on-primary: #5C3B00;
     --primary-container: #FCAB00;
@@ -96,13 +97,14 @@
     --text-secondary: var(--on-surface-variant);
     --text-muted: var(--outline);
     --brand-primary: var(--primary);
-    --brand-secondary: var(--tertiary);
+    --brand-secondary: var(--secondary);
     --success: var(--status-success);
     --warning: var(--status-warning);
     --danger: var(--status-danger);
 }
 
 :root[data-theme="light"] {
+    --primary-rgb: 125, 83, 0;
     --primary: #7D5300;
     --on-primary: #FFF0E1;
     --primary-container: #FCAB00;

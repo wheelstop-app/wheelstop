@@ -10,7 +10,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --brand-primary: #00D4AA;
+            --primary-rgb: 255, 189, 88;
+            --brand-primary: #FFBD58;
             --brand-secondary: #0EA5E9;
             --bg-base: #0F0F12;
             --bg-surface: #16161A;
@@ -28,6 +29,7 @@
            Android WebViewFragment sets [data-theme="light"] on every load
            when the app is in light mode. */
         :root[data-theme="light"] {
+            --primary-rgb: 125, 83, 0;
             --brand-primary: #7D5300;
             --brand-secondary: #755700;
             --bg-base: #F7FAF7;
@@ -143,7 +145,7 @@
         
         .form-input:focus {
             border-color: var(--brand-primary);
-            box-shadow: 0 0 0 3px rgba(0, 212, 170, 0.1);
+            box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.1);
         }
         
         .form-input.error {
@@ -190,7 +192,7 @@
         
         .btn-primary:hover {
             transform: translateY(-1px);
-            box-shadow: 0 4px 20px rgba(0, 212, 170, 0.3);
+            box-shadow: 0 4px 20px rgba(var(--primary-rgb), 0.3);
         }
         
         .btn-primary:disabled {

@@ -53,7 +53,7 @@ var CHARGING = {
     colors: {
         brand: '#0EA5E9',
         brandRgba: 'rgba(14, 165, 233, 0.22)',
-        accent: '#00D4AA',
+        accent: '#FFB020',
         amber: '#F59E0B',
         danger: '#EF4444',
         good: '#22C55E',

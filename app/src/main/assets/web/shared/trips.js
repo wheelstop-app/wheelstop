@@ -43,8 +43,8 @@ const TRIPS = {
     // the --chart-* CSS variables (same pattern as performance.js).
     // Brand and tier colours stay theme-independent.
     colors: {
-        brand: '#00D4AA',
-        brandRgba: 'rgba(0, 212, 170, 0.25)',
+        brand: '#FFB020',
+        brandRgba: 'rgba(255, 176, 32, 0.25)',
         accent: '#0EA5E9',
         danger: '#EF4444',
         warning: '#F59E0B',
@@ -1822,7 +1822,7 @@ const TRIPS = {
                         };
                         const tempLabels = { cold: BYD.i18n.t('trip.temp_label.cold'), mild: BYD.i18n.t('trip.temp_label.mild'), hot: BYD.i18n.t('trip.temp_label.hot') };
                         const styleLabels = { low: BYD.i18n.t('trip.style_label.low'), mid: BYD.i18n.t('trip.style_label.mid'), high: BYD.i18n.t('trip.style_label.high') };
-                        const speedColors = { city: 'rgba(99,102,241,0.15);color:#6366F1', suburban: 'rgba(0,212,170,0.15);color:var(--brand-primary)', highway: 'rgba(245,158,11,0.15);color:var(--warning)' };
+                        const speedColors = { city: 'rgba(99,102,241,0.15);color:#6366F1', suburban: 'rgba(var(--primary-rgb),0.15);color:var(--brand-primary)', highway: 'rgba(245,158,11,0.15);color:var(--warning)' };
                         const tempColors = { cold: 'rgba(14,165,233,0.15);color:#0EA5E9', mild: 'rgba(34,197,94,0.15);color:#22C55E', hot: 'rgba(239,68,68,0.15);color:var(--danger)' };
                         const styleColors = { low: 'rgba(34,197,94,0.15);color:#22C55E', mid: 'rgba(245,158,11,0.15);color:var(--warning)', high: 'rgba(239,68,68,0.15);color:var(--danger)' };
                         const neutralPill = 'rgba(148,163,184,0.18);color:var(--text-muted)';
@@ -3249,7 +3249,7 @@ const TRIPS = {
             ctx.beginPath();
             ctx.moveTo(x, pad.top);
             ctx.lineTo(x, pad.top + ch);
-            ctx.strokeStyle = 'rgba(0,212,170,0.6)';
+            ctx.strokeStyle = 'rgba(255,176,32,0.6)';
             ctx.lineWidth = 1.5;
             ctx.setLineDash([4, 4]);
             ctx.stroke();
@@ -3272,7 +3272,7 @@ const TRIPS = {
             ctx.beginPath();
             this._roundRectPath(ctx, tx, ty, tw, 70, 6);
             ctx.fill();
-            ctx.strokeStyle = 'rgba(0,212,170,0.3)';
+            ctx.strokeStyle = 'rgba(255,176,32,0.3)';
             ctx.lineWidth = 1;
             ctx.stroke();
 

@@ -221,7 +221,7 @@
         }
         .session-card:hover {
             background: var(--bg-elevated);
-            border-color: rgba(0,212,170,0.4);
+            border-color: rgba(var(--primary-rgb), 0.4);
             transform: translateY(-4px);
             box-shadow: 0 10px 30px var(--panel-overlay-bg-soft);
         }
@@ -255,21 +255,21 @@
         /* DC fast — electric blue. */
         .session-type-dc   { background: rgba(14,165,233,0.16);  color: #0EA5E9; border-color: rgba(14,165,233,0.35); }
         /* AC fast (wallbox) — teal. */
-        .session-type-fast { background: rgba(0,212,170,0.16);   color: #00D4AA; border-color: rgba(0,212,170,0.35); }
+        .session-type-fast { background: rgba(var(--primary-rgb), 0.16);   color: var(--primary); border-color: rgba(var(--primary-rgb), 0.35); }
         /* AC slow (trickle) — amber. */
         .session-type-slow { background: rgba(245,158,11,0.16);  color: #F59E0B; border-color: rgba(245,158,11,0.35); }
         .session-type-unk  { background: var(--bg-elevated);     color: var(--text-muted); }
         .session-date { font-size: 12px; color: var(--text-muted); flex: 0 0 auto; white-space: nowrap; }
         /* "Charging now" live badge for the open in-progress session. */
         .session-live { display: inline-flex; align-items: center; flex: 0 0 auto; white-space: nowrap;
-            font-size: 12px; font-weight: 600; color: #00D4AA; }
+            font-size: 12px; font-weight: 600; color: var(--primary); }
         .session-live > * + * { margin-left: 6px; }   /* dot → text (gap ignored on Chrome-58) */
-        .session-live-dot { width: 7px; height: 7px; border-radius: 50%; background: #00D4AA;
-            box-shadow: 0 0 0 0 rgba(0,212,170,0.6); animation: chgLivePulse 1.6s ease-out infinite; }
+        .session-live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--primary);
+            box-shadow: 0 0 0 0 rgba(var(--primary-rgb), 0.6); animation: chgLivePulse 1.6s ease-out infinite; }
         @keyframes chgLivePulse {
-            0%   { box-shadow: 0 0 0 0 rgba(0,212,170,0.55); }
-            70%  { box-shadow: 0 0 0 7px rgba(0,212,170,0); }
-            100% { box-shadow: 0 0 0 0 rgba(0,212,170,0); }
+            0%   { box-shadow: 0 0 0 0 rgba(var(--primary-rgb), 0.55); }
+            70%  { box-shadow: 0 0 0 7px rgba(var(--primary-rgb), 0); }
+            100% { box-shadow: 0 0 0 0 rgba(var(--primary-rgb), 0); }
         }
         /* Headline figures row: energy added (left) + cost (right), both prominent. */
         .session-figures { display: flex; align-items: baseline; justify-content: space-between; }

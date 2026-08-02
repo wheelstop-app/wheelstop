@@ -160,7 +160,7 @@
 .community-card-mine {
     border-left: 3px solid var(--brand-primary, #00d4aa);
     background-image: linear-gradient(90deg,
-        rgba(0, 212, 170, 0.09), rgba(0, 212, 170, 0) 140px);
+        rgba(var(--primary-rgb), 0.09), rgba(var(--primary-rgb), 0) 140px);
 }
 .community-badge {
     flex-shrink: 0;

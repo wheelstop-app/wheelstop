@@ -170,8 +170,8 @@ BYD.stream = {
         if (section && sectionMap[section]) {
             const el = document.getElementById(sectionMap[section]);
             if (el) {
-                el.style.fill = 'rgba(0, 212, 170, 0.15)';
-                el.style.stroke = 'rgba(0, 212, 170, 0.5)';
+                el.style.fill = 'rgba(255, 176, 32, 0.15)';
+                el.style.stroke = 'rgba(255, 176, 32, 0.5)';
             }
         }
         

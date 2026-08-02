@@ -1697,7 +1697,7 @@ BYD.automations = {
     createColourInput(data, defaultValue, eventListener) {
         const wrap = document.createElement('div');
         wrap.classList.add('input', 'colour-swatches');
-        const codes = (data.colourCodes != null && data.colourCodes.length) ? data.colourCodes : ['#00D4AA'];
+        const codes = (data.colourCodes != null && data.colourCodes.length) ? data.colourCodes : ['#FFB020'];
         const min = 1, max = codes.length;
         let current = (defaultValue != null && !isNaN(defaultValue)
             && defaultValue >= min && defaultValue <= max) ? parseInt(defaultValue, 10) : 1;

@@ -346,7 +346,7 @@ BYD.map = {
             [this.userPosition.lat, this.userPosition.lng],
             [this.carPosition.lat, this.carPosition.lng]
         ], {
-            color: '#00D4AA',
+            color: '#FFB020',
             weight: 3,
             opacity: 0.7,
             dashArray: '10, 10'

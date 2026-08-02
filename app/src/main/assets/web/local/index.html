@@ -234,11 +234,11 @@
             padding: 20px;
             background:
                 radial-gradient(80% 60% at 18% 12%,
-                    rgba(0, 212, 170, 0.16) 0%,
-                    rgba(0, 212, 170, 0.04) 40%,
+                    rgba(var(--primary-rgb), 0.16) 0%,
+                    rgba(var(--primary-rgb), 0.04) 40%,
                     transparent 70%),
                 radial-gradient(60% 40% at 50% 100%,
-                    rgba(0, 212, 170, 0.08) 0%,
+                    rgba(var(--primary-rgb), 0.08) 0%,
                     transparent 65%),
                 linear-gradient(135deg,
                     var(--bg-elevated) 0%,
@@ -355,7 +355,7 @@
             text-overflow: ellipsis;
         }
 
-        .dash-chip.good { color: var(--brand-primary); border-color: rgba(0, 212, 170, 0.35); }
+        .dash-chip.good { color: var(--brand-primary); border-color: rgba(var(--primary-rgb), 0.35); }
         .dash-chip.warn { color: #f59e0b; border-color: rgba(245, 158, 11, 0.35); }
 
         .dash-vehicle-canvas-wrap {
@@ -484,9 +484,9 @@
             transition: box-shadow 0.18s ease, transform 0.18s ease;
         }
         .dash-card-ghost {
-            outline: 2px dashed rgba(0, 212, 170, 0.5);
+            outline: 2px dashed rgba(var(--primary-rgb), 0.5);
             outline-offset: -4px;
-            background: rgba(0, 212, 170, 0.06);
+            background: rgba(var(--primary-rgb), 0.06);
             /* Hide ghost children — only the placeholder shape matters. */
         }
         .dash-card-ghost > * { visibility: hidden; }
@@ -575,8 +575,8 @@
         .dash-primary-btn:hover,
         .dash-secondary-btn:hover,
         .dash-command:hover {
-            background: rgba(0, 212, 170, 0.10);
-            border-color: rgba(0, 212, 170, 0.35);
+            background: rgba(var(--primary-rgb), 0.10);
+            border-color: rgba(var(--primary-rgb), 0.35);
             color: var(--brand-primary);
         }
 
