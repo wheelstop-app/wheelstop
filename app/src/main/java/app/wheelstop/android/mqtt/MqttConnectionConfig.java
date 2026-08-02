@@ -93,13 +93,9 @@ public class MqttConnectionConfig {
         this.name = "";
         this.brokerUrl = "";
         this.port = DEFAULT_PORT;
-        // Rebrand note: root changed from "overdrive/vehicle/telemetry" to
-        // "wheelstop/vehicle/telemetry". Existing connections that saved the old root under
-        // mqtt_connections.json will keep publishing there (fromJson() below only substitutes
-        // this default for brand-new/unset configs). On migration, either clear the old root's
-        // retained HA discovery messages (publish empty retained payloads) or leave them to
-        // expire so Home Assistant doesn't end up with stale duplicate entities under both
-        // "overdrive/..." and "wheelstop/..." roots. See migration runbook.
+        // Default telemetry root for a fresh install. Existing connections that
+        // saved a different root under mqtt_connections.json keep publishing there
+        // (fromJson() below only substitutes this default for brand-new/unset configs).
         this.topic = "wheelstop/vehicle/telemetry";
         this.clientId = "";
         this.username = "";

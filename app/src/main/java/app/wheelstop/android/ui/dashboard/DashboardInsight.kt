@@ -389,7 +389,7 @@ class DashboardInsightProvider(appContext: Context) {
     }
 
     companion object {
-        private const val PREFS_NAME = "overdrive_dashboard_insights"
+        private const val PREFS_NAME = "wheelstop_dashboard_insights"
         private const val KEY_DASHBOARD_SEEN_COUNT = "dashboard_seen_count"
     }
 }

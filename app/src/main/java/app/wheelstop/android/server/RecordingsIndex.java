@@ -34,7 +34,7 @@ import java.util.regex.Pattern;
  * reads. With ~1000 clips the request took ~2 minutes; with 5000+ it
  * was unusable.
  *
- * <p>Architecture: pure-Java H2 file at {@code /data/local/tmp/overdrive_recordings_h2}.
+ * <p>Architecture: pure-Java H2 file at {@code /data/local/tmp/wheelstop_recordings_h2}.
  * Same pattern as {@link app.wheelstop.android.trips.TripDatabase}: daemon UID
  * 2000 owns the file, app UID reads via the {@code /api/recordings} HTTP
  * surface (not direct JDBC). Cross-UID reads go through HTTP only —
@@ -78,7 +78,7 @@ public final class RecordingsIndex {
     private static final String TAG = "RecordingsIndex";
     private static final DaemonLogger logger = DaemonLogger.getInstance(TAG);
 
-    private static final String DB_PATH = "/data/local/tmp/overdrive_recordings_h2";
+    private static final String DB_PATH = "/data/local/tmp/wheelstop_recordings_h2";
     // DB_CLOSE_ON_EXIT=FALSE to avoid H2's JVM shutdown hook racing the
     // daemon close path. Same justification as TripDatabase — the orphaned
     // lock file would otherwise block the next CameraDaemon boot with
@@ -1270,10 +1270,9 @@ public final class RecordingsIndex {
                 // column is still NULL: any NULL row under '/storage/emulated/%' is
                 // classified as INTERNAL for filtering purposes. This is a query-time
                 // filter only — it has no bearing on which directories reconcile()
-                // scans on disk (see StorageManager.getAll*Dirs()) or on whether a
-                // legacy Overdrive/ file's index row survives reconcile(); that is
-                // handled separately by LegacyMediaMigration, which moves the legacy
-                // Overdrive/ roots to Wheelstop/ on first boot. The second, more
+                // scans on disk (see StorageManager.getAll*Dirs(), which enumerate
+                // only the Wheelstop/ roots — Wheelstop starts fresh and does not
+                // index recordings written by any other app). The second, more
                 // specific LIKE is redundant with the first (Wheelstop/ is itself
                 // under /storage/emulated/) and is kept only as inline documentation
                 // of the current internal base dir.

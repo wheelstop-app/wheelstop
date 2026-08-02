@@ -33,7 +33,7 @@ import java.io.File;
  *   <li><b>Stop</b> → stop the service + broadcast a stop the video activity honours.</li>
  * </ul>
  *
- * <p><b>File transport.</b> Library sounds live under {@code /data/local/tmp/.overdrive/audio},
+ * <p><b>File transport.</b> Library sounds live under {@code /data/local/tmp/.wheelstop/audio},
  * which the app UID (SELinux {@code untrusted_app}) cannot read directly — the locale /
  * device-id managers document the same cross-UID wall, and the app already reads daemon
  * files there only via a shell exec. So for a library file we pass its NAME and the app
@@ -50,7 +50,7 @@ public final class AudioPlaybackController {
     // Library dir whose files the app can't read directly (mirror of AudioApiHandler
     // / VehicleControlApiHandler). A path under here → stream by name; anything else
     // (e.g. /storage/emulated/0/Music/x.mp3) → the app opens it directly.
-    private static final String AUDIO_LIBRARY_DIR = "/data/local/tmp/.overdrive/audio";
+    private static final String AUDIO_LIBRARY_DIR = "/data/local/tmp/.wheelstop/audio";
 
     // Exported app-process components (see AndroidManifest). Our own package — the same
     // literal the Screen Deterrent / sidecars use in their `am` execs.

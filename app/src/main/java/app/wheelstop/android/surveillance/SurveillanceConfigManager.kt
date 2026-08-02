@@ -25,7 +25,7 @@ class SurveillanceConfigManager(
         private const val SHELL_CONFIG_PATH = "/data/local/tmp/sentry_config.json"
         
         // SOTA: Use unified config path
-        private const val UNIFIED_CONFIG_PATH = "/data/local/tmp/overdrive_config.json"
+        private const val UNIFIED_CONFIG_PATH = "/data/local/tmp/wheelstop_config.json"
         
         private fun getDefaultConfigFile(): File {
             val uid = Process.myUid()

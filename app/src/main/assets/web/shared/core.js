@@ -27,7 +27,7 @@ BYD.i18n = (function () {
         'nb', 'nl', 'ja', 'ko', 'th', 'vi', 'hi', 'tr', 'ru', 'ar'
     ];
     var DEFAULT_LANG = 'en';
-    var STORAGE_KEY = 'overdrive_locale';
+    var STORAGE_KEY = 'wheelstop_locale';
 
     // Right-to-left locales. Drives <html dir="rtl">. Arabic is the only RTL
     // language we ship; add he/fa/ur here if they're ever onboarded.

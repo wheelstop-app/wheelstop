@@ -8,7 +8,7 @@ import org.json.JSONObject;
  * Persistent configuration for Charging Analytics.
  *
  * <p>Stored in the {@code "chargingAnalytics"} section of
- * {@code /data/local/tmp/overdrive_config.json} via {@link UnifiedConfigManager}.
+ * {@code /data/local/tmp/wheelstop_config.json} via {@link UnifiedConfigManager}.
  *
  * <p><b>Rate/currency are NOT owned here.</b> Electricity rate and currency are
  * the same value used by Trips, so they live in the {@code "tripAnalytics"}

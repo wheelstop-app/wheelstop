@@ -15,7 +15,7 @@ import android.content.SharedPreferences
  * MODE_PRIVATE prefs are the correct, bootstrap-safe home and survive the camera-daemon
  * SIGKILL restart in the camera wizard (that kills the daemon, not this app process).
  *
- * This is intentionally separate from SetupGuideDialog's "overdrive_setup" prefs: that
+ * This is intentionally separate from SetupGuideDialog's "wheelstop_setup" prefs: that
  * dialog re-fires on every install via PackageInfo.lastUpdateTime (BYD wipes its
  * autostart allowlist per install). The guide must NOT re-arm on update — it is
  * once-per-user and only re-shows on explicit replay, so it gets its own version-
@@ -129,7 +129,7 @@ class OnboardingState private constructor(private val prefs: SharedPreferences) 
     }
 
     companion object {
-        private const val PREFS_NAME = "overdrive_onboarding"
+        private const val PREFS_NAME = "wheelstop_onboarding"
 
         private const val KEY_DAEMON_AUTHORIZED = "daemon_authorized"
         private const val KEY_MODE_CHOSEN = "mode_chosen"

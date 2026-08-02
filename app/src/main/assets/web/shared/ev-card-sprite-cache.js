@@ -15,7 +15,7 @@
  * sprites — so cache and selection stay in lockstep.
  *
  * Schema:
- *   db = 'overdrive-ev-sprites'
+ *   db = 'wheelstop-ev-sprites'
  *   store = 'sprites'
  *   key = `${modelId}|${color}|${view}|${dprBucket}`
  *   value = { blob: Blob, w: number, h: number, ts: number }
@@ -36,7 +36,7 @@
 
     if (root.WheelstopEvSpriteCache) return;
 
-    var DB_NAME    = 'overdrive-ev-sprites';
+    var DB_NAME    = 'wheelstop-ev-sprites';
     var DB_VERSION = 1;
     var STORE      = 'sprites';
     // Bump SPRITE_VERSION whenever the rendering pipeline changes in a

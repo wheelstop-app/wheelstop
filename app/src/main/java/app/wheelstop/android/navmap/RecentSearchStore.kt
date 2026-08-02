@@ -27,7 +27,7 @@ import org.json.JSONObject
  * Storage: a single SharedPreferences key ([KEY_RECENTS]) in a dedicated prefs
  * file ([PREFS_NAME]) holding a JSON array string. Each element is
  * `{"label":..,"lat":..,"lng":..}`. The dedicated file avoids any collision with
- * the shared "overdrive_prefs" used by PreferencesManager. Reads/writes are
+ * the shared "wheelstop_prefs" used by PreferencesManager. Reads/writes are
  * defensive: parsing never throws, and a corrupt/missing value yields an empty
  * list. SharedPreferences I/O is cheap and synchronous; the parent may safely
  * call these from a background thread.

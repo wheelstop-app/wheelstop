@@ -68,11 +68,11 @@ class RoadSenseStore private constructor() {
         private val logger = DaemonLogger.getInstance(TAG)
 
         /**
-         * Sibling of SocHistoryDatabase's `/data/local/tmp/overdrive_soc_h2`.
+         * Sibling of SocHistoryDatabase's `/data/local/tmp/wheelstop_soc_h2`.
          * `/data/local/tmp` is the daemon-writable (UID 2000) location the
          * project already uses for its H2 stores.
          */
-        private const val DB_PATH = "/data/local/tmp/overdrive_roadsense_h2"
+        private const val DB_PATH = "/data/local/tmp/wheelstop_roadsense_h2"
 
         /**
          * JDBC URL — identical flag set to SocHistoryDatabase:

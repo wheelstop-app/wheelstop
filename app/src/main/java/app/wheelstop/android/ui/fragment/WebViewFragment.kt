@@ -837,7 +837,7 @@ class WebViewFragment : Fragment() {
                     resp.responseHeaders = mapOf(
                         "Cache-Control" to "no-store",
                         "Connection" to "close",
-                        "X-Overdrive-Fail-Reason" to reason
+                        "X-Wheelstop-Fail-Reason" to reason
                     )
                     return resp
                 }

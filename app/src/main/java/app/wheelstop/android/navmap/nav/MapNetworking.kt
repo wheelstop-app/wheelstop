@@ -36,7 +36,7 @@ import okhttp3.OkHttpClient
 object MapNetworking {
 
     /** Required by OSM usage policy (identifies the client to public OSM services). */
-    const val USER_AGENT = "OverDrive/1.0 (RoadSense navigation)"
+    const val USER_AGENT = "Wheelstop/1.0 (RoadSense navigation)"
 
     /**
      * A [okhttp3.ProxySelector] that defers to [ProxyHelper] on EVERY request, so

@@ -8,7 +8,7 @@ import org.json.JSONObject;
  * Persistent configuration for Trip Analytics.
  *
  * Uses UnifiedConfigManager to store config in the "tripAnalytics" section
- * of /data/local/tmp/overdrive_config.json. Storage settings (storageType,
+ * of /data/local/tmp/wheelstop_config.json. Storage settings (storageType,
  * storageLimitMb) are delegated to StorageManager — this class only manages
  * the enabled toggle.
  */

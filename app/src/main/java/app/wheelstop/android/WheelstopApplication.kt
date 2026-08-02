@@ -12,7 +12,6 @@ import app.wheelstop.android.logging.LogManager
 import app.wheelstop.android.server.LocaleManager
 import app.wheelstop.android.services.DaemonKeepaliveService
 // import app.wheelstop.android.shell.PrivilegedShellSetup
-import app.wheelstop.android.storage.LegacyMediaMigration
 import app.wheelstop.android.ui.util.PreferencesManager
 
 /**
@@ -23,17 +22,6 @@ class WheelstopApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-
-        // One-time, best-effort move of legacy `Overdrive`-named media dirs
-        // to their `Wheelstop` counterparts. MUST run before anything below
-        // (or anything DaemonKeepaliveService.start() kicks off) touches
-        // StorageManager.getInstance() — that singleton's constructor
-        // creates the Wheelstop dirs as a side effect, which would close
-        // the "destination doesn't exist yet" window this migration needs.
-        // See LegacyMediaMigration's kdoc for the full data-loss scenario
-        // this prevents (RecordingsIndex.reconcile() purging pre-existing
-        // recordings that are still on disk under the old Overdrive/ roots).
-        LegacyMediaMigration.runIfNeeded(this)
 
         // Apply the user-picked locale before any Activity/Fragment is created.
         // Auto-mode (or unset) writes an empty list so AppCompat falls back to

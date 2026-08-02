@@ -127,7 +127,7 @@ class BootReceiver : BroadcastReceiver() {
             // the sole orchestrator post-update: it runs UpdateLifecycle.hardResetDaemons
             // before DaemonStartupManager. Starting daemons here would race the
             // hard reset and resurrect old/zombie watchdogs (see /data/local/tmp/
-            // overdrive_update_in_progress sentinel).
+            // wheelstop_update_in_progress sentinel).
             Intent.ACTION_MY_PACKAGE_REPLACED -> {
                 lastStartTime = System.currentTimeMillis()
                 // Skip auto-relaunch in debug builds: Android Studio drives its own

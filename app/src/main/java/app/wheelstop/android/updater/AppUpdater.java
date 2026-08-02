@@ -49,7 +49,7 @@ public class AppUpdater {
     private static final String PREF_UPDATED_VERSION = "updated_version";
     // The `ts` of the last failed-install progress record this app process has
     // already surfaced. consumeFailedUpdateError leaves the phase=error record
-    // in /data/local/tmp/overdrive_update_progress.json IN PLACE (the
+    // in /data/local/tmp/wheelstop_update_progress.json IN PLACE (the
     // app-process unlink in a sticky shell-owned dir is a no-op anyway, and the
     // record must survive for the web's reconnect re-read once the daemon is
     // back up — otherwise the web falls through to a false "Updated to X").
@@ -57,7 +57,7 @@ public class AppUpdater {
     // the same failure; a NEW failure carries a different `ts` and re-arms.
     private static final String PREF_LAST_CONSUMED_FAILURE_TS = "last_consumed_failure_ts";
     // Also persist to filesystem (survives app reinstall, unlike SharedPreferences)
-    private static final String UPDATE_TIMESTAMP_FILE = "/data/local/tmp/overdrive_update_timestamp";
+    private static final String UPDATE_TIMESTAMP_FILE = "/data/local/tmp/wheelstop_update_timestamp";
 
     /** Per-channel SharedPreferences baseline key. */
     private static String prefKeyForChannel(String channel) {
@@ -121,7 +121,7 @@ public class AppUpdater {
         installInFlight = false;
     }
     // Version file readable by daemon process (SharedPreferences are per-process)
-    public static final String VERSION_FILE = "/data/local/tmp/overdrive_version";
+    public static final String VERSION_FILE = "/data/local/tmp/wheelstop_version";
     // Sentinels for the post-update handshake (see UpdateLifecycle).
     private static final String UPDATE_IN_PROGRESS_FILE = UpdateLifecycle.UPDATE_IN_PROGRESS_FILE;
 
@@ -192,7 +192,7 @@ public class AppUpdater {
     private static boolean canWriteLocalTmp() {
         Boolean cached = canWriteTmpCached;
         if (cached != null) return cached;
-        File probe = new File("/data/local/tmp/.overdrive_updater_probe");
+        File probe = new File("/data/local/tmp/.wheelstop_updater_probe");
         boolean ok;
         try {
             try (FileOutputStream fos = new FileOutputStream(probe)) {
@@ -463,8 +463,8 @@ public class AppUpdater {
         }
     }
 
-    private static final String APK_PATH = "/data/local/tmp/overdrive_update.apk";
-    private static final String SUMS_PATH = "/data/local/tmp/overdrive_update.sha256";
+    private static final String APK_PATH = "/data/local/tmp/wheelstop_update.apk";
+    private static final String SUMS_PATH = "/data/local/tmp/wheelstop_update.sha256";
 
     private String getApkPath() {
         return APK_PATH;
@@ -1406,8 +1406,8 @@ public class AppUpdater {
      */
     private void runDetachedInstall(InstallCallback callback, String channel, String priorUpdateTimestamp,
                                     String priorDisplayVersion) {
-        String scriptPath = "/data/local/tmp/overdrive_install.sh";
-        String logPath = "/data/local/tmp/overdrive_install.log";
+        String scriptPath = "/data/local/tmp/wheelstop_install.sh";
+        String logPath = "/data/local/tmp/wheelstop_install.log";
 
         StringBuilder script = new StringBuilder();
         script.append("#!/system/bin/sh\n");
@@ -1469,12 +1469,12 @@ public class AppUpdater {
         script.append("rm -f /data/local/tmp/*_daemon.lock 2>/dev/null\n");
         script.append("rm -f /data/local/tmp/cam_watchdog.pid 2>/dev/null\n");
         // Sweep ONLY the transient config staging siblings a daemon killed
-        // mid-write may orphan (overdrive_config.json.tmp.<pid> from the atomic
+        // mid-write may orphan (wheelstop_config.json.tmp.<pid> from the atomic
         // write, and the .bak.tmp staging file). MUST NOT touch the live config,
         // its .bak, or .bad — those are the recovery copies. Explicit suffixes,
-        // never a broad overdrive_config* / *.json glob.
-        script.append("rm -f /data/local/tmp/overdrive_config.json.tmp.* "
-                + "/data/local/tmp/overdrive_config.json.bak.tmp 2>/dev/null\n");
+        // never a broad wheelstop_config* / *.json glob.
+        script.append("rm -f /data/local/tmp/wheelstop_config.json.tmp.* "
+                + "/data/local/tmp/wheelstop_config.json.bak.tmp 2>/dev/null\n");
         // Clear ONLY the CORE disable sentinels (camera + acc-sentry) — we
         // needed them set above so any surviving watchdog exits, but the new
         // MainActivity must not see them on startup or it'll leave those CORE
@@ -1544,7 +1544,7 @@ public class AppUpdater {
               .append("\",\"priorDisplayVersion\":\"")
               .append(shellSafe(priorDisplayVersion))
               .append("\",\"ts\":%s}' ");
-        script.append("\"$PM_ESC\" \"$TS\" > /data/local/tmp/overdrive_update_progress.json\n");
+        script.append("\"$PM_ESC\" \"$TS\" > /data/local/tmp/wheelstop_update_progress.json\n");
         script.append("  echo \"[install] FAILED rc=$INSTALL_RC\"\n");
         // Roll back the on-disk baseline + display files the daemon advanced
         // before pm install (the app-process consumeFailedUpdateError only
@@ -1624,7 +1624,7 @@ public class AppUpdater {
         // onSuccess path, never reached here). Nothing else overwrites it until
         // the NEXT install's "queued" write, so delete it now — pure hygiene so
         // a fresh poll doesn't see a stale terminal record.
-        script.append("  rm -f /data/local/tmp/overdrive_update_progress.json\n");
+        script.append("  rm -f /data/local/tmp/wheelstop_update_progress.json\n");
         // Advance the persisted display label NOW — and ONLY here, on pm-install
         // success. VERSION_FILE drives the user-visible "current version" on every
         // surface (About / status / toast), so it must move only after the new
@@ -2308,7 +2308,7 @@ public class AppUpdater {
         String priorDisplayVersion = null;
         long recordTs = 0;
         try {
-            java.io.File f = new java.io.File("/data/local/tmp/overdrive_update_progress.json");
+            java.io.File f = new java.io.File("/data/local/tmp/wheelstop_update_progress.json");
             StringBuilder sb = new StringBuilder();
             try (java.io.BufferedReader r = new java.io.BufferedReader(
                     new java.io.InputStreamReader(new java.io.FileInputStream(f)))) {
@@ -2420,7 +2420,7 @@ public class AppUpdater {
      */
     private static boolean hasFailedUpdateMarker() {
         try {
-            java.io.File f = new java.io.File("/data/local/tmp/overdrive_update_progress.json");
+            java.io.File f = new java.io.File("/data/local/tmp/wheelstop_update_progress.json");
             if (!f.exists()) return false;
             StringBuilder sb = new StringBuilder();
             try (java.io.BufferedReader r = new java.io.BufferedReader(
@@ -2816,7 +2816,7 @@ public class AppUpdater {
      */
     private static String persistedGithubVersion(Context context) {
         // SINGLE cross-process source of truth: the world-readable FILE
-        // /data/local/tmp/overdrive_version, written by EVERY install path
+        // /data/local/tmp/wheelstop_version, written by EVERY install path
         // (chmod 644) regardless of which process ran it. We deliberately do
         // NOT consult per-UID SharedPreferences here: PREF_UPDATED_VERSION is
         // per-process, so a daemon-run install (web/Telegram) updates the

@@ -33,7 +33,7 @@ import javax.crypto.spec.SecretKeySpec;
  *
  * Persistence:
  * The auth section ({@code "auth"}) lives inside the unified config at
- * {@code /data/local/tmp/overdrive_config.json}. UnifiedConfigManager
+ * {@code /data/local/tmp/wheelstop_config.json}. UnifiedConfigManager
  * sets the file world-rw (chmod 666), so the daemon (UID 2000) and the
  * app process (UID 10xxx) read/write the same secret. Without this, the
  * two processes used to mint independent in-memory secrets and JWT
@@ -45,7 +45,7 @@ import javax.crypto.spec.SecretKeySpec;
  * exists, its contents are migrated in-place — so a device that was
  * already logged in keeps its secret and existing JWTs.
  *
- * The device ID file at {@code /data/local/tmp/.overdrive_device_id} is
+ * The device ID file at {@code /data/local/tmp/.wheelstop_device_id} is
  * still consulted (it's written by ADB shell during MainActivity startup),
  * so the deviceId remains stable across uninstalls even though the
  * unified config is wiped on factory reset.
@@ -66,7 +66,7 @@ public class AuthManager {
     // Device ID file — written via ADB shell from MainActivity, survives
     // app reinstall. Consulted only when the unified config has no
     // deviceId yet (cold-start before MainActivity has synced).
-    private static final String DEVICE_ID_FILE = "/data/local/tmp/.overdrive_device_id";
+    private static final String DEVICE_ID_FILE = "/data/local/tmp/.wheelstop_device_id";
 
     // JWT settings.
     //
@@ -582,7 +582,7 @@ public class AuthManager {
      */
     private static boolean unifiedConfigContainsSecret(String expectedSecret) {
         try {
-            File file = new File("/data/local/tmp/overdrive_config.json");
+            File file = new File("/data/local/tmp/wheelstop_config.json");
             if (!file.exists() || !file.canRead()) return false;
             StringBuilder sb = new StringBuilder();
             try (BufferedReader reader = new BufferedReader(new FileReader(file))) {

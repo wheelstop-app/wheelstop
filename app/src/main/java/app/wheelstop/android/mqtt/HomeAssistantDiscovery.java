@@ -27,7 +27,7 @@ public final class HomeAssistantDiscovery {
 
     /** HA node id / device identifier derived from the Wheelstop device id. */
     public static String nodeId(String deviceId) {
-        String base = "overdrive_" + (deviceId == null ? "vehicle" : deviceId);
+        String base = "wheelstop_" + (deviceId == null ? "vehicle" : deviceId);
         return base.replaceAll("[^a-zA-Z0-9_-]", "_");
     }
 
@@ -70,7 +70,7 @@ public final class HomeAssistantDiscovery {
             JSONObject dev = new JSONObject();
             JSONArray ids = new JSONArray();
             ids.put(node);
-            if (vin != null && !vin.isEmpty()) ids.put("overdrive_vin_" + vin);
+            if (vin != null && !vin.isEmpty()) ids.put("wheelstop_vin_" + vin);
             dev.put("ids", ids);
             dev.put("name", deviceName(model, vin));
             dev.put("mf", "BYD");
@@ -83,7 +83,7 @@ public final class HomeAssistantDiscovery {
             JSONObject origin = new JSONObject();
             origin.put("name", "Wheelstop");
             if (swVersion != null && !swVersion.isEmpty()) origin.put("sw", swVersion);
-            origin.put("url", "https://www.overdrive.qd.je");
+            origin.put("url", "https://github.com/wheelstop-app/wheelstop");
             bundle.put("o", origin);
 
             // ----- shared availability (reuses the LWT) -----

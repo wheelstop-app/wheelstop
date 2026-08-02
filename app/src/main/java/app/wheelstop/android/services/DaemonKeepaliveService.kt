@@ -84,7 +84,7 @@ class DaemonKeepaliveService : Service() {
         acquireWakeLock()
         registerScreenOffReceiver()
         // GATE (G3): in "Vehicle ON only" mode the app-process keep-alive wakelock
-        // ("Overdrive:DaemonKeepalive") must NOT pin the CPU 24/7 while parked, or the
+        // ("Wheelstop:DaemonKeepalive") must NOT pin the CPU 24/7 while parked, or the
         // head unit can never sleep even after the daemon-side gates (G1/G4) let it.
         // There is no reliable ACC-OFF broadcast in the app process (only ACC_ON/IGN_ON
         // are directionally trustworthy — see OnboardingGate), so we use SCREEN_OFF as
@@ -362,7 +362,7 @@ class DaemonKeepaliveService : Service() {
             val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
             wakeLock = powerManager.newWakeLock(
                 PowerManager.PARTIAL_WAKE_LOCK,
-                "Overdrive:DaemonKeepalive"
+                "Wheelstop:DaemonKeepalive"
             ).apply {
                 setReferenceCounted(false)
                 acquire()
@@ -519,7 +519,7 @@ class DaemonKeepaliveService : Service() {
      * One-shot startup reconciliation for the G3 wakelock. SCREEN_OFF is an edge-only
      * broadcast, so a service (re)start while the vehicle is already parked with the
      * screen already off would never receive the release edge — leaving the
-     * "Overdrive:DaemonKeepalive" wakelock pinned for the whole parked window and
+     * "Wheelstop:DaemonKeepalive" wakelock pinned for the whole parked window and
      * re-establishing the CPU keep-awake onOnly is meant to remove. Here we read the
      * CURRENT interactive state directly and, in onOnly with the screen already off,
      * release immediately. In onAndOff (or when the screen is on) this is a no-op, so

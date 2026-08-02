@@ -1187,7 +1187,7 @@
     <!-- Verbatim ADB command. translatable=false so the i18n pipeline
          doesn't localize the literal path/command — translators following
          Crowdin would otherwise risk breaking the only recovery path. -->
-    <string name="settings_security_recovery_command" translatable="false">adb shell touch /data/local/tmp/.overdrive_pin_reset</string>
+    <string name="settings_security_recovery_command" translatable="false">adb shell touch /data/local/tmp/.wheelstop_pin_reset</string>
     <string name="settings_security_dialog_set_title">Set PIN</string>
     <string name="settings_security_dialog_set_body">Pick a 4–8 digit PIN. You\'ll need this every time you open the app.</string>
     <string name="settings_security_dialog_disable_title">Turn off PIN lock?</string>

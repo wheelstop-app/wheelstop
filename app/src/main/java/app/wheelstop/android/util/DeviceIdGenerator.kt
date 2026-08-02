@@ -18,7 +18,7 @@ import java.io.FileReader
 object DeviceIdGenerator {
     
     private const val TAG = "DeviceIdGenerator"
-    private const val ID_FILE = "/data/local/tmp/.overdrive_device_id"
+    private const val ID_FILE = "/data/local/tmp/.wheelstop_device_id"
     private const val ID_PREFIX = "byd-"
     private const val PREFS_NAME = "device_id_prefs"
     private const val PREFS_KEY = "device_id"

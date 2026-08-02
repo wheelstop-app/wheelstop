@@ -60,7 +60,7 @@ enum class DaemonType(
  * of park (for the stale-age fail-safe).
  */
 object ParkedShutdown {
-    const val MARKER_PATH = "/data/local/tmp/overdrive_parked_shutdown"
+    const val MARKER_PATH = "/data/local/tmp/wheelstop_parked_shutdown"
     /** Max age before the marker is treated as stale and force-cleared (fail-safe so a
      *  marker can never permanently suppress an active session). */
     const val MAX_AGE_MS = 24L * 60 * 60 * 1000

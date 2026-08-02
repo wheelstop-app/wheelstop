@@ -144,7 +144,7 @@ class IntegrationsFragment : Fragment() {
     private fun isTelegramConfigured(ctx: Context): Boolean = try {
         // Force a re-read from disk before checking. The token is written by
         // the daemon process (web UI POST → /api/telegram/token → daemon
-        // writes /data/local/tmp/overdrive_config.json), and this Fragment
+        // writes /data/local/tmp/wheelstop_config.json), and this Fragment
         // runs in the app process with its own UnifiedConfigManager cache.
         // Without forceReload() the in-process cache can return the value
         // observed at app launch — pre-token-save — making the Integrations

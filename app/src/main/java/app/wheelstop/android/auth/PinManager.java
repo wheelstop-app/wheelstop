@@ -37,7 +37,7 @@ import javax.crypto.spec.PBEKeySpec;
  * 610-class CPU), which is invisible at unlock time but adds real cost
  * to bulk attempts.
  *
- * Recovery: a touch-flag at {@code /data/local/tmp/.overdrive_pin_reset}
+ * Recovery: a touch-flag at {@code /data/local/tmp/.wheelstop_pin_reset}
  * triggers a one-shot wipe of the {@code pinLock} section on next
  * {@link #isEnabled()} call. The flag is then deleted. Designed for the
  * "user forgot their PIN" case — recoverable via ADB shell without a
@@ -54,7 +54,7 @@ public class PinManager {
     private static final String KEY_FAILED_ATTEMPTS = "failedAttempts";
     private static final String KEY_LOCKOUT_UNTIL = "lockoutUntilMs";
 
-    private static final String RESET_FLAG_FILE = "/data/local/tmp/.overdrive_pin_reset";
+    private static final String RESET_FLAG_FILE = "/data/local/tmp/.wheelstop_pin_reset";
     private static final String KEY_LAST_RECOVERY_APPLIED = "lastRecoveryAppliedMs";
 
     private static final int DEFAULT_ITERATIONS = 120_000;
@@ -353,7 +353,7 @@ public class PinManager {
 
     /**
      * Recovery flag handling. The user creates the flag from a host
-     * machine via {@code adb shell touch /data/local/tmp/.overdrive_pin_reset}.
+     * machine via {@code adb shell touch /data/local/tmp/.wheelstop_pin_reset}.
      * The flag is owned by uid {@code shell:shell}; the app process
      * (uid 10xxx) cannot {@code unlink()} it because /data/local/tmp/
      * has the sticky bit. So instead of trying to delete, we record

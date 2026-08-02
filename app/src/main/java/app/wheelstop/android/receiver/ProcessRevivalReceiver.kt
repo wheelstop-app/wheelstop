@@ -107,7 +107,7 @@ class ProcessRevivalReceiver : BroadcastReceiver() {
                 action = ACTION
                 // Distinct data URIs so primary/backup PendingIntents don't
                 // collide under PendingIntent equality rules.
-                data = Uri.parse("overdrive://revival/$tag")
+                data = Uri.parse("wheelstop://revival/$tag")
             }
             return PendingIntent.getBroadcast(context, requestCode, intent, flags)
         }

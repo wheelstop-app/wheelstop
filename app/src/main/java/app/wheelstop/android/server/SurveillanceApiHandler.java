@@ -21,7 +21,7 @@ import java.io.OutputStream;
  */
 public class SurveillanceApiHandler {
     
-    private static final String UNIFIED_CONFIG_FILE = "/data/local/tmp/overdrive_config.json";
+    private static final String UNIFIED_CONFIG_FILE = "/data/local/tmp/wheelstop_config.json";
     
     /**
      * Handle surveillance API requests.
@@ -125,7 +125,7 @@ public class SurveillanceApiHandler {
      * screenDeterrentImagePath at /etc/* and have the web server stream or
      * delete arbitrary readable files.
      */
-    private static final String SCREEN_DETERRENT_DIR = "/data/local/tmp/.overdrive";
+    private static final String SCREEN_DETERRENT_DIR = "/data/local/tmp/.wheelstop";
     private static final String SCREEN_DETERRENT_PREFIX = "screen_deterrent_asset.";
 
     private static boolean isAllowedDeterrentPath(String path) {
@@ -178,7 +178,7 @@ public class SurveillanceApiHandler {
      * Accept a base64-encoded image/GIF for the screen deterrent. JSON body:
      *   { "filename": "warning.gif", "dataBase64": "<base64>" }
      *
-     * Persists to /data/local/tmp/.overdrive/screen_deterrent_asset.<ext>
+     * Persists to /data/local/tmp/.wheelstop/screen_deterrent_asset.<ext>
      * world-readable so the daemon UID 2000 can decode it. Updates
      * surveillance.screenDeterrentImagePath in unified config on success.
      */
@@ -241,7 +241,7 @@ public class SurveillanceApiHandler {
             }
         }
 
-        java.io.File dir = new java.io.File("/data/local/tmp/.overdrive");
+        java.io.File dir = new java.io.File("/data/local/tmp/.wheelstop");
         if (!dir.exists()) {
             dir.mkdirs();
             try { dir.setReadable(true, false); dir.setExecutable(true, false); } catch (Exception ignored) {}
@@ -1202,7 +1202,7 @@ public class SurveillanceApiHandler {
                 // if a previous upload's .tmp leaked or UCM was out of sync
                 // with disk (e.g. the user upgraded mid-upload), Clear
                 // genuinely leaves no asset behind. Path-restriction prevents
-                // any escape from the .overdrive directory.
+                // any escape from the .wheelstop directory.
                 java.io.File dir = new java.io.File(SCREEN_DETERRENT_DIR);
                 if (dir.isDirectory()) {
                     for (String oldExt : new String[]{"png", "jpg", "jpeg", "webp", "gif"}) {
@@ -1596,7 +1596,7 @@ public class SurveillanceApiHandler {
             //
             // Surfaces save failures back to the caller — UnifiedConfigManager
             // can return false on this device when the app UID can't write
-            // /data/local/tmp/overdrive_config.json (EACCES). Previously we
+            // /data/local/tmp/wheelstop_config.json (EACCES). Previously we
             // swallowed the failure and still answered success, leaving the
             // dialog reporting "saved" while the disk record was unchanged.
             // Also writes the manualOverride keys + camera section atomically

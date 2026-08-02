@@ -73,12 +73,12 @@ class ZrokLauncher(
         // Set this after running reserve command once
         var reservedShareToken: String? = null
         
-        // Unique name for reserved URL (e.g., "overdrive1a2b3c" -> https://overdrive1a2b3c.share.zrok.io)
+        // Unique name for reserved URL (e.g., "wheelstop1a2b3c" -> https://wheelstop1a2b3c.share.zrok.io)
         // Generated automatically - must be lowercase alphanumeric only, 4-32 chars
-        var uniqueName: String = "overdrive"
+        var uniqueName: String = "wheelstop"
         
         // Prefix for unique name generation (no hyphens allowed!)
-        private const val UNIQUE_NAME_PREFIX = "overdrive"
+        private const val UNIQUE_NAME_PREFIX = "wheelstop"
         
         // Proxy settings for sing-box (socks5 for zrok)
         private const val PROXY_HOST = "127.0.0.1"
@@ -260,7 +260,7 @@ class ZrokLauncher(
 
         /**
          * Generate a unique name for this device.
-         * Format: overdrive<6-char-random>
+         * Format: wheelstop<6-char-random>
          * Must be lowercase alphanumeric only, 4-32 chars (zrok requirement).
          * Returns a NEW random value each time called.
          */
@@ -1165,9 +1165,9 @@ class ZrokLauncher(
             callback = object : AdbShellExecutor.ShellCallback {
                 override fun onSuccess(output: String) {
                     val name = output.trim()
-                    // Must be lowercase alphanumeric, 4-32 chars, starting with "overdrive"
+                    // Must be lowercase alphanumeric, 4-32 chars, starting with "wheelstop"
                     if (name.isNotEmpty() && !name.contains("No such file") && 
-                        name.startsWith("overdrive") && name.matches(Regex("^[a-z0-9]{4,32}$"))) {
+                        name.startsWith("wheelstop") && name.matches(Regex("^[a-z0-9]{4,32}$"))) {
                         callback(name)
                     } else {
                         callback(null)
@@ -1724,7 +1724,7 @@ class ZrokLauncher(
                 return@isTunnelRunning
             }
             // Re-read the unique_name file before each probe. The
-            // `uniqueName` companion-object var defaults to "overdrive"
+            // `uniqueName` companion-object var defaults to "wheelstop"
             // (a name we don't own); a freshly-revived MainActivity that
             // hits this tick before any launchZrok flow has populated
             // `uniqueName` would otherwise probe the wrong host. The

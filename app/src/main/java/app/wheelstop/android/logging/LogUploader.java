@@ -201,9 +201,9 @@ public final class LogUploader {
         Request.Builder rb = new Request.Builder()
                 .url(url)
                 .post(RequestBody.create(content, TEXT))
-                .header("X-Overdrive-Daemon", daemonLabel != null ? daemonLabel : "unknown");
+                .header("X-Wheelstop-Daemon", daemonLabel != null ? daemonLabel : "unknown");
         if (appVersion != null && !appVersion.isEmpty()) {
-            rb.header("X-Overdrive-Version", appVersion);
+            rb.header("X-Wheelstop-Version", appVersion);
         }
 
         try (Response resp = client.newCall(rb.build()).execute()) {

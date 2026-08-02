@@ -183,7 +183,7 @@ class GroundTruthStore private constructor() {
 
     companion object {
         private val logger = DaemonLogger.getInstance("RoadSense/GroundTruth")
-        private const val DB_PATH = "/data/local/tmp/overdrive_roadsense_labels_h2"
+        private const val DB_PATH = "/data/local/tmp/wheelstop_roadsense_labels_h2"
         private const val JDBC_URL =
             "jdbc:h2:file:$DB_PATH;FILE_LOCK=SOCKET;TRACE_LEVEL_FILE=0;DB_CLOSE_ON_EXIT=FALSE"
 

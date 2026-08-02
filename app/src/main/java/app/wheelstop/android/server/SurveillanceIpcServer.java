@@ -1983,7 +1983,7 @@ public class SurveillanceIpcServer implements Runnable {
      *      thread. The IPC reply returns immediately because the daemon dies
      *      mid-install.
      *
-     * Progress reporting reuses /data/local/tmp/overdrive_update_progress.json
+     * Progress reporting reuses /data/local/tmp/wheelstop_update_progress.json
      * via UpdateApiHandler-style writes so the same polling path serves both
      * the webapp and Telegram.
      */
@@ -2187,7 +2187,7 @@ public class SurveillanceIpcServer implements Runnable {
             // Start install on a background thread. The IPC reply returns now
             // because the daemon dies mid-install; Telegram polls progress via a
             // separate IPC request (CHECK_UPDATE-style polling isn't needed —
-            // /data/local/tmp/overdrive_update_progress.json is already tailed by
+            // /data/local/tmp/wheelstop_update_progress.json is already tailed by
             // the webapp; the Telegram bot reads it on demand instead).
             new Thread(() -> {
                 try {
@@ -2274,7 +2274,7 @@ public class SurveillanceIpcServer implements Runnable {
             r.put("ts", System.currentTimeMillis());
         } catch (Exception ignored) {}
         try (java.io.FileWriter fw = new java.io.FileWriter(
-                "/data/local/tmp/overdrive_update_progress.json")) {
+                "/data/local/tmp/wheelstop_update_progress.json")) {
             fw.write(r.toString());
         } catch (Exception ignored) {}
     }
@@ -2334,7 +2334,7 @@ public class SurveillanceIpcServer implements Runnable {
      */
     private void handleGetUpdateProgress(JSONObject response) throws Exception {
         response.put("success", true);
-        java.io.File f = new java.io.File("/data/local/tmp/overdrive_update_progress.json");
+        java.io.File f = new java.io.File("/data/local/tmp/wheelstop_update_progress.json");
         if (!f.exists()) {
             response.put("phase", "idle");
             response.put("percent", -1);

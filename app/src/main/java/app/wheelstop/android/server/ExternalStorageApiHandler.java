@@ -142,10 +142,10 @@ public class ExternalStorageApiHandler {
         response.put("lastCleanupTime", cleaner.getLastCleanupTime());
         
         // SOTA: Show if Wheelstop is using SD card (auto-enable recommendation)
-        boolean overdriveUsesSdCard = storage.getRecordingsStorageType() == StorageManager.StorageType.SD_CARD ||
+        boolean wheelstopUsesSdCard = storage.getRecordingsStorageType() == StorageManager.StorageType.SD_CARD ||
                                        storage.getSurveillanceStorageType() == StorageManager.StorageType.SD_CARD;
-        response.put("overdriveUsesSdCard", overdriveUsesSdCard);
-        response.put("recommendAutoCleanup", overdriveUsesSdCard && !cleaner.isEnabled());
+        response.put("wheelstopUsesSdCard", wheelstopUsesSdCard);
+        response.put("recommendAutoCleanup", wheelstopUsesSdCard && !cleaner.isEnabled());
         
         sendJson(out, 200, response);
     }

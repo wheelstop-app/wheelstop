@@ -22,6 +22,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Overdrive"
+rootProject.name = "Wheelstop"
 include(":app")
  

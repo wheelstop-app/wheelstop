@@ -22,7 +22,7 @@
  */
 (function () {
     'use strict';
-    var STORAGE_KEY = 'overdrive_theme';
+    var STORAGE_KEY = 'wheelstop_theme';
     var DEFAULT_THEME = 'dark';
 
     // ─── Step 0: viewport-height stabilizer ─────────────────────────────────

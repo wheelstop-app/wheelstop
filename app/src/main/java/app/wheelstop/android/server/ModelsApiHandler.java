@@ -45,7 +45,7 @@ public class ModelsApiHandler {
     private static final String TAG = "ModelsApiHandler";
     private static final DaemonLogger logger = DaemonLogger.getInstance(TAG);
 
-    public static final String MODELS_DIR = "/data/local/tmp/overdrive/models";
+    public static final String MODELS_DIR = "/data/local/tmp/wheelstop/models";
 
     // Manifest path inside the extracted web assets — bundled copy ships with the APK
     // and is the offline-safe baseline.
@@ -53,7 +53,7 @@ public class ModelsApiHandler {
     // Cached remote manifest. Persisted across app updates so an offline boot still
     // shows the most recently-seen model list. Promoted in front of the bundled copy
     // by readManifest() whenever its top-level "version" is newer.
-    private static final String MANIFEST_REMOTE_CACHE = "/data/local/tmp/overdrive/models/manifest.json";
+    private static final String MANIFEST_REMOTE_CACHE = "/data/local/tmp/wheelstop/models/manifest.json";
     // GitHub release manifest URL — same baseUrl convention as the GLBs themselves.
     private static final String MANIFEST_REMOTE_URL =
             "https://github.com/wheelstop-app/wheelstop-assets/releases/download/models-v1/manifest.json";
@@ -648,7 +648,7 @@ public class ModelsApiHandler {
             conn.setConnectTimeout(15000);
             conn.setReadTimeout(60000);
             conn.setInstanceFollowRedirects(false);
-            conn.setRequestProperty("User-Agent", "Overdrive/1.0");
+            conn.setRequestProperty("User-Agent", "Wheelstop/1.0");
             if (ifNoneMatch != null && !ifNoneMatch.isEmpty()) {
                 conn.setRequestProperty("If-None-Match", ifNoneMatch);
             }

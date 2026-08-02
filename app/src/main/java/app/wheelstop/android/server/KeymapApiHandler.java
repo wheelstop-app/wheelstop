@@ -216,7 +216,7 @@ public final class KeymapApiHandler {
         // catches cross-UID writes) and returns the cheap in-memory cache otherwise.
         // The earlier forceReload() here nulled the PROCESS-WIDE config cache every
         // 60s unconditionally — even when keymap was disabled — forcing the ~44
-        // other subsystems that read overdrive_config.json to re-parse from disk on
+        // other subsystems that read wheelstop_config.json to re-parse from disk on
         // the next access. That defeated the very cache designed to prevent it and
         // is a real, self-inflicted periodic cost. Plain reads are correct and cheap.
         boolean enabled = app.wheelstop.android.config.UnifiedConfigManager.isKeymapEnabled();

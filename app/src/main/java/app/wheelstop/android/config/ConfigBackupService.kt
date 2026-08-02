@@ -34,7 +34,7 @@ import java.io.File
 object ConfigBackupService {
     private const val TAG = "ConfigBackup"
 
-    const val BUNDLE_FORMAT = "overdrive-config-bundle"
+    const val BUNDLE_FORMAT = "wheelstop-config-bundle"
     const val BUNDLE_VERSION = 1
     // Bump when applyBundle's understood schema changes incompatibly. A bundle
     // with a HIGHER schemaVersion than this is refused (forward-incompatible).
@@ -614,7 +614,7 @@ object ConfigBackupService {
      * file is already world-readable. The setReadable call LOOSENS to the
      * required end state; ordering write-vs-chmod doesn't change exposure. The
      * DID is a device identifier, not the secret — the encrypted blobs it keys
-     * already sit at 0666 in overdrive_config.json under the same on-device
+     * already sit at 0666 in wheelstop_config.json under the same on-device
      * threat model.
      */
     private fun writeDid(value: String): Boolean = try {

@@ -31,7 +31,7 @@ public class SocHistoryDatabase {
     // H2 JDBC URL - file-based embedded database
     // FILE_LOCK=SOCKET uses socket-based locking (more reliable than file locks on Android)
     // AUTO_SERVER=TRUE allows multiple processes to connect via TCP fallback
-    private static final String DB_PATH = "/data/local/tmp/overdrive_soc_h2";
+    private static final String DB_PATH = "/data/local/tmp/wheelstop_soc_h2";
     // DB_CLOSE_ON_EXIT=FALSE: we drive shutdown ourselves from CameraDaemon.shutdown().
     // Without it, H2's JVM shutdown hook runs concurrently with our explicit
     // stop() and our last in-flight 2-minute SOC tick, producing the

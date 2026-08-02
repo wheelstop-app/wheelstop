@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicLong
  * that both the app (via IPC) and shell daemon can read/write.
  * 
  * Architecture:
- * - Single JSON file at /data/local/tmp/overdrive_config.json
+ * - Single JSON file at /data/local/tmp/wheelstop_config.json
  * - App UI writes via IPC to daemon (daemon has shell UID 2000)
  * - Web UI/daemon writes directly (already has shell UID 2000)
  * - Both read from the same file
@@ -38,7 +38,7 @@ object UnifiedConfigManager {
     private const val TAG = "UnifiedConfig"
     
     // Single source of truth - world-readable location
-    private const val CONFIG_PATH = "/data/local/tmp/overdrive_config.json"
+    private const val CONFIG_PATH = "/data/local/tmp/wheelstop_config.json"
 
     // ==================== DOUBLE-BUFFERED, SEQ-STAMPED DURABILITY ====================
     //
@@ -72,7 +72,7 @@ object UnifiedConfigManager {
     // match the application's package — Context.filesDir resolves here.
     private const val APP_PACKAGE = "app.wheelstop.android"
     private const val APP_PRIVATE_DIR = "/data/data/$APP_PACKAGE/files"
-    private const val APP_PRIVATE_BAK_PATH = "$APP_PRIVATE_DIR/overdrive_config.json.bak"
+    private const val APP_PRIVATE_BAK_PATH = "$APP_PRIVATE_DIR/wheelstop_config.json.bak"
     // Monotonic write sequence. Absent (legacy configs) reads as 0; saveConfig
     // bumps it. Stripped from backup bundles (see ConfigBackupService) so an
     // imported bundle never injects a foreign seq.
@@ -2404,7 +2404,7 @@ object UnifiedConfigManager {
      *
      * Schema: { "locale": "<bcp47>" | "auto" }
      *
-     * The legacy file at /data/local/tmp/.overdrive/locale was unreliable
+     * The legacy file at /data/local/tmp/.wheelstop/locale was unreliable
      * because the app UID can't `mkdir` under /data/local/tmp/, so writes
      * from the picker silently failed and the language reverted on next
      * cold start.

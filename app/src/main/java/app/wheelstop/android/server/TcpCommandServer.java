@@ -416,7 +416,7 @@ public class TcpCommandServer {
                 String bitrate = "MEDIUM";
                 String codec = "H264";
                 try {
-                    java.io.File unifiedFile = new java.io.File("/data/local/tmp/overdrive_config.json");
+                    java.io.File unifiedFile = new java.io.File("/data/local/tmp/wheelstop_config.json");
                     if (unifiedFile.exists()) {
                         java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(unifiedFile));
                         StringBuilder sb = new StringBuilder();
