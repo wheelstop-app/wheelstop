@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.0](https://github.com/wheelstop-app/wheelstop/compare/v0.1.0...v0.2.0) (2026-08-02)
+
+
+### Features
+
+* **brand:** finish the colour rebrand + de-Overdrive the web UI + bundle licences ([#4](https://github.com/wheelstop-app/wheelstop/issues/4)) ([2c181c2](https://github.com/wheelstop-app/wheelstop/commit/2c181c29f5ed280e151e1fa66085f2a6dc0cefe5))
+* **brand:** replace launcher icon + sidebar logo with the Wheelstop mark ([#2](https://github.com/wheelstop-app/wheelstop/issues/2)) ([ed5c5c1](https://github.com/wheelstop-app/wheelstop/commit/ed5c5c16acc982483a2fc8bdf55f7ec87f1c0116))
+
+
+### Bug Fixes
+
+* **licensing:** offer sing-box GPLv3 Corresponding Source with every release ([37afd28](https://github.com/wheelstop-app/wheelstop/commit/37afd289ca7f6c01ac584f7cfd386f60c8cb79a6))
+
 ## 0.1.0 (2026-08-02)
 
 
