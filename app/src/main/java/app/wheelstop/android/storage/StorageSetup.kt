@@ -32,7 +32,7 @@ object StorageSetup {
     private const val TAG = "StorageSetup"
     
     // Base directory for all Overdrive files
-    private const val BASE_DIR = "/storage/emulated/0/Overdrive"
+    private const val BASE_DIR = "/storage/emulated/0/Wheelstop"
     
     // Subdirectories to create
     private val SUBDIRS = listOf("recordings", "surveillance", "proximity")

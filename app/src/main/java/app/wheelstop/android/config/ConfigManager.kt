@@ -208,7 +208,7 @@ class ConfigManager private constructor(private val context: Context) {
                 val app = root.getJSONObject("app")
                 val config = AppConfig(
                     deviceId = app.optString("deviceId", "unknown"),
-                    outputDir = app.optString("outputDir", "/sdcard/DCIM/Overdrive"),
+                    outputDir = app.optString("outputDir", "/sdcard/DCIM/Wheelstop"),
                     streamMode = StreamMode.valueOf(app.optString("streamMode", "PRIVATE")),
                     sentryModeEnabled = app.optBoolean("sentryMode", false),
                     locationSidecarEnabled = app.optBoolean("locationSidecar", false)
@@ -241,7 +241,7 @@ class ConfigManager private constructor(private val context: Context) {
     private fun loadAppConfig(): AppConfig {
         return AppConfig(
             deviceId = prefs.getString(KEY_DEVICE_ID, "unknown") ?: "unknown",
-            outputDir = prefs.getString(KEY_OUTPUT_DIR, "/sdcard/DCIM/Overdrive") ?: "/sdcard/DCIM/Overdrive",
+            outputDir = prefs.getString(KEY_OUTPUT_DIR, "/sdcard/DCIM/Wheelstop") ?: "/sdcard/DCIM/Wheelstop",
             streamMode = getStreamMode(),
             sentryModeEnabled = prefs.getBoolean(KEY_SENTRY_MODE, false),
             locationSidecarEnabled = prefs.getBoolean(KEY_LOCATION_SIDECAR_ENABLED, false)

@@ -24,7 +24,7 @@ public class EventCommandHandler implements TelegramCommandHandler {
     private static final long MAX_VIDEO_SIZE_BYTES = 50 * 1024 * 1024; // 50MB Telegram limit
     
     // Fallback path if StorageManager is not available
-    private static final String FALLBACK_SURVEILLANCE_DIR = "/storage/emulated/0/Overdrive/surveillance";
+    private static final String FALLBACK_SURVEILLANCE_DIR = "/storage/emulated/0/Wheelstop/surveillance";
     
     /**
      * Get the event directory.

@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * StorageManager - SOTA Storage Management for Overdrive
  * 
  * Manages recording and surveillance storage with:
- * - Dedicated directories under /storage/emulated/0/Overdrive/ (internal) or SD card
+ * - Dedicated directories under /storage/emulated/0/Wheelstop/ (internal) or SD card
  * - Storage type selection: INTERNAL or SD_CARD for both recordings and surveillance
  * - Configurable size limits (100MB - 10000MB for SD card)
  * - Automatic cleanup of oldest files when limit is reached
@@ -125,7 +125,7 @@ public class StorageManager {
     }
     
     // Base directories for Overdrive files
-    private static final String INTERNAL_BASE_DIR = "/storage/emulated/0/Overdrive";
+    private static final String INTERNAL_BASE_DIR = "/storage/emulated/0/Wheelstop";
 
     // Legacy paths from older app versions. Files here aren't written anymore
     // but they still count toward the user's configured limit and must be

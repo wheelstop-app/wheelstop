@@ -1266,8 +1266,11 @@ public final class RecordingsIndex {
             boolean wantInternal = f.storages.contains("INTERNAL");
             boolean wantSd = f.storages.contains("SD_CARD");
             if (wantInternal) {
+                // The broad '/storage/emulated/%' already covers both the current
+                // Wheelstop/ dir and any legacy Overdrive/ recordings, so no migration
+                // scan is lost; the specific clause is kept as documentation of the dir.
                 clause.append(" OR (storage IS NULL AND (abs_path LIKE '/storage/emulated/%'"
-                        + " OR abs_path LIKE '/storage/emulated/0/Overdrive/%'))");
+                        + " OR abs_path LIKE '/storage/emulated/0/Wheelstop/%'))");
             }
             if (wantSd) {
                 clause.append(" OR (storage IS NULL AND abs_path NOT LIKE '/storage/emulated/%'"

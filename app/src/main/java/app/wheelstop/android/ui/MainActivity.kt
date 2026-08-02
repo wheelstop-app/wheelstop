@@ -1114,7 +1114,7 @@ class MainActivity : AppCompatActivity() {
         // of MES state, so recordings still work on this launch even if MES
         // never lands. With requestLegacyExternalStorage="true" + targetSdk 25,
         // WRITE_EXTERNAL_STORAGE is enough for our own paths under
-        // /storage/emulated/0/Overdrive.
+        // /storage/emulated/0/Wheelstop.
         val legacySuccess = StorageSetup.setupDirectories()
         android.util.Log.i("MainActivity", "Legacy-mode setupDirectories success=$legacySuccess")
 
