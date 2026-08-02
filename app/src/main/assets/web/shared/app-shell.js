@@ -446,15 +446,15 @@
     }
 
     function ensureSpriteCacheModule(cb) {
-        if (typeof window.OverdriveEvSpriteCache === 'object') { cb(window.OverdriveEvSpriteCache); return; }
+        if (typeof window.WheelstopEvSpriteCache === 'object') { cb(window.WheelstopEvSpriteCache); return; }
         if (spriteCacheLoadStarted) {
             // Poll briefly for the global to land.
             var tries = 0;
             var iv = setInterval(function () {
                 tries++;
-                if (typeof window.OverdriveEvSpriteCache === 'object') {
+                if (typeof window.WheelstopEvSpriteCache === 'object') {
                     clearInterval(iv);
-                    cb(window.OverdriveEvSpriteCache);
+                    cb(window.WheelstopEvSpriteCache);
                 } else if (tries > 60) {
                     clearInterval(iv);
                     cb(null);
@@ -466,7 +466,7 @@
         var s = document.createElement('script');
         s.src = '../shared/ev-card-sprite-cache.js';
         s.async = true;
-        s.onload = function () { cb(window.OverdriveEvSpriteCache || null); };
+        s.onload = function () { cb(window.WheelstopEvSpriteCache || null); };
         s.onerror = function () { cb(null); };
         document.head.appendChild(s);
     }
@@ -530,13 +530,13 @@
         // a setTimeout for browsers without it (notably Safari ≤14).
         function instantiate() {
             if (ev3dInstance) return;
-            if (typeof window.OverdriveEvCard3D !== 'function') return;
+            if (typeof window.WheelstopEvCard3D !== 'function') return;
             // The native shell hides #sidebar after page load. The script may
             // still be needed by a visible aux canvas, but never bind WebGL
             // to the hidden sidebar canvas in that environment.
             if (embeddedInNativeApp) return;
             try {
-                ev3dInstance = new window.OverdriveEvCard3D(canvas);
+                ev3dInstance = new window.WheelstopEvCard3D(canvas);
                 // Replay the most recent (model, colour) pair. SOC +
                 // charging state are painted on the DOM battery overlay
                 // independently so they need no replay here.
@@ -560,13 +560,13 @@
 
         function inject() {
             // Skip on pages that explicitly opt out (e.g. login.html could
-            // set window.OverdriveDisableEvCard3D = true).
-            if (window.OverdriveDisableEvCard3D) return;
+            // set window.WheelstopDisableEvCard3D = true).
+            if (window.WheelstopDisableEvCard3D) return;
 
             // If the global is already present (vehicle-control bundles
             // its own three.js + we got loaded second; or ev-map-sprite.js
             // got there first on a map page), instantiate immediately.
-            if (typeof window.OverdriveEvCard3D === 'function') {
+            if (typeof window.WheelstopEvCard3D === 'function') {
                 instantiate();
                 return;
             }
@@ -574,11 +574,11 @@
             // If a previous caller has already inserted the <script>,
             // don't insert a duplicate — just poll for the global to
             // appear once that load completes.
-            if (document.querySelector('script[data-overdrive-ev-card-3d]')) {
+            if (document.querySelector('script[data-wheelstop-ev-card-3d]')) {
                 var pollTries = 0;
                 var pollIv = setInterval(function () {
                     pollTries++;
-                    if (typeof window.OverdriveEvCard3D === 'function') {
+                    if (typeof window.WheelstopEvCard3D === 'function') {
                         clearInterval(pollIv);
                         instantiate();
                     } else if (pollTries > 60) {
@@ -591,7 +591,7 @@
             var s = document.createElement('script');
             s.src = '../shared/ev-card-3d.js';
             s.async = true;
-            s.setAttribute('data-overdrive-ev-card-3d', '1');
+            s.setAttribute('data-wheelstop-ev-card-3d', '1');
             s.onload = instantiate;
             s.onerror = function () {
                 if (window.console) console.warn('[app-shell] ev-card-3d.js load failed');
@@ -617,7 +617,7 @@
     // applyToAux) so the relationship to lastEv3dModel/lastEv3dColor is
     // visible at a glance.
     var pendingSidebarSnapshot = null;
-    // Extra OverdriveEvCard3D instances mounted by other surfaces on the
+    // Extra WheelstopEvCard3D instances mounted by other surfaces on the
     // same page (currently: Live View's top-down camera selector). These
     // share the same model/colour as the sidebar card and stay in sync
     // when the user changes their selection on vehicle-control.html.
@@ -982,7 +982,7 @@
     window.WheelstopAppShell = window.WheelstopAppShell || {};
     window.WheelstopAppShell.refreshVehicle = applyVehicleSelection;
 
-    // Mount an additional OverdriveEvCard3D on a custom canvas (e.g. the
+    // Mount an additional WheelstopEvCard3D on a custom canvas (e.g. the
     // Live View camera selector). Reuses the sidebar's vendor download —
     // ev-card-3d.js is idempotent and adopts already-loaded THREE — and
     // tracks whatever (model, colour) the user has selected, replaying
@@ -1024,9 +1024,9 @@
         var instance = null;
         function instantiate() {
             if (instance) return instance;
-            if (typeof window.OverdriveEvCard3D !== 'function') return null;
+            if (typeof window.WheelstopEvCard3D !== 'function') return null;
             try {
-                instance = new window.OverdriveEvCard3D(canvasEl, opts || {});
+                instance = new window.WheelstopEvCard3D(canvasEl, opts || {});
                 auxEv3dInstances.push(instance);
                 if (lastEv3dColor) instance.setColor(lastEv3dColor);
                 if (lastEv3dModel) instance.setModel(lastEv3dModel);
@@ -1044,7 +1044,7 @@
         // Track this canvas in auxEv3dInstances even when we satisfy it
         // from the sprite cache, so a later setEvCardAppearance can
         // re-paint it on user selection change. We use a lightweight
-        // pseudo-instance — not a real OverdriveEvCard3D — exposing the
+        // pseudo-instance — not a real WheelstopEvCard3D — exposing the
         // minimum the iteration loop needs (canvas, view, _disposed,
         // setModel/setColor that re-attempt the cache).
         function makeSpriteOnlyAux() {
@@ -1103,7 +1103,7 @@
                     return;
                 }
                 ensureEv3d();
-                if (typeof window.OverdriveEvCard3D === 'function') {
+                if (typeof window.WheelstopEvCard3D === 'function') {
                     instantiate();
                     return;
                 }
@@ -1112,7 +1112,7 @@
                 var tries = 0;
                 var iv = setInterval(function () {
                     tries++;
-                    if (typeof window.OverdriveEvCard3D === 'function') {
+                    if (typeof window.WheelstopEvCard3D === 'function') {
                         clearInterval(iv);
                         instantiate();
                     } else if (tries > 80) {
@@ -1191,12 +1191,12 @@
     // Auto-load the collapsible-card script so every page that includes
     // app-shell.js gets the collapse behavior without needing a per-page
     // <script> tag. Idempotent: a second injection is a no-op via the
-    // data-overdrive-collapse marker.
+    // data-wheelstop-collapse marker.
     function ensureCollapseScript() {
-        if (document.querySelector('script[data-overdrive-collapse]')) return;
+        if (document.querySelector('script[data-wheelstop-collapse]')) return;
         var s = document.createElement('script');
         s.src = '../shared/app-collapse.js';
-        s.setAttribute('data-overdrive-collapse', '1');
+        s.setAttribute('data-wheelstop-collapse', '1');
         s.async = false;
         // Place it next to app-shell.js so the relative path resolves the
         // same way as the page's other shared imports.

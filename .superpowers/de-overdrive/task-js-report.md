@@ -106,6 +106,70 @@ Confirmed untouched (spot-checked with `rg`):
   the Overdrive shell", "Overdrive Android shell") in header/doc comments — left as-is.
 - No `security-audit/` directory exists under `app/src/main/assets/web`.
 
+## Follow-up pass: remaining Overdrive* JS family + data-overdrive-* attributes
+
+The coordinator asked for the second `Overdrive*` global family (flagged as a concern above) to be
+renamed too, as part of the same full de-Overdrive sweep. Renamed:
+
+- **`OverdriveEvCard3D` → `WheelstopEvCard3D`** — defined in
+  `app/src/main/assets/web/shared/ev-card-3d.js:304` (constructor function), with
+  `root.WheelstopEvCard3D = WheelstopEvCard3D` at line 787 exposing it globally, plus all
+  `.prototype.*` method definitions in the same file. Used/read via `window.WheelstopEvCard3D` in
+  `shared/app-shell.js` (8 sites: guard checks, instantiation, doc comments) and mentioned in
+  comments in `shared/map.js` (2) and `shared/core.js` (1).
+- **`OverdriveEvSpriteCache` → `WheelstopEvSpriteCache`** — defined in
+  `shared/ev-card-sprite-cache.js` (guard at line 37, `root.WheelstopEvSpriteCache = {...}` at
+  line 347). Used in `shared/app-shell.js` (4 sites, all `window.WheelstopEvSpriteCache` reads).
+- **`OverdriveDisableEvCard3D` → `WheelstopDisableEvCard3D`** — an opt-out flag only referenced
+  inside `shared/app-shell.js` (comment + `if (window.WheelstopDisableEvCard3D) return;`); no page
+  in the repo actually sets it, so no other file needed changes.
+- **`__overdriveEvCard3dVendorPromise` → `__wheelstopEvCard3dVendorPromise`** — an internal
+  `root.*`-scoped (i.e. `window`-scoped) vendor-load cache in `ev-card-3d.js`, not explicitly
+  named in the coordinator's bullet list (it's lowercase-prefixed, not `Overdrive<Word>`), but
+  it's unambiguously the same brand word embedded in a global identifier, so renamed for
+  consistency with the rest of the file (6 occurrences, all within `ev-card-3d.js`).
+- **`data-overdrive-ev-card-3d` → `data-wheelstop-ev-card-3d`** and
+  **`data-overdrive-collapse` → `data-wheelstop-collapse`** — both DOM data-attribute markers are
+  set (`setAttribute`) and read (`querySelector('script[data-...]')`) entirely within
+  `shared/app-shell.js` itself (self-referential script-injection idempotency guards); confirmed
+  via repo-wide grep that no HTML template or other JS file references either attribute, so no
+  `dataset.*` reads or CSS `[data-overdrive-...]` selectors existed to update.
+
+Files touched in this pass: `shared/ev-card-3d.js`, `shared/ev-card-sprite-cache.js`,
+`shared/app-shell.js`, `shared/map.js`, `shared/core.js` (51 insertions / 51 deletions).
+
+### Verify (coordinator's exact command)
+
+```
+$ rg -n 'Overdrive|data-overdrive' app/src/main/assets/web | rg -iv \
+    'overdrive_config|/tmp/.*overdrive|overdrive/models|DCIM/Overdrive|saved to Overdrive|the Overdrive (shell|Android)|// .*Overdrive'
+```
+
+Remaining output is exclusively the two allowed categories:
+- i18n `storage_path_default` / `events_saved_to_default` strings in the *non-English* locale
+  JSON files (`i18n/it.json`, `de.json`, `ja.json`, ... — ~30 files) containing translated forms
+  of "saved to Overdrive/trips" etc. These are the same DCIM/Overdrive-folder display-text family
+  as the English string the filter already excludes; the filter regex only matched the literal
+  English phrase "saved to Overdrive", so the translated equivalents surface in the diff output,
+  but they're the identical out-of-scope category (recording-folder display text, another pass).
+- `/* ... */`-style header prose comments ("`* Overdrive — EV-card sprite cache.`",
+  "`* Overdrive — App-shell visual identity layer.`", "`The Overdrive accent stripe`", etc.) across
+  ~9 files. These use a leading `*` inside a block comment, not `//`, so the filter's
+  `// .*Overdrive` clause doesn't strip them — same "prose brand word in a comment" category the
+  coordinator already scoped out, just a block-comment style the given regex didn't happen to
+  anchor on.
+
+No JS identifiers, `data-overdrive-*` attributes, or `window.Overdrive*` globals remain anywhere
+in `app/src/main/assets/web` after this pass.
+
+```
+$ rg -c 'OverdriveEvCard3D|OverdriveEvSpriteCache|OverdriveDisableEvCard3D|data-overdrive-|__overdriveEvCard3dVendorPromise' app/src/main/assets/web
+(no output — 0 hits)
+
+$ rg -n 'WheelstopEvCard3D|WheelstopEvSpriteCache|WheelstopDisableEvCard3D|data-wheelstop-|__wheelstopEvCard3dVendorPromise' app/src/main/assets/web | wc -l
+51
+```
+
 ## Concerns / judgment calls
 
 - The task's occurrence counts ("~32", "~7") matched exactly (32 and 7) once comment mentions of

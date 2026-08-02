@@ -960,7 +960,7 @@ BYD.core = {
             }
 
             // Body-mesh emissive glow. The teal/amber/red ramp + intensity
-            // scaling lives in OverdriveEvCard3D — see ev-card-3d.js
+            // scaling lives in WheelstopEvCard3D — see ev-card-3d.js
             // socRampColor + _applyEmissive. No-op on pages where the 3D
             // shell isn't loaded yet (login.html, dev-only pages).
             if (window.WheelstopAppShell && window.WheelstopAppShell.setSoc) {

@@ -106,7 +106,7 @@ BYD.map = {
     },
     
     /**
-     * Mount OverdriveEvCard3D onto the map marker canvas. The canvas
+     * Mount WheelstopEvCard3D onto the map marker canvas. The canvas
      * is injected by Leaflet inside `createCarIcon()`'s divIcon HTML,
      * so we reach it through the live #carIconCanvas in the map pane
      * (Leaflet renders the divIcon to a positioned <div> with the same
@@ -180,7 +180,7 @@ BYD.map = {
     
     /**
      * Create custom car icon. Renders the user's selected GLB top-down
-     * via OverdriveEvCard3D — same model and paint colour as the
+     * via WheelstopEvCard3D — same model and paint colour as the
      * sidebar EV-card and the Live View camera selector. The wrapper
      * keeps the same dimensions as the legacy car-icon-map.webp PNG so
      * Leaflet's iconSize / iconAnchor stay valid and rotation by

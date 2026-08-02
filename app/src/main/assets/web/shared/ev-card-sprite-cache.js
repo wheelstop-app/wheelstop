@@ -34,7 +34,7 @@
 (function (root) {
     'use strict';
 
-    if (root.OverdriveEvSpriteCache) return;
+    if (root.WheelstopEvSpriteCache) return;
 
     var DB_NAME    = 'overdrive-ev-sprites';
     var DB_VERSION = 1;
@@ -344,7 +344,7 @@
         });
     }
 
-    root.OverdriveEvSpriteCache = {
+    root.WheelstopEvSpriteCache = {
         supported: supported,
         get: get,
         put: put,
