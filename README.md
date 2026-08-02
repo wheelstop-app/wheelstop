@@ -1,5 +1,10 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/wheelstop-app/branding/main/icon/wheelstop-icon-512.png" width="128" alt="Wheelstop">
+</p>
+
 <h1 align="center">Wheelstop</h1>
 <p align="center">Advanced sentry mode &amp; dashcam for BYD vehicles — an independent, open fork of Overdrive.</p>
+<p align="center"><sub>Brand assets &amp; guidelines: <a href="https://github.com/wheelstop-app/branding">wheelstop-app/branding</a></sub></p>
 
 ---
 
