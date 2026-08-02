@@ -33,7 +33,7 @@ public class VehicleControlAssetTest {
 
         assertTrue(ruleFor(css, ".vc-tyre-callout").contains("width: 168px"));
         assertTrue(ruleFor(css, ".vc-tyre-psi-val").contains("font-size: 28px"));
-        assertTrue(css.contains("rgba(0, 212, 170, 0.28)"));
+        assertTrue(css.contains("rgba(var(--primary-rgb), 0.28)"));
     }
 
     @Test

@@ -32,7 +32,7 @@ import okhttp3.Response;
  * - Update detection: compare asset updated_at vs last installed timestamp
  * - Debug tag is ignored in release builds
  *
- * API: https://api.github.com/repos/yash-srivastava/Overdrive-release/releases/tags/{channel}
+ * API: https://api.github.com/repos/wheelstop-app/wheelstop/releases/tags/{channel}
  */
 public class AppUpdater {
 

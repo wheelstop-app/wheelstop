@@ -23,7 +23,7 @@ public class SendLogCommandHandler implements TelegramCommandHandler {
     private static final int CAMERA_IPC_PORT = 19877;
     private static final String DISCORD_URL = "https://discord.gg/PZutk9fg4h";
     private static final String GITHUB_URL =
-            "https://github.com/yash-srivastava/Overdrive-release/issues";
+            "https://github.com/wheelstop-app/wheelstop/issues";
     private static final String WHATSAPP_URL =
             "https://chat.whatsapp.com/HChmriCWgr9KwAtE6OEkiM";
     // Upload is network-bound (read log → POST to CF). 35s sits above

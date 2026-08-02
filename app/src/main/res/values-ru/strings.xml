@@ -811,7 +811,7 @@
     <string name="settings_about_support_section">Поддерживаются такими людьми, как ты.</string>
     <string name="settings_about_support_share_title">Расскажите другому владельцу</string>
     <string name="settings_about_support_share_value">Каждый общий ссылка помогает другому владельцу BYD обнаружить Wheelstop.</string>
-    <string name="settings_about_support_share_message">Проверьте Wheelstop открытый код наблюдения и дашкамы для BYD: https://overdrive-5lc.pages.dev/</string>
+    <string name="settings_about_support_share_message">Проверьте Wheelstop открытый код наблюдения и дашкамы для BYD: https://github.com/wheelstop-app/wheelstop</string>
     <string name="settings_about_support_share_chooser">Поделиться Wheelstop</string>
     <string name="settings_about_open_link_failed">Не удалось открыть ссылку.</string>
     <string name="settings_about_open_link_copied">Никакой браузер не найден. URL скопирован: %1$s</string>
@@ -820,7 +820,7 @@
     <string name="settings_about_license_title">Лицензия</string>
     <string name="settings_about_license_value">MIT  открытый код. Нажмите, чтобы просмотреть полный текст.</string>
     <string name="settings_about_source_title">Исходный код</string>
-    <string name="settings_about_source_value">Github.com/yash-srivastava/Overdrive-release</string>
+    <string name="settings_about_source_value">github.com/wheelstop-app/wheelstop</string>
     <string name="settings_about_star_title">Отпустить на GitHub</string>
     <string name="settings_about_star_value">Это много значит.</string>
     <string name="settings_about_thanks_title">Спасибо</string>

@@ -623,7 +623,7 @@
     <string name="settings_update_channel_braveheart_toast">Switched to Braveheart. Builds may be unstable — if something breaks, send the daemon log and report it on Discord/GitHub/WhatsApp.</string>
     <!-- Community / report-a-bug links -->
     <string name="community_discord_url" translatable="false">https://discord.gg/PZutk9fg4h</string>
-    <string name="community_github_issues_url" translatable="false">https://github.com/yash-srivastava/Overdrive-release/issues</string>
+    <string name="community_github_issues_url" translatable="false">https://github.com/wheelstop-app/wheelstop/issues</string>
     <string name="community_whatsapp_url" translatable="false">https://chat.whatsapp.com/HChmriCWgr9KwAtE6OEkiM</string>
 
     <string name="toast_storage_permission_required">Storage permission required for recordings</string>
@@ -938,7 +938,7 @@
 
     <string name="settings_about_support_share_title">Tell a fellow owner</string>
     <string name="settings_about_support_share_value">Every shared link helps another BYD owner discover Wheelstop.</string>
-    <string name="settings_about_support_share_message">Check out Wheelstop — open-source surveillance &amp; dashcam for BYD: https://overdrive-5lc.pages.dev/</string>
+    <string name="settings_about_support_share_message">Check out Wheelstop — open-source surveillance &amp; dashcam for BYD: https://github.com/wheelstop-app/wheelstop</string>
     <string name="settings_about_support_share_chooser">Share Wheelstop</string>
     <string name="settings_about_open_link_failed">Couldn\'t open link.</string>
     <string name="settings_about_open_link_copied">No browser found. URL copied: %1$s</string>
@@ -949,12 +949,12 @@
     <string name="settings_about_license_title">License</string>
     <string name="settings_about_license_value">MIT — open source. Tap to view full text.</string>
     <string name="settings_about_source_title">Source code</string>
-    <string name="settings_about_source_value">github.com/yash-srivastava/Overdrive-release</string>
-    <string name="settings_about_license_url" translatable="false">https://github.com/yash-srivastava/Overdrive-release/blob/main/LICENSE</string>
-    <string name="settings_about_source_url" translatable="false">https://github.com/yash-srivastava/Overdrive-release</string>
+    <string name="settings_about_source_value">github.com/wheelstop-app/wheelstop</string>
+    <string name="settings_about_license_url" translatable="false">https://github.com/wheelstop-app/wheelstop/blob/main/LICENSE</string>
+    <string name="settings_about_source_url" translatable="false">https://github.com/wheelstop-app/wheelstop</string>
     <string name="settings_about_star_title">Star us on GitHub</string>
     <string name="settings_about_star_value">Takes a second. Means a lot.</string>
-    <string name="settings_about_star_url" translatable="false">https://github.com/yash-srivastava/Overdrive-release</string>
+    <string name="settings_about_star_url" translatable="false">https://github.com/wheelstop-app/wheelstop</string>
 
     <string name="settings_about_thanks_title">Thanks</string>
     <string name="settings_about_thanks_subtitle">Built with the help of contributors and supporters.</string>

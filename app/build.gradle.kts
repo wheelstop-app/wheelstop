@@ -185,6 +185,25 @@ tasks.matching { it.name == "preBuild" }.configureEach {
     dependsOn("downloadTunnelBinaries")
 }
 
+// ==================== Legal notices ====================
+// The tunnel binaries above are GPLv3 (sing-box), Apache-2.0, and BSD-3-Clause software.
+// THIRD_PARTY_NOTICES.md and LICENSES/ at the repo root record what's bundled and carry the
+// GPLv3 written offer to provide sing-box's corresponding source. Copying them into
+// assets/web/local/legal/ ships that offer INSIDE the APK, not just as a release asset that can go
+// missing independently of the binary it applies to.
+tasks.register<Copy>("copyLegalAssets") {
+    description = "Copies THIRD_PARTY_NOTICES.md and LICENSES/ into assets/web/local/legal/ so they ship inside the APK and are reachable via the in-app HTTP server's /local/ route."
+    from(rootProject.file("THIRD_PARTY_NOTICES.md"))
+    from(rootProject.file("LICENSES"))
+    into(file("src/main/assets/web/local/legal"))
+}
+
+// Bind to preBuild for the same reason as downloadTunnelBinaries above: these are copied
+// assets, not compiled inputs, so they must exist before the merge/package steps.
+tasks.matching { it.name == "preBuild" }.configureEach {
+    dependsOn("copyLegalAssets")
+}
+
 // OpenCV-mobile version for surveillance module (minimal build, ~3MB vs ~20MB)
 // https://github.com/nihui/opencv-mobile
 val opencvMobileTag = "v31"

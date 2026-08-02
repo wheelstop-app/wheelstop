@@ -12,10 +12,10 @@
     <color name="white">#FFFFFFFF</color>
 
     <!-- Brand (slightly deeper for AA contrast on light surfaces) -->
-    <color name="brand_primary">#00876C</color>
-    <color name="brand_secondary">#00658F</color>
+    <color name="brand_primary">#7D5300</color>
+    <color name="brand_secondary">#755700</color>
     <color name="brand_cyan">@color/brand_primary</color>
-    <color name="brand_cyan_glow">#3300876C</color>
+    <color name="brand_cyan_glow">#337D5300</color>
 
     <!-- Backgrounds — M3 light surface stack -->
     <color name="bg_base">#F7FAF7</color>

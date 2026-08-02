@@ -301,8 +301,8 @@
         
         /* SOC Chart Card */
         .soc-chart-card {
-            background: linear-gradient(135deg, var(--bg-surface) 0%, rgba(0, 212, 170, 0.05) 100%);
-            border: 1px solid rgba(0, 212, 170, 0.2);
+            background: linear-gradient(135deg, var(--bg-surface) 0%, rgba(var(--primary-rgb), 0.05) 100%);
+            border: 1px solid rgba(var(--primary-rgb), 0.2);
         }
         
         .soc-chart-card .chart-title {
@@ -414,8 +414,8 @@
         }
         
         .gpu-status-badge.optimal {
-            background: rgba(0, 212, 170, 0.2);
-            color: #00D4AA;
+            background: rgba(var(--primary-rgb), 0.2);
+            color: var(--primary);
         }
         
         .gpu-status-badge.heavy {
@@ -465,11 +465,11 @@
         }
         
         .gpu-health-hint.optimal .hint-icon {
-            background: rgba(0, 212, 170, 0.2);
+            background: rgba(var(--primary-rgb), 0.2);
         }
         .gpu-health-hint.optimal .hint-icon::before {
             content: '●';
-            color: #00D4AA;
+            color: var(--primary);
         }
         
         .gpu-health-hint.heavy .hint-icon {

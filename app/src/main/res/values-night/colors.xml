@@ -12,10 +12,10 @@
     <color name="white">#FFFFFFFF</color>
 
     <!-- Brand -->
-    <color name="brand_primary">#5DDBB6</color>
-    <color name="brand_secondary">#85CFFF</color>
+    <color name="brand_primary">#FFBD58</color>
+    <color name="brand_secondary">#F5BB23</color>
     <color name="brand_cyan">@color/brand_primary</color>
-    <color name="brand_cyan_glow">#335DDBB6</color>
+    <color name="brand_cyan_glow">#33FFBD58</color>
 
     <!-- Backgrounds — M3 surface tonal stack -->
     <color name="bg_base">#0E1311</color>
@@ -61,7 +61,7 @@
 
     <!-- Switches -->
     <color name="switch_track_on">@color/brand_primary</color>
-    <color name="switch_thumb_on">#003828</color>
+    <color name="switch_thumb_on">#5C3B00</color>
     <color name="switch_track_off">@color/bg_hover</color>
     <color name="switch_thumb_off">@color/text_muted</color>
 

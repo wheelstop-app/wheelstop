@@ -8,22 +8,22 @@
 <resources>
 
     <!-- Primary -->
-    <color name="md_sys_color_primary_dark">#5DDBB6</color>
-    <color name="md_sys_color_on_primary_dark">#003828</color>
-    <color name="md_sys_color_primary_container_dark">#00513B</color>
-    <color name="md_sys_color_on_primary_container_dark">#78F3CC</color>
+    <color name="md_sys_color_primary_dark">#FFBD58</color>
+    <color name="md_sys_color_on_primary_dark">#5C3B00</color>
+    <color name="md_sys_color_primary_container_dark">#FCAB00</color>
+    <color name="md_sys_color_on_primary_container_dark">#4F3300</color>
 
     <!-- Secondary -->
-    <color name="md_sys_color_secondary_dark">#B1CCC0</color>
-    <color name="md_sys_color_on_secondary_dark">#1D352D</color>
-    <color name="md_sys_color_secondary_container_dark">#334B43</color>
-    <color name="md_sys_color_on_secondary_container_dark">#CDE8DC</color>
+    <color name="md_sys_color_secondary_dark">#F5BB23</color>
+    <color name="md_sys_color_on_secondary_dark">#513B00</color>
+    <color name="md_sys_color_secondary_container_dark">#795900</color>
+    <color name="md_sys_color_on_secondary_container_dark">#FFF6EC</color>
 
     <!-- Tertiary -->
-    <color name="md_sys_color_tertiary_dark">#85CFFF</color>
-    <color name="md_sys_color_on_tertiary_dark">#00344C</color>
-    <color name="md_sys_color_tertiary_container_dark">#004C6C</color>
-    <color name="md_sys_color_on_tertiary_container_dark">#C5E7FF</color>
+    <color name="md_sys_color_tertiary_dark">#FFEB93</color>
+    <color name="md_sys_color_on_tertiary_dark">#645600</color>
+    <color name="md_sys_color_tertiary_container_dark">#F9DD44</color>
+    <color name="md_sys_color_on_tertiary_container_dark">#5B4E00</color>
 
     <!-- Error -->
     <color name="md_sys_color_error_dark">#FFB4AB</color>
@@ -53,7 +53,7 @@
     <!-- Inverse / scrim -->
     <color name="md_sys_color_inverse_surface_dark">#DEE4E0</color>
     <color name="md_sys_color_inverse_on_surface_dark">#2D3130</color>
-    <color name="md_sys_color_inverse_primary_dark">#00876C</color>
+    <color name="md_sys_color_inverse_primary_dark">#825600</color>
     <color name="md_sys_color_scrim_dark">#000000</color>
 
     <!-- Brand-aware status colors -->

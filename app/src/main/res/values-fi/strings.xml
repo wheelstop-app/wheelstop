@@ -658,7 +658,7 @@
     <string name="settings_about_support_section">Palvelun tarjoaa kaltaisesi ihmiset</string>
     <string name="settings_about_support_share_title">Kerro omalle omistajalle</string>
     <string name="settings_about_support_share_value">Jokainen jaettu linkki auttaa toista BYD omistajaa löytämään Wheelstop.</string>
-    <string name="settings_about_support_share_message">Katso Wheelstop – avoimen lähdekoodin valvonta &amp; dashcam BYD: https://overdrive-5lc.pages.dev/</string>
+    <string name="settings_about_support_share_message">Katso Wheelstop – avoimen lähdekoodin valvonta &amp; dashcam BYD: https://github.com/wheelstop-app/wheelstop</string>
     <string name="settings_about_support_share_chooser">Jaa Wheelstop</string>
     <string name="settings_about_open_link_failed">Linkkiä ei voitu avata.</string>
     <string name="settings_about_open_link_copied">Selainta ei löytynyt. URL kopioitu: %1$s</string>
@@ -667,7 +667,7 @@
     <string name="settings_about_license_title">Lisenssi</string>
     <string name="settings_about_license_value">MIT – avoin lähdekoodi. Napauta nähdäksesi koko tekstin.</string>
     <string name="settings_about_source_title">Lähdekoodi</string>
-    <string name="settings_about_source_value">github.com/yash-srivastava/Overdrive-release</string>
+    <string name="settings_about_source_value">github.com/wheelstop-app/wheelstop</string>
     <string name="settings_about_star_title">Star us on GitHub</string>
     <string name="settings_about_star_value">Ottaa toisen. Tarkoittaa paljon.</string>
     <string name="settings_about_thanks_title">Kiitos</string>

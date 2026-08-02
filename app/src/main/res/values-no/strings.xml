@@ -800,7 +800,7 @@
     <string name="settings_about_support_section">Drevet av mennesker som deg</string>
     <string name="settings_about_support_share_title">Fortell en medeier</string>
     <string name="settings_about_support_share_value">Hver delte lenke hjelper en annen BYD-eier å oppdage Wheelstop.</string>
-    <string name="settings_about_support_share_message">Sjekk ut Wheelstop— åpen kildekode overvåkning &amp; dashcam for BYD: https://overdrive-5lc.pages.dev/</string>
+    <string name="settings_about_support_share_message">Sjekk ut Wheelstop— åpen kildekode overvåkning &amp; dashcam for BYD: https://github.com/wheelstop-app/wheelstop</string>
     <string name="settings_about_support_share_chooser">Del Wheelstop</string>
     <string name="settings_about_open_link_failed">Kunne ikke åpne lenken.</string>
     <string name="settings_about_open_link_copied">Ingen nettleser funnet. URL kopiert: %1$s</string>
@@ -809,7 +809,7 @@
     <string name="settings_about_license_title">Lisens</string>
     <string name="settings_about_license_value">MIT – åpen kildekode. Trykk for å se full tekst.</string>
     <string name="settings_about_source_title">Kildekode</string>
-    <string name="settings_about_source_value">github.com/yash-srivastava/Overdriv-frigjøring</string>
+    <string name="settings_about_source_value">github.com/wheelstop-app/wheelstop</string>
     <string name="settings_about_star_title">Star us on GitHub</string>
     <string name="settings_about_star_value">Tar et sekund til. Betyr mye.</string>
     <string name="settings_about_thanks_title">Takk</string>
