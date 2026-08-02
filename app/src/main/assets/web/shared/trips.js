@@ -1,5 +1,5 @@
 /**
- * OverDrive - Trip Analytics Module v2
+ * Wheelstop - Trip Analytics Module v2
  * Modern trip list, interactive timeline slider, route map with marker,
  * radar hover tooltips, score descriptions, speed distribution details.
  */

@@ -616,7 +616,7 @@
     <string name="status_overlay_notif_title">حالة Wheelstop</string>
     <string name="status_overlay_notif_text">Status overlay active</string>
     <!-- DaemonKeepaliveService persistent notification (foreground service)
-         and the group-summary row that collapses Overdrive's three FGS
+         and the group-summary row that collapses Wheelstop's three FGS
          notifications into one shade entry. The summary text is intentionally
          generic so it stays accurate whether all three services are running
          or only the keepalive survived an OOM respawn. -->
@@ -862,7 +862,7 @@
     <string name="settings_privacy_storage_count_format_plural">%1$d مقطع</string>
     <string name="settings_privacy_reset_subtitle">اختر فئات: تسجيلات، أحداث، تكوينات دايمون، القياس عن بعد الذاكرة المؤقتة…</string>
     <!-- Settings → Security pane copy + PIN unlock screen.
-         The lock guards the OverDrive UI only. Cam daemon, AccSentry,
+         The lock guards the Wheelstop UI only. Cam daemon, AccSentry,
          surveillance, recording, Telegram alerts, status overlay, and the
          deterrent screen all run independently regardless of this state. -->
     <string name="settings_security_title">أمان</string>

@@ -17,7 +17,7 @@ import java.util.regex.Pattern;
 /**
  * Publish an MQTT message from an automation — the outbound sink that lets a rule notify
  * Home Assistant (or any broker consumer), e.g. "when a person is detected while parked →
- * publish overdrive/alert = person". Fans the message out to every active MQTT connection
+ * publish wheelstop/alert = person". Fans the message out to every active MQTT connection
  * via {@link app.wheelstop.android.mqtt.MqttConnectionManager#publishToAll}.
  *
  * <p>Deliberately NOT an {@link ApiAction}: {@code /api/mqtt} is intentionally OFF the

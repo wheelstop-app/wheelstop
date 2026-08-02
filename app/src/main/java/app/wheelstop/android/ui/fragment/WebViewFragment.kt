@@ -340,7 +340,7 @@ class WebViewFragment : Fragment() {
                 }
             });
         };
-        console.log('[OverDrive] fetch() patched to bypass proxy');
+        console.log('[Wheelstop] fetch() patched to bypass proxy');
     }
 })();
 """

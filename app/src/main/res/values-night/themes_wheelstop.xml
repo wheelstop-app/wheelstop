@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Material 3 themes for Overdrive — DARK variant.
+  Material 3 themes for Wheelstop — DARK variant.
   Activated automatically when the system or AppCompatDelegate sets night mode.
 -->
 <resources xmlns:tools="http://schemas.android.com/tools">

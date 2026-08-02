@@ -362,7 +362,7 @@
 
         <!-- Map day/night override (Auto → Light → Dark). Lets the user pin the
              basemap scheme directly from the map; AUTO (default) follows the
-             Overdrive app theme. Icon reflects the current mode (auto/sun/moon)
+             Wheelstop app theme. Icon reflects the current mode (auto/sun/moon)
              and the FAB is accented when a scheme is pinned. -->
         <com.google.android.material.floatingactionbutton.FloatingActionButton
             android:id="@+id/fabMapTheme"

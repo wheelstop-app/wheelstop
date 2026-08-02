@@ -509,7 +509,7 @@ object UnifiedConfigManager {
         // ACC-OFF cycle to save the 12 V battery. Does NOT affect the cameras — the
         // camera/AVM/ISP power keep-alives are unconditional in AccSentryDaemon.
         if (!surveillance.has("keepUsbPowerOnAccOff")) surveillance.put("keepUsbPowerOnAccOff", true)
-        // Operating mode: WHICH lifecycle phases OverDrive is active for.
+        // Operating mode: WHICH lifecycle phases Wheelstop is active for.
         //   "onAndOff" — full current behaviour: after the vehicle powers off the
         //                daemon keeps the head unit awake (MCU/USB/AP wake, keep-alive
         //                loop, voltage/SoC monitors) AND runs post-OFF surveillance /
@@ -1724,7 +1724,7 @@ object UnifiedConfigManager {
         updateValues("radio", mapOf("wifiUserOff" to suppressed))
 
     /** The dataUsage config section: {enabled}. Tracks per-day WiFi/mobile bytes
-     *  consumed by Overdrive (app UID + UID-2000 daemons/tunnels) for the
+     *  consumed by Wheelstop (app UID + UID-2000 daemons/tunnels) for the
      *  performance page's Data graph. */
     @JvmStatic
     fun getDataUsage(): JSONObject = loadConfig().optJSONObject("dataUsage") ?: JSONObject()

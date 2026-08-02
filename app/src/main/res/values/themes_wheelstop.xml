@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Material 3 themes for Overdrive — LIGHT (default) variant.
+  Material 3 themes for Wheelstop — LIGHT (default) variant.
   values-night/themes_wheelstop.xml provides the dark variant.
   values/themes.xml keeps the legacy `Theme.Wheelstop` alias so existing
   Manifest entries (android:theme="@style/Theme.Wheelstop") keep working —

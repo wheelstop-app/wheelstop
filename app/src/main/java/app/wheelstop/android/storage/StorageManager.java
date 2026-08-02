@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * StorageManager - SOTA Storage Management for Overdrive
+ * StorageManager - SOTA Storage Management for Wheelstop
  * 
  * Manages recording and surveillance storage with:
  * - Dedicated directories under /storage/emulated/0/Wheelstop/ (internal) or SD card
@@ -124,7 +124,7 @@ public class StorageManager {
         }
     }
     
-    // Base directories for Overdrive files
+    // Base directories for Wheelstop files
     private static final String INTERNAL_BASE_DIR = "/storage/emulated/0/Wheelstop";
 
     // Legacy paths from older app versions. Files here aren't written anymore
@@ -3365,8 +3365,8 @@ public class StorageManager {
     }
     
     /**
-     * SOTA: Auto-enable CDR (BYD dashcam) cleanup when Overdrive uses SD card.
-     * This ensures Overdrive always has space by cleaning up old dashcam files.
+     * SOTA: Auto-enable CDR (BYD dashcam) cleanup when Wheelstop uses SD card.
+     * This ensures Wheelstop always has space by cleaning up old dashcam files.
      */
     private void autoEnableCdrCleanup() {
         try {
@@ -3385,7 +3385,7 @@ public class StorageManager {
                 
                 cleaner.setReservedSpaceMb(reservedMb);
                 cleaner.setEnabled(true);
-                logInfo("Auto-enabled CDR cleanup with " + reservedMb + "MB reserved for Overdrive");
+                logInfo("Auto-enabled CDR cleanup with " + reservedMb + "MB reserved for Wheelstop");
             }
         } catch (Exception e) {
             logWarn("Could not auto-enable CDR cleanup: " + e.getMessage());
@@ -5603,7 +5603,7 @@ public class StorageManager {
             try {
                 ExternalStorageCleaner cleaner = ExternalStorageCleaner.getInstance();
                 if (cleaner.isEnabled()) {
-                    logInfo("Overdrive cleanup insufficient on SD card — triggering CDR cleanup");
+                    logInfo("Wheelstop cleanup insufficient on SD card — triggering CDR cleanup");
                     cleaner.ensureReservedSpace();
                 }
             } catch (Exception e) {

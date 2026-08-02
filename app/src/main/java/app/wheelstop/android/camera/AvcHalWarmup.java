@@ -135,7 +135,7 @@ public class AvcHalWarmup {
         if (dilink4) {
             // ESCO-PARITY: esco does NOT launch com.byd.avc anywhere in its
             // panorama-camera flow. The 4 s blocking sleep + `am start
-            // com.byd.avc/.MainActivity` was OverDrive-specific and
+            // com.byd.avc/.MainActivity` was Wheelstop-specific and
             // suspected of stealing the HAL's mosaic mode (PANORAMA_OUTPUT_STATE=7).
             // Skip the warmup entirely on dilink4. ensureAvcAlive() (pidof +
             // conditional am start, no sleep) still runs separately for the

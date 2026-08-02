@@ -17,7 +17,7 @@ import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 
 /**
- * PIN-lock manager for the OverDrive app UI.
+ * PIN-lock manager for the Wheelstop app UI.
  *
  * Scope: this gates {@link app.wheelstop.android.ui.MainActivity} only. The
  * cam daemon, AccSentry, surveillance, recording, Telegram alerts, status

@@ -37,12 +37,12 @@ class DaemonKeepaliveService : Service() {
         private const val CHANNEL_ID = "daemon_keepalive_channel"
 
         // Shared notification grouping. The three foreground services that
-        // Overdrive runs (this one + LocationSidecarService + StatusOverlay
+        // Wheelstop runs (this one + LocationSidecarService + StatusOverlay
         // Service) each post their own ongoing notification — Android needs
         // the FGS notification to remain visible per service. Tagging them
         // all with the same group key, plus a 4th `setGroupSummary(true)`
         // notification posted by this service, collapses the four entries
-        // into a single expandable shade row. The user sees one "Overdrive
+        // into a single expandable shade row. The user sees one "Wheelstop
         // Active" tile with the per-service lines available on tap-to-expand.
         //
         // The summary notification is *not* a foreground-service notification
@@ -195,7 +195,7 @@ class DaemonKeepaliveService : Service() {
     override fun onDestroy() {
         Log.i(TAG, "Service onDestroy")
 
-        // Drop the group-summary so the user doesn't see a stale "Overdrive"
+        // Drop the group-summary so the user doesn't see a stale "Wheelstop"
         // row after the keepalive service stops. The per-service FGS notifs
         // are auto-removed by the framework when their service stops; only
         // the summary (posted via NotificationManager.notify) needs an
@@ -291,10 +291,10 @@ class DaemonKeepaliveService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 SUMMARY_CHANNEL_ID,
-                "Overdrive Status",
+                "Wheelstop Status",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Combined status row for Overdrive's background services"
+                description = "Combined status row for Wheelstop's background services"
                 setShowBadge(false)
             }
             val manager = getSystemService(NotificationManager::class.java)

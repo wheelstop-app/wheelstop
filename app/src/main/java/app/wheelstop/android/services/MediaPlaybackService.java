@@ -381,7 +381,7 @@ public final class MediaPlaybackService extends Service {
                 ? new Notification.Builder(this, CHANNEL_ID)
                 : new Notification.Builder(this);
         return b.setContentTitle("Playing audio")
-                .setContentText("OverDrive automation")
+                .setContentText("Wheelstop automation")
                 .setSmallIcon(R.drawable.ic_play_circle)
                 .setOngoing(true)
                 .setGroup(DaemonKeepaliveService.NOTIFICATION_GROUP_KEY)

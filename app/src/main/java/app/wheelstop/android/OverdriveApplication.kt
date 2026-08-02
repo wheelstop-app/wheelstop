@@ -15,7 +15,7 @@ import app.wheelstop.android.services.DaemonKeepaliveService
 import app.wheelstop.android.ui.util.PreferencesManager
 
 /**
- * Application class for Overdrive.
+ * Application class for Wheelstop.
  * Initializes global singletons before any Activity is created.
  */
 class OverdriveApplication : Application() {

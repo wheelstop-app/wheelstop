@@ -1841,7 +1841,7 @@ public class PanoramicCameraGpu {
         // ESCO-PARITY: no gate. esco's user-preview path opens AVMCamera
         // immediately on PanoCameraRecordService.m19854a → AIDL → daemon
         // C5312b.m24073j → C5920a.mo26750v with no wall-clock wait. All
-        // OverDrive open paths (StreamingApiHandler, RecordingModeManager,
+        // Wheelstop open paths (StreamingApiHandler, RecordingModeManager,
         // OemDashcam, CameraDaemon ACC-OFF) reach this method directly.
 
         // Notify camera service we're about to open

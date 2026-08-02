@@ -15,7 +15,7 @@
       WebView detection MUST run before app-tabs.js builds the tab bar so
       we can filter OT_TABS to the Telegram-only flow on the head unit.
       The AndroidBridge JS interface is injected by WebViewFragment; its
-      mere presence is the canonical "we're inside the Overdrive shell"
+      mere presence is the canonical "we're inside the Wheelstop shell"
       signal (same approach core.js uses for locale / theme decisions).
       Setting the class on <html> (not <body>) so CSS rules can style
       pre-paint elements like <main> and <style> media queries.
@@ -269,7 +269,7 @@
         /* ============================================================
            In-app WebView adaptations
            ------------------------------------------------------------
-           When loaded inside the Overdrive Android shell (signaled by
+           When loaded inside the Wheelstop Android shell (signaled by
            html.is-app-webview), Web Push is unreachable (the head unit
            can't satisfy the secure-origin requirement and the on-device
            browser is the wrong UA for the Devices list). Hide both

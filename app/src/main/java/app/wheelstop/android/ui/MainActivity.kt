@@ -190,7 +190,7 @@ class MainActivity : AppCompatActivity() {
         setupAdbAuthCallback()
         
         // Log app start
-        logsViewModel.info("App", "OverDrive started")
+        logsViewModel.info("App", "Wheelstop started")
 
         // Seed out-of-process revival watchdog so the process gets resurrected
         // if it ever gets force-stopped or OOM-killed without an external event.

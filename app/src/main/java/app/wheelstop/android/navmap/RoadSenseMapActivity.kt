@@ -231,7 +231,7 @@ open class RoadSenseMapActivity : AppCompatActivity() {
 
     /**
      * Per-map day/night override, persisted independently of the app theme.
-     * [MAP_THEME_AUTO] (default) = follow the Overdrive app theme; [MAP_THEME_LIGHT]
+     * [MAP_THEME_AUTO] (default) = follow the Wheelstop app theme; [MAP_THEME_LIGHT]
      * / [MAP_THEME_DARK] = the user pinned the map to that scheme regardless of the
      * app. Cycled by the in-map theme FAB; honored by [isNightTheme] /
      * [styleUrlForTheme]. Loaded in onCreate.
@@ -1288,7 +1288,7 @@ open class RoadSenseMapActivity : AppCompatActivity() {
     private fun colorToHex(color: Int): String = String.format("#%08X", color)
 
     /**
-     * Recolor the bundled basemap to the Overdrive Material-3 palette at runtime, so
+     * Recolor the bundled basemap to the Wheelstop Material-3 palette at runtime, so
      * the map matches the app shell (day + night) instead of rendering the stock
      * OpenFreeMap colors. This walks the loaded style's layers ONCE (mirroring
      * [localizeMapLabels]) and rewrites each layer's flat paint color onto an M3 role.
@@ -1681,7 +1681,7 @@ open class RoadSenseMapActivity : AppCompatActivity() {
         //     local/default name. So "München"/"慕尼黑" etc. render to match the app.
         localizeMapLabels(style)
 
-        // 5f) Recolor the basemap to the Overdrive M3 palette (day/night) so the map
+        // 5f) Recolor the basemap to the Wheelstop M3 palette (day/night) so the map
         //     matches the app shell instead of the stock OpenFreeMap colors. One layer
         //     pass, no per-frame cost; re-runs here on every theme switch (setStyle →
         //     onStyleLoaded). Done AFTER localizeMapLabels (same kind of one-time walk)
@@ -2283,7 +2283,7 @@ open class RoadSenseMapActivity : AppCompatActivity() {
 
     /**
      * Cycle the per-map theme override Auto → Light → Dark → Auto and apply it.
-     * AUTO follows the Overdrive app theme; an explicit Light/Dark pins the
+     * AUTO follows the Wheelstop app theme; an explicit Light/Dark pins the
      * basemap to that scheme regardless of the app. The choice is persisted so it
      * survives leaving the map. Only RELOADS the basemap style when the resolved
      * day/night state actually changes (a no-op flip — e.g. Auto→Light while the
@@ -5647,7 +5647,7 @@ open class RoadSenseMapActivity : AppCompatActivity() {
         // that bails BEFORE that assignment, yet super.onCreate already ran so AMS
         // still drives the full lifecycle on the finishing instance. Touching the
         // uninitialized lateinit here threw UninitializedPropertyAccessException and
-        // crashed the whole app — the intermittent "clicking Map crashes Overdrive".
+        // crashed the whole app — the intermittent "clicking Map crashes Wheelstop".
         // Guard every forward with ::mapView.isInitialized.
         if (::mapView.isInitialized) mapView.onStart()
         // (C) Start the app-side gyro tap for crisp-turn heading fusion. Idempotent +
@@ -6244,7 +6244,7 @@ open class RoadSenseMapActivity : AppCompatActivity() {
         const val KEY_MAP_3D = "map_3d_enabled" // persisted 2D/3D choice (default 2D)
 
         // Per-map day/night override (independent of the app theme). AUTO follows
-        // the Overdrive app theme; LIGHT/DARK pin the basemap regardless.
+        // the Wheelstop app theme; LIGHT/DARK pin the basemap regardless.
         const val MAP_THEME_AUTO = 0
         const val MAP_THEME_LIGHT = 1
         const val MAP_THEME_DARK = 2

@@ -349,7 +349,7 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- License — Overdrive is MIT-licensed. Tap opens the LICENSE
+        <!-- License — Wheelstop is MIT-licensed. Tap opens the LICENSE
              text on GitHub. -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/cardLicense"
