@@ -329,8 +329,10 @@ android {
         applicationId = "app.wheelstop.android"
         minSdk = 25
         targetSdk = 25
-        versionCode = 1
-        versionName = "1.0"
+        // release-please owns the version; the release workflow passes it via -P properties
+        // derived from the release tag. These hardcoded values are only the local/dev fallback.
+        versionCode = (project.findProperty("wheelstopVersionCode") as String?)?.toIntOrNull() ?: 1
+        versionName = (project.findProperty("wheelstopVersionName") as String?) ?: "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
         // Note: abiFilters removed - using splits.abi instead for size optimization

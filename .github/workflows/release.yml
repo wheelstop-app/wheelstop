@@ -1,15 +1,30 @@
 name: Release
 
-# Manually-triggered signed release. Builds :app:assembleRelease with the
-# release signing key (loaded from secrets), refuses to publish anything signed
-# with a different certificate, and pushes the APK + SHA256SUMS to the rolling
-# "alpha" release the in-app updater reads. Same-cert signing is what lets the
-# car install the update in place (pm install -r) with no data wipe.
+# Signed release build. Builds :app:assembleRelease with the release signing key (loaded
+# from secrets), refuses to publish anything signed with a different certificate, and pushes
+# the APK + SHA256SUMS to the rolling "alpha" release the in-app updater reads. Same-cert
+# signing is what lets the car install the update in place (pm install -r) with no data wipe.
+#
+# Two triggers:
+#   - `release: published` — the normal path. release-please.yml tags and publishes a semver
+#     GitHub Release (e.g. v1.2.3) on a bot token, which is what lets that "published" event
+#     fire this workflow (GITHUB_TOKEN-authored release events don't trigger other workflows).
+#     VERSION comes from the release tag.
+#   - `workflow_dispatch` — manual fallback for rebuilding/republishing a specific version
+#     without cutting a new release-please release.
+#
+# No actions/cache here (unlike build.yml): this job signs and publishes the artifact a user's
+# car will `pm install -r`. Restoring a Gradle/native-dep cache that some other, less-trusted
+# workflow run wrote (build.yml runs on every branch push) into a signing job is exactly the
+# cache-poisoning shape zizmor's cache-poisoning audit flags — so the release build always
+# starts cold.
 on:
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       version:
-        description: "Version label baked into the asset name, e.g. v33.1 (must sort newer than what's on the car)"
+        description: "Semver version label, e.g. 1.2.3 (a leading 'v' is stripped if present; must sort newer than what's on the car)"
         required: true
         type: string
 
@@ -32,6 +47,34 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Resolve version
+        id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_VERSION: ${{ inputs.version }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            workflow_dispatch) RAW="$DISPATCH_VERSION" ;;
+            release) RAW="$RELEASE_TAG" ;;
+            *) echo "::error::unsupported trigger event: $EVENT_NAME"; exit 1 ;;
+          esac
+          VERSION="${RAW#v}" # strip a leading v — release tags always have one, a manual input might
+          if [ -z "$VERSION" ]; then
+            echo "::error::could not resolve a version from event '$EVENT_NAME'"; exit 1
+          fi
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+            echo "::error::version '$VERSION' is not of the form MAJOR.MINOR[.PATCH]"; exit 1
+          fi
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          PATCH="${PATCH:-0}"
+          # Monotonic Android versionCode. Assumes MINOR and PATCH stay under 100 — true for
+          # this project's history (single/double-digit components) and revisited if it isn't.
+          VERSION_CODE=$((MAJOR * 10000 + MINOR * 100 + PATCH))
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+
       - name: Set up JDK 17
         uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07 # v4
         with:
@@ -43,23 +86,6 @@ jobs:
 
       - name: Install NDK + CMake
         run: sdkmanager --install "ndk;26.1.10909125" "cmake;3.22.1"
-
-      - name: Cache Gradle
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', 'gradle/libs.versions.toml') }}
-          restore-keys: gradle-${{ runner.os }}-
-
-      - name: Cache native dependencies
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: |
-            app/src/main/cpp/opencv
-            app/src/main/cpp/openh264
-          key: native-deps-${{ runner.os }}-${{ hashFiles('app/build.gradle.kts') }}
 
       - name: Decode signing keystore
         env:
@@ -77,7 +103,12 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.SIGNING_KEYSTORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
           KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
-        run: ./gradlew :app:assembleRelease --no-daemon --console=plain
+          WHEELSTOP_VERSION_NAME: ${{ steps.version.outputs.version }}
+          WHEELSTOP_VERSION_CODE: ${{ steps.version.outputs.version_code }}
+        run: |
+          ./gradlew :app:assembleRelease --no-daemon --console=plain \
+            -PwheelstopVersionName="$WHEELSTOP_VERSION_NAME" \
+            -PwheelstopVersionCode="$WHEELSTOP_VERSION_CODE"
 
       - name: Gate on the pinned signing certificate
         env:
@@ -106,7 +137,7 @@ jobs:
 
       - name: Stage assets (versioned APK + SHA256SUMS)
         env:
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
           APK=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
@@ -117,7 +148,7 @@ jobs:
       - name: Publish to the rolling alpha release
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
           NOTES="Signed release ${VERSION}. Cert-gated to the pinned release signer. Installs in place via same-cert pm install -r."

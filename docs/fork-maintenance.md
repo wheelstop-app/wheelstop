@@ -69,7 +69,7 @@ The monitor is a cheap early-warning. To prove a specific release corresponds to
 2. Seed `app/src/main/cpp/{opencv,openh264}` (fetched at build; a network-less container needs
    them copied from this fork's tree) and, if `od/od.cpp` is missing, comment out the `od`
    target in `CMakeLists.txt` so the committed `libod.so` blob ships.
-3. Build `:app:assembleRelease -PoverdriveVersionCode=<n> -PoverdriveVersionName=<v>`.
+3. Build `:app:assembleRelease -PwheelstopVersionCode=<n> -PwheelstopVersionName=<v>`.
 4. Diff class lists, native-lib hashes, permissions, and assets against the downloaded release
    APK. `libsurveillance.so` differing (cross-toolchain) and a different signing cert are
    expected; anything else is a finding.

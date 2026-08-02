@@ -1,0 +1,47 @@
+name: Release Please
+
+# Maintains the rolling "release please" PR that tracks conventional-commit history on
+# main, and — when that PR is merged — tags a semver GitHub Release. That Release
+# (types: [published]) is what release.yml's new trigger listens for; it builds, cert-gates,
+# and publishes the signed APK.
+#
+# The token matters: release-please's own commits/tags/releases are made with a GitHub App
+# installation token (wheelstop-release), not the default GITHUB_TOKEN. Resources created by
+# GITHUB_TOKEN do not trigger other workflows (GitHub's loop guard — see upstream-sync.yml's
+# note on the same limitation). Minting a bot token here is what lets the release it publishes
+# actually fire release.yml's `on: release: published` trigger.
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release-please:
+    name: Maintain release PR / tag release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # push the release PR's commits, tag + publish the GitHub Release
+      pull-requests: write # open/update the release PR
+    steps:
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: bot
+        with:
+          app-id: Iv23livK39Yzp2c9rPlq
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+          # Scope the minted token down to exactly what release-please needs, rather than
+          # inheriting the App's full blanket installation permissions.
+          permission-contents: write
+          permission-pull-requests: write
+
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ steps.bot.outputs.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
