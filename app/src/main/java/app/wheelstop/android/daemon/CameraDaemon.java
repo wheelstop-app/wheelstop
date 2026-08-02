@@ -5218,14 +5218,9 @@ public class CameraDaemon {
             log("Surveillance library already loaded");
         }
 
-        // Load libod.so via explicit path too — System.loadLibrary("od") can't
-        // resolve by name in the app_process daemon (same reason as surveillance).
-        // Without this, BsCoefficients.resolve() returns zeros in the daemon and the view-7/8
-        // stitch shader gets all-zero coefficients → black blind-spot stream.
-        if (nativeLibDir != null) {
-            boolean odLoaded = app.wheelstop.android.blindspot.BsCoefficients.tryLoadLibrary(nativeLibDir);
-            log("od native lib loaded (daemon): " + odLoaded);
-        }
+        // Blind-spot (view-7/8) stitch coefficients are computed in pure Kotlin now
+        // (BsCoefficients.resolve()), not the withheld libod.so blob — so there is no native
+        // library to load here. The daemon computes coefficients identically to the app.
     }
     
     private static void loadSurveillanceFromPath(String nativeLibDir) {

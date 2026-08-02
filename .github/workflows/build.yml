@@ -88,8 +88,11 @@ jobs:
           # The tunnel binaries are no longer committed — they are fetched by
           # downloadTunnelBinaries. If that task ever silently no-ops, the APK would build
           # fine and ship without them, so assert they made it in.
+          # NOTE: libod.so (upstream's compiled blind-spot blob) is intentionally NOT in this
+          # list — Wheelstop reimplements those coefficients in Kotlin (BsCoefficients.kt), so
+          # the APK ships no libod.so by design.
           for required in libsurveillance.so libopenh264.so \
-                          libtailscale.so libcloudflared.so libzrok.so libsingbox.so libod.so; do
+                          libtailscale.so libcloudflared.so libzrok.so libsingbox.so; do
             echo "$libs" | grep -q "$required" \
               || { echo "::error::$required missing from the APK"; exit 1; }
           done
