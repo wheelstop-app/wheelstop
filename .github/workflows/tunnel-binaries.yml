@@ -90,6 +90,16 @@ jobs:
       - name: Install UPX
         run: sudo apt-get update -qq && sudo apt-get install -y -qq upx-ucl
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+
+      - name: Install NDK (for llvm-strip)
+        # The SHIPPED artifacts are stripped, and they must be stripped with the SAME tool
+        # AGP uses during packaging — otherwise AGP re-strips them, the bytes change, and
+        # the digest pinned in app/build.gradle.kts stops describing what actually ships.
+        # Same NDK version as app/build.gradle.kts's ndkVersion.
+        run: sdkmanager --install "ndk;26.1.10909125"
+
       - name: Build binaries
         env:
           # CGO off + GOOS=linux gives a fully static arm64 executable. The app execs these
@@ -260,6 +270,24 @@ jobs:
           pack zrok        libzrok.so
           pack sing-box    libsingbox.so
 
+          # Two variants per binary:
+          #   libX.so        - stripped. This is what the APK ships.
+          #   libX.intact.so - packed but NOT stripped. Keeps the UPX PackHeader, so anyone
+          #                    can `upx -d` it and read the payload. This is the audit copy,
+          #                    and the reason the shipped file is verifiable at all: strip it
+          #                    with the NDK llvm-strip and you must get the shipped digest.
+          STRIP="$ANDROID_HOME/ndk/26.1.10909125/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
+          echo "strip: $STRIP"
+          for f in dist/*.so; do
+            cp "$f" "${f%.so}.intact.so"
+            "$STRIP" --strip-all "$f"
+            # Fixed point check: AGP will strip again during packaging, and that must be a
+            # no-op. If stripping twice is not identical, the pinned digest cannot hold.
+            cp "$f" /tmp/twice.so && "$STRIP" --strip-all /tmp/twice.so
+            cmp -s "$f" /tmp/twice.so || { echo "::error::strip is not idempotent for $f"; exit 1; }
+            rm -f /tmp/twice.so
+          done
+
           echo "### packed sizes (mode: ${COMPRESSION:-fast})"
           for f in dist/*.so; do
             printf "  %-22s %10d bytes (from %d)\n" "$(basename "$f")" \
@@ -267,26 +295,46 @@ jobs:
           done
           echo "  TOTAL packed: $(cat dist/*.so | wc -c) bytes"
 
-      - name: Verify each artifact is arm64 and round-trips through upx -d
+      - name: Verify arm64, and that the audit copies still unpack
         run: |
           set -euo pipefail
           for f in dist/*.so; do
-            file "$f"
             file "$f" | grep -q "ARM aarch64" || { echo "::error::$f is not arm64"; exit 1; }
+          done
+          # Only the .intact.so copies can round-trip: the shipped ones are deliberately
+          # stripped, which removes the PackHeader `upx -d` needs. That is precisely why
+          # the intact copy is published alongside — it is the auditable one.
+          for f in dist/*.intact.so; do
             upx -d -o /tmp/unpacked "$f" >/dev/null
             rm -f /tmp/unpacked
-            echo "  ✓ $f unpacks cleanly (PackHeader intact)"
+            echo "  ✓ $(basename "$f") unpacks cleanly (PackHeader intact)"
           done
 
-      - name: Checksums
+      - name: Checksums and the full provenance chain
         run: |
+          set -euo pipefail
           cd dist && sha256sum *.so | tee SHA256SUMS
+          cd ..
+          {
+            echo
+            echo "## chain"
+            echo "# shipped = llvm-strip --strip-all (NDK 26.1.10909125) applied to intact"
+            echo "# verify:  download libX.intact.so, strip it with that exact tool,"
+            echo "#          and the result must hash to the shipped digest below."
+            for n in tailscale cloudflared zrok singbox; do
+              printf "lib%s.so  shipped=%s  intact=%s\n" "$n" \
+                "$(sha256sum "dist/lib$n.so"        | cut -d" " -f1)" \
+                "$(sha256sum "dist/lib$n.intact.so" | cut -d" " -f1)"
+            done
+          } >> out/PROVENANCE.txt
+          cat out/PROVENANCE.txt
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: tunnel-binaries-arm64
           path: |
             dist/*.so
+            dist/*.intact.so
             dist/SHA256SUMS
             out/VERSIONS.txt
             out/PROVENANCE.txt

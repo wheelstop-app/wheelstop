@@ -72,6 +72,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name }}
+          # This job deliberately has no checkout (it only needs the artifact), so `gh`
+          # cannot infer the repository from a .git directory and fails with
+          # "not a git repository". Tell it explicitly.
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           ls -laR artifact

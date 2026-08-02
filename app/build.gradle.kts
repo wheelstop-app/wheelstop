@@ -110,6 +110,81 @@ tasks.matching { it.name.contains("CMake") || it.name.contains("ExternalNative")
     dependsOn("downloadOpenH264", "downloadOpenCV")
 }
 
+// ==================== Tunnel binaries ====================
+// tailscaled / cloudflared / zrok / sing-box. These are CLI executables, not libraries:
+// Android extracts lib/<abi>/*.so from the APK to nativeLibraryDir with the execute bit
+// set, so shipping them under .so names is how the app gets runnable binaries onto the
+// device. That part of the design is sound and unchanged.
+//
+// What changed is where they come from. They used to be ~40 MB of prebuilt blobs
+// committed to this repository, and an audit could not verify them: all four UPX-packed,
+// three with the PackHeader stripped so `upx -d` refuses them outright, and the versions
+// they self-reported were developer builds that matched no upstream release. They are now
+// produced by .github/workflows/tunnel-binaries.yml — official upstream release artifacts
+// where they exist, built from source where they don't — and fetched here by digest.
+//
+// The digests below are the contract. If upstream re-publishes, or the release assets are
+// tampered with, the build fails rather than silently shipping something else.
+// Provenance lives in app/tunnel-binaries.lock, not here: a digest in a build script tells
+// you what to expect but not where it came from or how to re-derive it. That file records
+// the upstream ref/commit per binary, both digests (shipped and auditable), and the exact
+// strip invocation that maps one to the other — so the shipped bytes can be reproduced from
+// upstream sources by anyone with the repo.
+val tunnelLockFile = file("tunnel-binaries.lock")
+val tunnelLock: Map<String, String> = tunnelLockFile.readLines()
+    .map { it.substringBefore('#').trim() }
+    .filter { it.contains('=') }
+    .associate { it.substringBefore('=').trim() to it.substringAfter('=').trim() }
+
+val tunnelBinaryNames = listOf("libtailscale", "libcloudflared", "libzrok", "libsingbox")
+
+tasks.register("downloadTunnelBinaries") {
+    description = "Fetches the tunnel executables recorded in tunnel-binaries.lock."
+    val outDir = file("src/main/jniLibs/arm64-v8a")
+    inputs.file(tunnelLockFile)
+
+    doLast {
+        val baseUrl = tunnelLock["base_url"]
+            ?: throw GradleException("tunnel-binaries.lock: missing base_url")
+        outDir.mkdirs()
+        tunnelBinaryNames.forEach { stem ->
+            // The SHIPPED digest, not the intact one. AGP strips native libs during
+            // packaging, so the already-stripped artifact is the one whose bytes survive
+            // into the APK unchanged — which is what makes pinning it meaningful.
+            val sha = tunnelLock["$stem.sha256_shipped"]
+                ?: throw GradleException("tunnel-binaries.lock: missing $stem.sha256_shipped")
+            val name = "$stem.so"
+            val dest = file("$outDir/$name")
+            // Re-verify what is already on disk, not just fresh downloads: a stale or
+            // hand-edited copy is exactly what this exists to catch, and hashing is free
+            // next to the download it avoids.
+            if (dest.exists()) {
+                val actual = MessageDigest.getInstance("SHA-256")
+                    .digest(dest.readBytes())
+                    .joinToString("") { b -> "%02x".format(b) }
+                if (actual.equals(sha, ignoreCase = true)) return@forEach
+                logger.lifecycle("$name: digest mismatch on the cached copy — refetching")
+                dest.delete()
+            }
+            val url = "$baseUrl/$name"
+            logger.lifecycle("Downloading $name from $url")
+            try {
+                ant.invokeMethod("get", mapOf("src" to url, "dest" to dest.absolutePath))
+            } catch (e: Exception) {
+                throw GradleException("Tunnel binary download failed for $name from $url: ${e.message}", e)
+            }
+            verifyDigest(dest, sha, "tunnel binary $name")
+        }
+    }
+}
+
+// Bind to preBuild rather than the CMake tasks: these are packaged, not compiled, so they
+// must exist before the merge/package steps, and they are needed even for a build with no
+// native compilation to do.
+tasks.matching { it.name == "preBuild" }.configureEach {
+    dependsOn("downloadTunnelBinaries")
+}
+
 // OpenCV-mobile version for surveillance module (minimal build, ~3MB vs ~20MB)
 // https://github.com/nihui/opencv-mobile
 val opencvMobileTag = "v31"
@@ -375,6 +450,12 @@ android {
         jniLibs {
             // CRITICAL: Compresses .so files in the APK (saves ~20MB+)
             useLegacyPackaging = true
+
+            // NOTE: the tunnel binaries are published already-stripped (see
+            // app/tunnel-binaries.lock), so AGP's strip step is a no-op on them and the
+            // digests pinned in that file describe exactly what ships. Do not add them to
+            // keepDebugSymbols: that would ship the unstripped images and grow the APK by
+            // ~30 MB for no verification benefit.
 
             // Keep only arm64-v8a (You already have this, but good to keep)
             excludes += listOf(
