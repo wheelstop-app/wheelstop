@@ -5,8 +5,11 @@ name: Build
 # can even resolve its native dependencies (opencv-mobile and OpenH264 are gitignored and
 # fetched at build time — see app/build.gradle.kts).
 on:
+  # Build main pushes (post-merge verification) and every PR. A PR'd feature branch
+  # is covered by its pull_request run, so building all branch pushes too would just
+  # run the whole NDK build twice for the same commit — hence push is scoped to main.
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -69,11 +72,11 @@ jobs:
             app/src/main/cpp/openh264
           key: native-deps-${{ runner.os }}-${{ hashFiles('app/build.gradle.kts') }}
 
-      - name: Unit tests
-        run: ./gradlew :app:testDebugUnitTest --no-daemon --console=plain
-
-      - name: Assemble debug APK
-        run: ./gradlew :app:assembleDebug --no-daemon --console=plain
+      - name: Unit tests + assemble debug APK
+        # One Gradle invocation for both tasks: the configuration phase and the debug
+        # compilation are shared instead of paid twice across two --no-daemon runs.
+        # --build-cache reuses task outputs restored from the Gradle cache above.
+        run: ./gradlew :app:testDebugUnitTest :app:assembleDebug --no-daemon --console=plain --build-cache
 
       - name: Verify the APK actually contains the native libs
         # Guards the failure mode this CI exists for: the native dependency fetch used to
