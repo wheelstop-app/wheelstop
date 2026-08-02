@@ -15,27 +15,27 @@
 # ONLY keep class names and main() - everything else gets obfuscated
 # This hides internal method names like whitelistViaBruteForce -> a()
 
--keep class com.overdrive.app.daemon.CameraDaemon {
+-keep class app.wheelstop.android.daemon.CameraDaemon {
     public static void main(java.lang.String[]);
 }
--keep class com.overdrive.app.daemon.SentryDaemon {
+-keep class app.wheelstop.android.daemon.SentryDaemon {
     public static void main(java.lang.String[]);
 }
--keep class com.overdrive.app.daemon.AccSentryDaemon {
+-keep class app.wheelstop.android.daemon.AccSentryDaemon {
     public static void main(java.lang.String[]);
 }
--keep class com.overdrive.app.daemon.TelegramBotDaemon {
+-keep class app.wheelstop.android.daemon.TelegramBotDaemon {
     public static void main(java.lang.String[]);
 }
--keep class com.overdrive.app.daemon.GlobalProxyDaemon {
+-keep class app.wheelstop.android.daemon.GlobalProxyDaemon {
     public static void main(java.lang.String[]);
 }
--keep class com.overdrive.app.byd.BydEventDaemon {
+-keep class app.wheelstop.android.byd.BydEventDaemon {
     public static void main(java.lang.String[]);
 }
 
 # Keep listener classes that extend BYD SDK (method names must match parent)
--keep class com.overdrive.app.daemon.AccSentryDaemon$AccListener {
+-keep class app.wheelstop.android.daemon.AccSentryDaemon$AccListener {
     <methods>;
 }
 
@@ -47,10 +47,10 @@
 # AccSentryDaemon.launchTelegramDaemon would NoSuchMethodError, and the
 # code falls back to the bare-nohup unsupervised launch — silently
 # regressing the H2 watchdog work.
--keep class com.overdrive.app.launcher.DaemonLauncher$Companion {
+-keep class app.wheelstop.android.launcher.DaemonLauncher$Companion {
     public *;
 }
--keep class com.overdrive.app.launcher.ZrokLauncher$Companion {
+-keep class app.wheelstop.android.launcher.ZrokLauncher$Companion {
     public *;
 }
 
@@ -58,12 +58,12 @@
 # These are used by daemons but don't need full preservation
 
 # Safe - Pure Java AES decryption (replaced native NativeSecrets)
--keep class com.overdrive.app.daemon.proxy.Safe {
+-keep class app.wheelstop.android.daemon.proxy.Safe {
     public static java.lang.String s(java.lang.String);
 }
 
 # S - Short alias for string decryption (used throughout daemon code)
--keep class com.overdrive.app.daemon.proxy.S {
+-keep class app.wheelstop.android.daemon.proxy.S {
     public static java.lang.String d(java.lang.String);
 }
 
@@ -71,7 +71,7 @@
 # DaemonBootstrap.verifySafeWorking() (Class.forName + getDeclaredField).
 # Without this, R8 renames APP_PACKAGE to a single-letter name and the
 # bootstrap aborts before the daemon ever loads.
--keep class com.overdrive.app.daemon.proxy.Enc {
+-keep class app.wheelstop.android.daemon.proxy.Enc {
     public static java.lang.String APP_PACKAGE;
     *;
 }
@@ -80,12 +80,12 @@
 # (surveillance package can't compile-time depend on daemon package). The
 # main()-only -keep above doesn't preserve this, so R8 renames it to a()
 # and ScreenDeterrent silently falls through to DaemonBootstrap.
--keepclassmembers class com.overdrive.app.daemon.CameraDaemon {
+-keepclassmembers class app.wheelstop.android.daemon.CameraDaemon {
     public static android.content.Context getAppContext();
 }
 
 # DaemonBootstrap.getContext() — fallback path for the same reflection above.
--keepclassmembers class com.overdrive.app.daemon.DaemonBootstrap {
+-keepclassmembers class app.wheelstop.android.daemon.DaemonBootstrap {
     public static android.content.Context getContext();
 }
 
@@ -93,29 +93,29 @@
 # reflectively by SrtWriter.lookupCatalog() so subtitle generation can
 # pull localized strings without a compile-time dependency from
 # surveillance → server.
--keepclassmembers class com.overdrive.app.server.Messages {
+-keepclassmembers class app.wheelstop.android.server.Messages {
     public static java.lang.String get(java.lang.String, java.lang.String);
     public static java.lang.String get(java.lang.String);
 }
 
 # LocaleManager.get() — called reflectively by SrtWriter.resolveCurrentLocale()
--keepclassmembers class com.overdrive.app.server.LocaleManager {
+-keepclassmembers class app.wheelstop.android.server.LocaleManager {
     public static java.lang.String get();
 }
 
 # Keep class names for daemon subpackages (for Class.forName if used internally)
 # but allow method/field renaming
--keepnames class com.overdrive.app.daemon.** { }
--keepnames class com.overdrive.app.byd.** { }
--keepnames class com.overdrive.app.camera.** { }
--keepnames class com.overdrive.app.server.** { }
--keepnames class com.overdrive.app.encoding.** { }
--keepnames class com.overdrive.app.stream.** { }
--keepnames class com.overdrive.app.monitor.** { }
+-keepnames class app.wheelstop.android.daemon.** { }
+-keepnames class app.wheelstop.android.byd.** { }
+-keepnames class app.wheelstop.android.camera.** { }
+-keepnames class app.wheelstop.android.server.** { }
+-keepnames class app.wheelstop.android.encoding.** { }
+-keepnames class app.wheelstop.android.stream.** { }
+-keepnames class app.wheelstop.android.monitor.** { }
 
 # ==================== Logging (keep class names + DaemonLogConfig for runtime control) ====================
--keepnames class com.overdrive.app.logging.** { }
--keep class com.overdrive.app.logging.DaemonLogConfig { *; }
+-keepnames class app.wheelstop.android.logging.** { }
+-keep class app.wheelstop.android.logging.DaemonLogConfig { *; }
 
 # ==================== Native Methods (all classes) ====================
 # JNI method names must match native function signatures exactly
@@ -163,8 +163,8 @@
 
 # AI detection classes - keep class names but allow method obfuscation
 # Detection data class needs field names for any serialization
--keep class com.overdrive.app.ai.Detection { *; }
--keepnames class com.overdrive.app.ai.** { }
+-keep class app.wheelstop.android.ai.Detection { *; }
+-keepnames class app.wheelstop.android.ai.** { }
 
 # ==================== Kotlin & AndroidX ====================
 -dontwarn kotlin.**
@@ -178,46 +178,46 @@
 
 # ==================== App Components (declared in AndroidManifest) ====================
 # R8 auto-keeps these, but explicit rules for safety
--keep class com.overdrive.app.OverdriveApplication { *; }
--keep class com.overdrive.app.ui.MainActivity { *; }
--keep class com.overdrive.app.ui.LocationStarterActivity { *; }
--keep class com.overdrive.app.BlockerActivity { *; }
--keep class com.overdrive.app.receiver.BootReceiver { *; }
--keep class com.overdrive.app.receiver.LocationBootReceiver { *; }
--keep class com.overdrive.app.services.LocationSidecarService { *; }
+-keep class app.wheelstop.android.OverdriveApplication { *; }
+-keep class app.wheelstop.android.ui.MainActivity { *; }
+-keep class app.wheelstop.android.ui.LocationStarterActivity { *; }
+-keep class app.wheelstop.android.BlockerActivity { *; }
+-keep class app.wheelstop.android.receiver.BootReceiver { *; }
+-keep class app.wheelstop.android.receiver.LocationBootReceiver { *; }
+-keep class app.wheelstop.android.services.LocationSidecarService { *; }
 # RoadSense IMU sidecar — launched by the daemon via a STRING-LITERAL `am
 # start-foreground-service -n .../RoadSenseImuSidecarService` (R8 can't see that
 # reference), so its class name must not be renamed/stripped. Same rationale as
 # LocationSidecarService above. The daemon→app bridge (CameraDaemon.getRoadSense,
 # RoadSenseController, RoadSenseApiHandler) is reached by typed calls so R8 tracks
 # those automatically; only the am-launched component needs an explicit keep.
--keep class com.overdrive.app.roadsense.sidecar.RoadSenseImuSidecarService { *; }
--keep class com.overdrive.app.roadsense.overlay.RoadSenseOverlayService { *; }
+-keep class app.wheelstop.android.roadsense.sidecar.RoadSenseImuSidecarService { *; }
+-keep class app.wheelstop.android.roadsense.overlay.RoadSenseOverlayService { *; }
 
 # ==================== App Packages (allow obfuscation) ====================
 # Keep class names for debugging but obfuscate methods/fields
--keepnames class com.overdrive.app.auth.** { }
--keepnames class com.overdrive.app.bridge.** { }
--keepnames class com.overdrive.app.byd.** { }
--keepnames class com.overdrive.app.client.** { }
--keepnames class com.overdrive.app.config.** { }
--keepnames class com.overdrive.app.launcher.** { }
--keepnames class com.overdrive.app.manager.** { }
--keepnames class com.overdrive.app.proximity.** { }
--keepnames class com.overdrive.app.recording.** { }
--keepnames class com.overdrive.app.service.** { }
--keepnames class com.overdrive.app.shell.** { }
--keepnames class com.overdrive.app.storage.** { }
--keepnames class com.overdrive.app.streaming.** { }
--keepnames class com.overdrive.app.surveillance.** { }
--keepnames class com.overdrive.app.telemetry.** { }
+-keepnames class app.wheelstop.android.auth.** { }
+-keepnames class app.wheelstop.android.bridge.** { }
+-keepnames class app.wheelstop.android.byd.** { }
+-keepnames class app.wheelstop.android.client.** { }
+-keepnames class app.wheelstop.android.config.** { }
+-keepnames class app.wheelstop.android.launcher.** { }
+-keepnames class app.wheelstop.android.manager.** { }
+-keepnames class app.wheelstop.android.proximity.** { }
+-keepnames class app.wheelstop.android.recording.** { }
+-keepnames class app.wheelstop.android.service.** { }
+-keepnames class app.wheelstop.android.shell.** { }
+-keepnames class app.wheelstop.android.storage.** { }
+-keepnames class app.wheelstop.android.streaming.** { }
+-keepnames class app.wheelstop.android.surveillance.** { }
+-keepnames class app.wheelstop.android.telemetry.** { }
 # TelemetrySnapshot fields accessed by overlay renderer — keep from renaming
--keepclassmembers class com.overdrive.app.telemetry.TelemetrySnapshot { public *; }
--keepnames class com.overdrive.app.abrp.** { }
--keepnames class com.overdrive.app.telegram.** { }
--keepnames class com.overdrive.app.ui.** { }
--keepnames class com.overdrive.app.util.** { }
--keepnames class com.overdrive.app.webrtc.** { }
+-keepclassmembers class app.wheelstop.android.telemetry.TelemetrySnapshot { public *; }
+-keepnames class app.wheelstop.android.abrp.** { }
+-keepnames class app.wheelstop.android.telegram.** { }
+-keepnames class app.wheelstop.android.ui.** { }
+-keepnames class app.wheelstop.android.util.** { }
+-keepnames class app.wheelstop.android.webrtc.** { }
 
 # ==================== Serialization & Parcelable ====================
 -keepclassmembers class * implements android.os.Parcelable {
@@ -273,7 +273,7 @@
 
 # ==================== Log Stripping (Release Builds) ====================
 #
-# CONTROLLED BY: com.overdrive.app.logging.DaemonLogConfig
+# CONTROLLED BY: app.wheelstop.android.logging.DaemonLogConfig
 #
 # DaemonLogger stripping is in a SEPARATE file: proguard-rules-strip-logs.pro
 # build.gradle.kts auto-detects DaemonLogConfig flags:
@@ -304,12 +304,12 @@
 }
 
 # Keep DaemonLogConfig (R8 needs it for runtime checks when logging is enabled)
--keep class com.overdrive.app.logging.DaemonLogConfig { *; }
+-keep class app.wheelstop.android.logging.DaemonLogConfig { *; }
 
 # Keep DaemonLogger class structure
--keep class com.overdrive.app.logging.DaemonLogger { *; }
--keep class com.overdrive.app.logging.DaemonLogger$Config { *; }
--keep class com.overdrive.app.logging.DaemonLogger$Level { *; }
+-keep class app.wheelstop.android.logging.DaemonLogger { *; }
+-keep class app.wheelstop.android.logging.DaemonLogger$Config { *; }
+-keep class app.wheelstop.android.logging.DaemonLogger$Level { *; }
 
 # Strip Kotlin null checks (minor optimization — always safe to strip)
 -assumenosideeffects class kotlin.jvm.internal.Intrinsics {
