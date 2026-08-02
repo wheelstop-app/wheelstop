@@ -43,12 +43,29 @@ and log — never clobber. Every step (per-dir rename, volume walk, pref rewrite
 `runIfNeeded`) is wrapped in try/catch and only logs a warning on failure; nothing here can
 crash startup.
 
-### Guard
+### Guard — retry-safe (revised after coordinator review)
 
 New, dedicated prefs file `wheelstop_migrations` (SharedPreferences, `Context.MODE_PRIVATE`),
 key `legacy_overdrive_dirs_migrated_v1`. Deliberately **not** `overdrive_config` or any other
 preserved `overdrive_*` prefs name — those stay untouched per the data-compat constraints.
-Once set, `runIfNeeded()` short-circuits on every later launch.
+
+The guard is only set to `true` when the migration has genuinely finished, not merely
+"attempted once":
+- If none of the candidate legacy roots exist anywhere (fixed roots + every mounted removable
+  volume), the flag is set immediately — nothing to migrate, no need to ever check again.
+- If at least one legacy root exists but the app does not yet have external-storage access
+  (`StorageSetup.checkStoragePermission(context)` — the same `Environment.isExternalStorageManager()`
+  / `WRITE_EXTERNAL_STORAGE` check `StorageSetup` already uses elsewhere), the flag is left
+  **unset** and the whole attempt is skipped — a fresh or upgraded install can reach
+  `Application.onCreate()` before `MANAGE_EXTERNAL_STORAGE` is granted, and attempting (and
+  failing) the move at that point would have permanently orphaned the recordings under the old
+  one-shot design.
+- Otherwise every candidate pair's `renameTo()` is attempted; `migrateDir()` returns `true` for
+  "resolved, no retry needed" (source absent, destination already exists, or rename succeeded)
+  and `false` only when a rename was actually attempted and failed. The `outputDir` pref rewrite
+  is folded into the same all-or-nothing accounting. The flag is set **only if every attempted
+  step returned true**; a single failure leaves it unset so `runIfNeeded()` retries the whole
+  thing on the next launch (by which point storage permission is expected to have landed).
 
 ### `outputDir` pref rewrite
 
@@ -152,19 +169,30 @@ and `assembleDebug` both ran clean; only pre-existing, unrelated deprecation war
 (`startActivityForResult`) in `SettingsAboutFragment.kt`. Ownership of Docker-created build
 output was restored with the follow-up `chown` container run per instructions.
 
+### Follow-up: retry-safe guard (coordinator review)
+
+The coordinator flagged the original one-shot design (guard set unconditionally after a single
+attempt) as a real data-loss risk: on a fresh or upgraded install, `Application.onCreate()` can
+run before `MANAGE_EXTERNAL_STORAGE` is granted, so the first (and only) migration attempt would
+fail silently and the recordings would be permanently orphaned once permission later landed.
+Reworked the guard per their spec — see the revised "Guard" section above — and re-ran the same
+dockerised build:
+
+```
+BUILD SUCCESSFUL in 15s
+51 actionable tasks: 14 executed, 37 up-to-date
+```
+
+Committed separately as `fix: only mark media migration done on success (retry until storage
+access)` rather than amending, per this repo's git-safety default of new commits over `--amend`.
+
 ## Concerns / judgment calls
 
-- **One-shot guard is set after a single attempt regardless of outcome.** If
-  `MANAGE_EXTERNAL_STORAGE` hasn't been granted yet on the very first post-upgrade launch (the
-  app requests/grants it via `StorageSetup`/ADB app-ops elsewhere, asynchronously, later in
-  startup), `File.renameTo()` on the legacy dirs can fail silently, and the guard still flips to
-  "done" — there's no retry on a later launch once permission lands. This matches the task's
-  literal spec ("guarded by a one-shot ... flag", "best-effort... never crash startup") rather
-  than a retry-until-success design, but it's worth an on-car smoke test after a real
-  upgrade-with-existing-recordings to confirm permission is already available by the time
-  `Application.onCreate()` runs (BYD's ADB app-ops grant flow suggests it usually is, by the time
-  the app process restarts post-update, but this wasn't verified against a live device in this
-  task).
+- No on-car verification was performed for either pass — the retry-safe guard's actual behavior
+  under BYD's permission-grant timing (ADB app-ops vs. user-driven Settings grant) is unverified
+  beyond code review and a clean build. Worth an on-car smoke test after a real
+  upgrade-with-existing-recordings: confirm the migration defers (not "done") on the first launch
+  if permission isn't yet granted, and completes on the next launch once it is.
 - Did not attempt an on-car verification (out of scope per the task — build-only ask). The fix
   is code-reviewed and compiles, but the actual `renameTo()` behavior under BYD's SELinux/FUSE
   storage stack is unverified beyond this build.
