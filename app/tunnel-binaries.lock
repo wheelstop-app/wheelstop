@@ -55,7 +55,7 @@
 # here, and run scripts/gen-third-party-notices.py. CI fails if the notice drifts.
 
 release = tunnel-binaries-2026.08.01
-base_url = https://github.com/wheelstop-app/wheelstop/releases/download/tunnel-binaries-2026.08.01
+base_url = https://github.com/wheelstop-app/wheelstop-assets/releases/download/tunnel-binaries-2026.08.01
 strip_tool = ndk/26.1.10909125 llvm-strip --strip-all
 
 # `.license` (SPDX) and, for GPL components, `.source_commit` / `.source_sha256` drive the
