@@ -872,7 +872,7 @@ class RoadSenseController @JvmOverloads constructor(
         // dead-strips this whole block — the shipped binary has NO path to start the recorder
         // even if someone flips roadSense.rawRecord in the on-device config (it's a plain JSON
         // file). rawRecord then stays false forever, so every capture site (the `if (rawRecord)`
-        // guards in onAccel/onGyro) is also dead. Same posture as Od.authorize's debug bypass.
+        // guards in onAccel/onGyro) is also dead. Same idea: a compiled-out branch leaves the code path inert.
         if (com.overdrive.app.BuildConfig.DEBUG) {
             maybeToggleRawRecorder(cfgTick.rawRecord)
             if (rawRecord) maybeConsumeRawMark(now)

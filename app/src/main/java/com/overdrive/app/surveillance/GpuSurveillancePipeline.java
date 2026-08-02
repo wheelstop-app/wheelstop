@@ -3969,7 +3969,7 @@ public class GpuSurveillancePipeline {
             android.content.Context odCtx = savedContext;
             if (odCtx == null) odCtx = com.overdrive.app.daemon.CameraDaemon.getAppContext();
             if (odCtx != null) {
-                com.overdrive.app.od.Od.authorize(odCtx);
+                com.overdrive.app.blindspot.BsCoefficients.authorize(odCtx);
             } else {
                 logger.error("od authorize skipped: no context available");
             }
@@ -4735,7 +4735,7 @@ public class GpuSurveillancePipeline {
         try {
             android.content.Context odCtx = savedContext;
             if (odCtx == null) odCtx = com.overdrive.app.daemon.CameraDaemon.getAppContext();
-            if (odCtx != null) com.overdrive.app.od.Od.authorize(odCtx);
+            if (odCtx != null) com.overdrive.app.blindspot.BsCoefficients.authorize(odCtx);
         } catch (Throwable t) {
             logger.warn("BS: od init failed: " + t.getMessage());
         }
@@ -6151,11 +6151,11 @@ public class GpuSurveillancePipeline {
     }
 
     /**
-     * Re-runs Od.authorize() to recover from a transient boot-time
+     * Re-runs BsCoefficients.authorize() to recover from a transient boot-time
      * authorization failure. enableStreamingInternal() authorizes once at
      * enable time, but if the context was null/unstable then (early boot,
      * system_server transient) authorization silently stayed false and
-     * Od.resolve() zeros its output forever. Od.authorize() is idempotent
+     * BsCoefficients.resolve() zeros its output forever. BsCoefficients.authorize() is idempotent
      * (returns early once ready), so calling it again later — e.g. on ACC ON
      * once a valid context exists — is a cheap, safe retry.
      *
@@ -6168,7 +6168,7 @@ public class GpuSurveillancePipeline {
             if (odCtx == null) odCtx = com.overdrive.app.daemon.CameraDaemon.getAppContext();
             if (odCtx != null) {
                 if (this.savedContext == null) this.savedContext = odCtx;
-                com.overdrive.app.od.Od.authorize(odCtx);
+                com.overdrive.app.blindspot.BsCoefficients.authorize(odCtx);
             } else {
                 logger.error("od authorize retry skipped: no context available");
             }
