@@ -48,6 +48,26 @@ class DaemonStartupManager(
         ZrokLauncher(context, executor, log)
     }
 
+    // Runnables scheduled by proceedInitializeOnAppLaunch/proceedInitializeOnBoot,
+    // held so a LATER exclusivity-gate call on THIS instance can cancel an
+    // EARLIER call's still-pending schedule before it fires. This manager is a
+    // long-lived, re-entrant singleton — MainActivity re-invokes
+    // initializeOnAppLaunch() from ~4 call sites, notably shortly after ADB
+    // auth is granted — so an early call can fail-open (ADB not yet
+    // authorized -> EXCLUSIVE) and schedule a 45s-out core-daemon start, then
+    // a later call on the SAME instance can genuinely find CONTENDED before
+    // that Runnable fires. Without cancelling it, Wheelstop's core daemons
+    // would start WHILE the blocker is up for a real contention — and
+    // ExclusivityPreflight's sweep ("any live core daemon is unambiguously
+    // the old app's") would then wrongly kill Wheelstop's own just-started
+    // daemon. All reads/writes happen on the main looper (checkExclusivityWithTimeout
+    // always dispatches onVerdict via handler.post), so no additional locking
+    // is needed; @Volatile is defensive/documentary, matching this file's
+    // existing style for cross-call state.
+    @Volatile private var pendingCoreDaemonStart: Runnable? = null
+    @Volatile private var pendingOptionalDaemonStart: Runnable? = null
+    @Volatile private var pendingHealthCheckStart: Runnable? = null
+
     companion object {
         private const val TAG = "DaemonStartup"
         private const val HEALTH_CHECK_INTERVAL_MS = 30_000L  // 30 seconds
@@ -224,10 +244,33 @@ class DaemonStartupManager(
                 ExclusivityPreflight.Verdict.CONTENDED -> {
                     log.warn(TAG, "Exclusivity preflight: legacy Overdrive is installed " +
                         "and active — refusing to start Wheelstop daemons until resolved")
+                    cancelPendingDaemonStart()
                     ExclusivityBlockerActivity.start(context)
                 }
             }
         }
+    }
+
+    /**
+     * Cancel any core/optional daemon-start or health-check Runnable a PRIOR
+     * call to initializeOnAppLaunch()/initializeOnBoot() on this instance
+     * scheduled but hasn't fired yet — see the [pendingCoreDaemonStart] field
+     * doc for the re-entrant-call race this closes. Uses narrow
+     * `handler.removeCallbacks(Runnable)` per pending Runnable — NOT
+     * `handler.removeCallbacksAndMessages(null)`, which would also cancel
+     * unrelated scheduled work sharing this handler (the 30s health-check's
+     * own self-rescheduling, one-off ADB-callback posts, etc). A Runnable
+     * that already fired is simply not present as "pending" by the time this
+     * runs; removeCallbacks on an already-fired Runnable is a harmless no-op
+     * either way.
+     */
+    private fun cancelPendingDaemonStart() {
+        pendingCoreDaemonStart?.let { handler.removeCallbacks(it) }
+        pendingOptionalDaemonStart?.let { handler.removeCallbacks(it) }
+        pendingHealthCheckStart?.let { handler.removeCallbacks(it) }
+        pendingCoreDaemonStart = null
+        pendingOptionalDaemonStart = null
+        pendingHealthCheckStart = null
     }
 
     /**
@@ -326,12 +369,21 @@ class DaemonStartupManager(
         // post-update path; missing from the cold-start launch flow.)
         clearStaleSentinels()
 
-        // Wait 45 seconds for system to fully stabilize before starting any daemons
-        handler.postDelayed({ startCoreDaemons() }, 45000)
-        handler.postDelayed({ startOptionalDaemonsFromPreferences() }, 60000)
+        // Wait 45 seconds for system to fully stabilize before starting any daemons.
+        // Named Runnables (not inline lambdas) so a LATER CONTENDED verdict on
+        // this instance can cancel them via cancelPendingDaemonStart() before
+        // they fire — see the pendingCoreDaemonStart field doc.
+        val coreStart = Runnable { pendingCoreDaemonStart = null; startCoreDaemons() }
+        val optionalStart = Runnable { pendingOptionalDaemonStart = null; startOptionalDaemonsFromPreferences() }
+        val healthCheckStart = Runnable { pendingHealthCheckStart = null; startDaemonHealthCheck() }
+        pendingCoreDaemonStart = coreStart
+        pendingOptionalDaemonStart = optionalStart
+        pendingHealthCheckStart = healthCheckStart
+        handler.postDelayed(coreStart, 45000)
+        handler.postDelayed(optionalStart, 60000)
 
         // Start periodic health check after initial daemons have had time to start
-        handler.postDelayed({ startDaemonHealthCheck() }, 90000)
+        handler.postDelayed(healthCheckStart, 90000)
     }
 
     /**
@@ -382,6 +434,7 @@ class DaemonStartupManager(
                 ExclusivityPreflight.Verdict.CONTENDED -> {
                     log.warn(TAG, "Exclusivity preflight (boot): legacy Overdrive is " +
                         "installed and active — refusing to start Wheelstop daemons until resolved")
+                    cancelPendingDaemonStart()
                     ExclusivityBlockerActivity.start(context)
                 }
             }
@@ -405,12 +458,20 @@ class DaemonStartupManager(
         // immediately. See initializeOnAppLaunch for the full rationale.
         clearStaleSentinels()
 
-        // Wait 45 seconds for system to fully stabilize before starting any daemons
-        handler.postDelayed({ startCoreDaemonsViaAdb() }, 45000)
-        handler.postDelayed({ startOptionalDaemonsViaAdb() }, 60000)
+        // Wait 45 seconds for system to fully stabilize before starting any daemons.
+        // Named Runnables — see proceedInitializeOnAppLaunch for why (cancellable
+        // by a later CONTENDED verdict on this instance).
+        val coreStart = Runnable { pendingCoreDaemonStart = null; startCoreDaemonsViaAdb() }
+        val optionalStart = Runnable { pendingOptionalDaemonStart = null; startOptionalDaemonsViaAdb() }
+        val healthCheckStart = Runnable { pendingHealthCheckStart = null; startDaemonHealthCheck() }
+        pendingCoreDaemonStart = coreStart
+        pendingOptionalDaemonStart = optionalStart
+        pendingHealthCheckStart = healthCheckStart
+        handler.postDelayed(coreStart, 45000)
+        handler.postDelayed(optionalStart, 60000)
 
         // Start periodic health check after initial daemons have had time to start
-        handler.postDelayed({ startDaemonHealthCheck() }, 90000)
+        handler.postDelayed(healthCheckStart, 90000)
     }
 
 

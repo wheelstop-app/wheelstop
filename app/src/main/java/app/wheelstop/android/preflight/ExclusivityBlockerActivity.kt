@@ -57,6 +57,17 @@ class ExclusivityBlockerActivity : Activity() {
         // rather than silently dismissing the gate.
         private const val RECHECK_TIMEOUT_MS = 5_000L
 
+        // Same unbounded-dadb.shell() hazard as RECHECK_TIMEOUT_MS, applied to
+        // the action buttons themselves: stop()/disable()/uninstall() now chain
+        // an am/pm command followed by ExclusivityPreflight's daemon sweep (two
+        // sequential ADB round-trips), so this gets a bit more headroom than a
+        // single probe. On timeout, same fail-SAFE behavior as recheck() — the
+        // action's eventual (or never) completion is otherwise unobservable, so
+        // we can't claim success; re-enable the buttons and let the user retry
+        // rather than leaving them stuck disabled with no recovery but
+        // restarting the app.
+        private const val ACTION_TIMEOUT_MS = 8_000L
+
         /**
          * Launch the blocker over whatever is currently on screen. [context]
          * may be an Activity or an application Context (the boot path only
@@ -151,13 +162,39 @@ class ExclusivityBlockerActivity : Activity() {
         actionButtons.forEach { it.isEnabled = enabled }
     }
 
+    /**
+     * Run one of the three action commands (each now a 2-step am/pm-command +
+     * daemon-sweep chain — see [ExclusivityPreflight]). Bounded by
+     * [ACTION_TIMEOUT_MS] with the same single-fire-guard pattern as
+     * [recheck]: whichever of {the action's callback, the timeout} comes
+     * first wins, and the other becomes a no-op.
+     */
     private fun runAction(progressMessage: String, action: (AdbDaemonLauncher.LaunchCallback) -> Unit) {
         setActionsEnabled(false)
         statusText.text = progressMessage
+
+        val delivered = java.util.concurrent.atomic.AtomicBoolean(false)
+        val timeoutRunnable = Runnable {
+            if (delivered.compareAndSet(false, true)) {
+                log.warn(TAG, "Exclusivity action timed out after ${ACTION_TIMEOUT_MS}ms")
+                setActionsEnabled(true)
+                statusText.text = "Action timed out — tap an action to retry.\n\n" + reasonText()
+            }
+        }
+        handler.postDelayed(timeoutRunnable, ACTION_TIMEOUT_MS)
+
         action(object : AdbDaemonLauncher.LaunchCallback {
             override fun onLog(message: String) {}
-            override fun onLaunched() { handler.post { onActionDone(true, null) } }
-            override fun onError(error: String) { handler.post { onActionDone(false, error) } }
+            override fun onLaunched() {
+                if (delivered.compareAndSet(false, true)) {
+                    handler.post { handler.removeCallbacks(timeoutRunnable); onActionDone(true, null) }
+                }
+            }
+            override fun onError(error: String) {
+                if (delivered.compareAndSet(false, true)) {
+                    handler.post { handler.removeCallbacks(timeoutRunnable); onActionDone(false, error) }
+                }
+            }
         })
     }
 
