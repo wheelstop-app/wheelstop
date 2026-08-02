@@ -106,7 +106,7 @@
         linkRow.style.cssText = 'margin:0 0 18px;';
         var rdefs = [
             { label: t('update.report_discord', 'Discord'), url: t('update.report_discord_url', 'https://discord.gg/PZutk9fg4h') },
-            { label: t('update.report_github', 'GitHub Issues'), url: t('update.report_github_url', 'https://github.com/yash-srivastava/Overdrive-release/issues') },
+            { label: t('update.report_github', 'GitHub Issues'), url: t('update.report_github_url', 'https://github.com/wheelstop-app/wheelstop/issues') },
             { label: t('update.report_whatsapp', 'WhatsApp'), url: t('update.report_whatsapp_url', 'https://chat.whatsapp.com/HChmriCWgr9KwAtE6OEkiM') }
         ];
         for (var ri = 0; ri < rdefs.length; ri++) {

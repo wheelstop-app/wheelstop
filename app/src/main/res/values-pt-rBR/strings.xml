@@ -805,7 +805,7 @@
     <string name="settings_about_support_section">Movido por pessoas como você</string>
     <string name="settings_about_support_share_title">Conte a outro proprietário</string>
     <string name="settings_about_support_share_value">Cada link compartilhado ajuda outro proprietário de BYD a descobrir o Wheelstop.</string>
-    <string name="settings_about_support_share_message">Confira o Wheelstop — vigilância de código aberto e dashcam para BYD: https://overdrive-5lc.pages.dev/</string>
+    <string name="settings_about_support_share_message">Confira o Wheelstop — vigilância de código aberto e dashcam para BYD: https://github.com/wheelstop-app/wheelstop</string>
     <string name="settings_about_support_share_chooser">Compartilhar Wheelstop</string>
     <string name="settings_about_open_link_failed">Não foi possível abrir o link.</string>
     <string name="settings_about_open_link_copied">Nenhum navegador encontrado. URL copiada: %1$s</string>
@@ -814,7 +814,7 @@
     <string name="settings_about_license_title">Licença</string>
     <string name="settings_about_license_value">MIT — código aberto. Toque para ver o texto completo.</string>
     <string name="settings_about_source_title">Código-fonte</string>
-    <string name="settings_about_source_value">github.com/yash-srivastava/Overdrive-release</string>
+    <string name="settings_about_source_value">github.com/wheelstop-app/wheelstop</string>
     <string name="settings_about_star_title">Deixe uma ⭐ no GitHub</string>
     <string name="settings_about_star_value">Leva um segundo. Significa muito.</string>
     <string name="settings_about_thanks_title">Agradecimentos</string>

@@ -413,7 +413,7 @@
         links.className = 'upd-report-links';
         var defs = [
             { key: 'report_discord', url: 'report_discord_url', fb: 'https://discord.gg/PZutk9fg4h' },
-            { key: 'report_github', url: 'report_github_url', fb: 'https://github.com/yash-srivastava/Overdrive-release/issues' },
+            { key: 'report_github', url: 'report_github_url', fb: 'https://github.com/wheelstop-app/wheelstop/issues' },
             { key: 'report_whatsapp', url: 'report_whatsapp_url', fb: 'https://chat.whatsapp.com/HChmriCWgr9KwAtE6OEkiM' }
         ];
         defs.forEach(function (d) {

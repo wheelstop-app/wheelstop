@@ -664,7 +664,7 @@
     <string name="settings_about_support_section">Poháněn lidmi jako vy</string>
     <string name="settings_about_support_share_title">Řekněte kolegovi</string>
     <string name="settings_about_support_share_value">Každý sdílený odkaz pomáhá jinému majiteli BYD objevit Wheelstop.</string>
-    <string name="settings_about_support_share_message">Podívejte se na Wheelstop — open-source sledování &amp; dashcam pro BYD: https://overdrive-5lc.pages.dev/</string>
+    <string name="settings_about_support_share_message">Podívejte se na Wheelstop — open-source sledování &amp; dashcam pro BYD: https://github.com/wheelstop-app/wheelstop</string>
     <string name="settings_about_support_share_chooser">Sdílet Wheelstop</string>
     <string name="settings_about_open_link_failed">Nelze otevřít odkaz.</string>
     <string name="settings_about_open_link_copied">Nebyl nalezen žádný prohlížeč. URL zkopírováno: %1$s</string>
@@ -673,7 +673,7 @@
     <string name="settings_about_license_title">Licence</string>
     <string name="settings_about_license_value">MIT — open source. Klepnutím zobrazíte celý text.</string>
     <string name="settings_about_source_title">Zdrojový kód</string>
-    <string name="settings_about_source_value">github.com/yash-srivastava/Overdrive-release</string>
+    <string name="settings_about_source_value">github.com/wheelstop-app/wheelstop</string>
     <string name="settings_about_star_title">Star us on GitHub</string>
     <string name="settings_about_star_value">Zabere vteřinu. Znamená hodně.</string>
     <string name="settings_about_thanks_title">Děkujeme</string>

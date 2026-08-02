@@ -661,7 +661,7 @@
     <string name="settings_about_support_section">Oferit de oameni ca tine</string>
     <string name="settings_about_support_share_title">Spune-i unui alt proprietar</string>
     <string name="settings_about_support_share_value">Fiecare link comun ajută un alt proprietar BYD să descopere Wheelstop.</string>
-    <string name="settings_about_support_share_message">Vezi Wheelstop — Supravegherea open-source &amp; dashcam pentru BYD: https://overdrive-5lc.pages.dev/</string>
+    <string name="settings_about_support_share_message">Vezi Wheelstop — Supravegherea open-source &amp; dashcam pentru BYD: https://github.com/wheelstop-app/wheelstop</string>
     <string name="settings_about_support_share_chooser">Împărtășește Wheelstop</string>
     <string name="settings_about_open_link_failed">Nu s-a putut deschide link-ul.</string>
     <string name="settings_about_open_link_copied">Nici un browser găsit. URL copiat: %1$s</string>
@@ -670,7 +670,7 @@
     <string name="settings_about_license_title">Licenta</string>
     <string name="settings_about_license_value">MIT – open source. Atingeți pentru a vizualiza textul complet.</string>
     <string name="settings_about_source_title">Cod sursă</string>
-    <string name="settings_about_source_value">github.com/yash-srivastava/Overdrive-release</string>
+    <string name="settings_about_source_value">github.com/wheelstop-app/wheelstop</string>
     <string name="settings_about_star_title">Star us on GitHub</string>
     <string name="settings_about_star_value">Ia o secundă. Înseamnă mult.</string>
     <string name="settings_about_thanks_title">Mulțumim</string>

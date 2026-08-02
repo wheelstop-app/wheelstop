@@ -802,7 +802,7 @@
     <string name="settings_about_support_section">あなたのような人々によって動かす</string>
     <string name="settings_about_support_share_title">他のオーナーにも伝えよう</string>
     <string name="settings_about_support_share_value">共有されたリンクは 他のBYDのオーナーがWheelstopを発見するのに役立ちます</string>
-    <string name="settings_about_support_share_message">BYDのWheelstop オープンソース監視とダッシュカメラをチェックしてください: https://overdrive-5lc.pages.dev/</string>
+    <string name="settings_about_support_share_message">BYDのWheelstop オープンソース監視とダッシュカメラをチェックしてください: https://github.com/wheelstop-app/wheelstop</string>
     <string name="settings_about_support_share_chooser">Wheelstop を共有</string>
     <string name="settings_about_open_link_failed">リンクを開けられなかった</string>
     <string name="settings_about_open_link_copied">ブラウザが見つかりませんでした. URLコピー: %1$s</string>
@@ -811,7 +811,7 @@
     <string name="settings_about_license_title">ライセンス</string>
     <string name="settings_about_license_value">MIT オープンソース. 完全テキストを表示するにはタップします.</string>
     <string name="settings_about_source_title">ソースコード</string>
-    <string name="settings_about_source_value">github.com/yash-srivastava/Overdrive-release</string>
+    <string name="settings_about_source_value">github.com/wheelstop-app/wheelstop</string>
     <string name="settings_about_star_title">を GitHub に 落とす</string>
     <string name="settings_about_star_value">ちょっと待って 沢山の意味がある</string>
     <string name="settings_about_thanks_title">ありがとう</string>

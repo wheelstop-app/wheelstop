@@ -656,7 +656,7 @@
     <string name="settings_about_support_section">Được vận hành bởi những người như anh</string>
     <string name="settings_about_support_share_title">Hãy nói với chủ xe khác</string>
     <string name="settings_about_support_share_value">Mỗi liên kết được chia sẻ giúp một chủ sở hữu BYD khác khám phá Wheelstop.</string>
-    <string name="settings_about_support_share_message">Kiểm tra Wheelstop giám sát nguồn mở &amp; dashcam cho BYD: https://overdrive-5lc.pages.dev/</string>
+    <string name="settings_about_support_share_message">Kiểm tra Wheelstop giám sát nguồn mở &amp; dashcam cho BYD: https://github.com/wheelstop-app/wheelstop</string>
     <string name="settings_about_support_share_chooser">Chia sẻ Wheelstop</string>
     <string name="settings_about_open_link_failed">Không thể mở liên kết.</string>
     <string name="settings_about_open_link_copied">Không tìm thấy trình duyệt. URL sao chép: %1$s</string>
@@ -665,7 +665,7 @@
     <string name="settings_about_license_title">Giấy phép</string>
     <string name="settings_about_license_value">MIT  mã nguồn mở. Nhấp để xem toàn văn bản.</string>
     <string name="settings_about_source_title">Mã nguồn</string>
-    <string name="settings_about_source_value">github.com/yash-srivastava/Overdrive-release</string>
+    <string name="settings_about_source_value">github.com/wheelstop-app/wheelstop</string>
     <string name="settings_about_star_title">Thả trên GitHub</string>
     <string name="settings_about_star_value">Chỉ mất một giây thôi, có nghĩa là rất nhiều.</string>
     <string name="settings_about_thanks_title">Cảm ơn</string>

@@ -423,7 +423,7 @@
                 ? (window.BYD.i18n.t(k) || fb) : fb;
 
             const star = document.getElementById('tierStar');
-            if (star) star.href = t('about.support.star_url', 'https://github.com/yash-srivastava/Overdrive-release');
+            if (star) star.href = t('about.support.star_url', 'https://github.com/wheelstop-app/wheelstop');
 
             const kofi = document.getElementById('tierKofi');
             if (kofi) kofi.href = t('about.support.kofi_url', 'https://ko-fi.com/E1E71XALHX');
@@ -432,7 +432,7 @@
             if (share) {
                 share.addEventListener('click', async () => {
                     const text = t('about.support.share_message',
-                        'Check out Wheelstop — open-source surveillance & dashcam for BYD: https://overdrive-5lc.pages.dev/');
+                        'Check out Wheelstop — open-source surveillance & dashcam for BYD: https://github.com/wheelstop-app/wheelstop');
                     try {
                         if (navigator.share) {
                             await navigator.share({ text });

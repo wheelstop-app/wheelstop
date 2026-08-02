@@ -805,7 +805,7 @@
     <string name="settings_about_support_section">Von Leuten wie dir angetrieben.</string>
     <string name="settings_about_support_share_title">Sag es einem anderen Besitzer</string>
     <string name="settings_about_support_share_value">Jeder gemeinsame Link hilft einem anderen BYD-Besitzer, Wheelstop zu entdecken.</string>
-    <string name="settings_about_support_share_message">Überprüfen Sie Wheelstop Open-Source-Überwachung &amp; Dashcam für BYD: https://overdrive-5lc.pages.dev/</string>
+    <string name="settings_about_support_share_message">Überprüfen Sie Wheelstop Open-Source-Überwachung &amp; Dashcam für BYD: https://github.com/wheelstop-app/wheelstop</string>
     <string name="settings_about_support_share_chooser">Wheelstop teilen</string>
     <string name="settings_about_open_link_failed">Ich konnte die Verbindung nicht öffnen.</string>
     <string name="settings_about_open_link_copied">Keine Browser gefunden. URL kopiert: %1$s</string>

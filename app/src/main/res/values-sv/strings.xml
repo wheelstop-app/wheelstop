@@ -658,7 +658,7 @@
     <string name="settings_about_support_section">Drivs av personer som du</string>
     <string name="settings_about_support_share_title">Berätta för en annan ägare</string>
     <string name="settings_about_support_share_value">Varje delad länk hjälper en annan BYD-ägare upptäcka Wheelstop.</string>
-    <string name="settings_about_support_share_message">Kolla in Wheelstop — open-source övervakning &amp; dashcam för BYD: https://overdrive-5lc.pages.dev/</string>
+    <string name="settings_about_support_share_message">Kolla in Wheelstop — open-source övervakning &amp; dashcam för BYD: https://github.com/wheelstop-app/wheelstop</string>
     <string name="settings_about_support_share_chooser">Dela Wheelstop</string>
     <string name="settings_about_open_link_failed">Kunde inte öppna länk.</string>
     <string name="settings_about_open_link_copied">Ingen webbläsare hittad. URL kopierad: %1$s</string>
@@ -667,7 +667,7 @@
     <string name="settings_about_license_title">Licens</string>
     <string name="settings_about_license_value">MIT — öppen källkod. Tryck för att visa fulltext.</string>
     <string name="settings_about_source_title">Källkod</string>
-    <string name="settings_about_source_value">github.com/yash-srivastava/Overdrive-release</string>
+    <string name="settings_about_source_value">github.com/wheelstop-app/wheelstop</string>
     <string name="settings_about_star_title">Star us on GitHub</string>
     <string name="settings_about_star_value">Tar en sekund. Innebär mycket.</string>
     <string name="settings_about_thanks_title">Tack</string>

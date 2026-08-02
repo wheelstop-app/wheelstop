@@ -656,7 +656,7 @@
     <string name="settings_about_support_section">สนับสนุนโครงการโดยผู้ใช้งาน</string>
     <string name="settings_about_support_share_title">บอกต่อให้ผู้ใช้รถท่านอื่น</string>
     <string name="settings_about_support_share_value">ทุกลิงก์ที่แชร์ช่วยให้ผู้ใช้ BYD ท่านอื่นได้รู้จักกับ Wheelstop</string>
-    <string name="settings_about_support_share_message">ลองใช้งาน Wheelstop — แอปพลิเคชันกล้องหน้ารถและโหมดเฝ้าระวังแบบ Open-Source สำหรับ BYD: https://overdrive-5lc.pages.dev/</string>
+    <string name="settings_about_support_share_message">ลองใช้งาน Wheelstop — แอปพลิเคชันกล้องหน้ารถและโหมดเฝ้าระวังแบบ Open-Source สำหรับ BYD: https://github.com/wheelstop-app/wheelstop</string>
     <string name="settings_about_support_share_chooser">แชร์ Wheelstop</string>
     <string name="settings_about_open_link_failed">ไม่สามารถเปิดลิงก์ได้</string>
     <string name="settings_about_open_link_copied">ไม่พบเว็บเบราว์เซอร์ คัดลอก URL เรียบร้อยแล้ว: %1$s</string>
@@ -665,7 +665,7 @@
     <string name="settings_about_license_title">สัญญาอนุญาต (License)</string>
     <string name="settings_about_license_value">MIT — Open Source แตะเพื่อดูรายละเอียดเพิ่มเติม</string>
     <string name="settings_about_source_title">ซอร์สโค้ด (Source Code)</string>
-    <string name="settings_about_source_value">github.com/yash-srivastava/Overdrive-release</string>
+    <string name="settings_about_source_value">github.com/wheelstop-app/wheelstop</string>
     <string name="settings_about_star_title">มอบ ⭐ ให้กับโครงการบน GitHub</string>
     <string name="settings_about_star_value">ใช้เวลาเพียงเล็กน้อย แต่มีความหมายอย่างยิ่งต่อนักพัฒนา</string>
     <string name="settings_about_thanks_title">ขอขอบคุณ</string>

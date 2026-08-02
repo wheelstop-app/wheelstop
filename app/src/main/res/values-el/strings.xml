@@ -658,7 +658,7 @@
     <string name="settings_about_support_section">Τροφοδοτείται από ανθρώπους σαν εσάς</string>
     <string name="settings_about_support_share_title">Ενημερώστε έναν συνιδιοκτήτη</string>
     <string name="settings_about_support_share_value">Κάθε κοινόχρηστος σύνδεσμος βοηθά έναν άλλο ιδιοκτήτη BYD να ανακαλύψει Wheelstop.</string>
-    <string name="settings_about_support_share_message">Αναχώρηση Wheelstop - open-source επιτήρησης &amp; dashcam για BYD: https://overdrive-5lc.pages.dev/</string>
+    <string name="settings_about_support_share_message">Αναχώρηση Wheelstop - open-source επιτήρησης &amp; dashcam για BYD: https://github.com/wheelstop-app/wheelstop</string>
     <string name="settings_about_support_share_chooser">Κοινή Χρήση Wheelstop</string>
     <string name="settings_about_open_link_failed">Αδυναμία ανοίγματος συνδέσμου.</string>
     <string name="settings_about_open_link_copied">Δεν βρέθηκε κανένα πρόγραμμα περιήγησης. Διεύθυνση αντιγράφησης: %1$s</string>
@@ -667,7 +667,7 @@
     <string name="settings_about_license_title">Άδεια</string>
     <string name="settings_about_license_value">MIT — ανοιχτός κώδικας. Πατήστε για να δείτε το πλήρες κείμενο.</string>
     <string name="settings_about_source_title">Πηγαίος κώδικας</string>
-    <string name="settings_about_source_value">github.com/yash-srivastava/Overdrive-release</string>
+    <string name="settings_about_source_value">github.com/wheelstop-app/wheelstop</string>
     <string name="settings_about_star_title">Star us on GitHub</string>
     <string name="settings_about_star_value">Παίρνει ένα δευτερόλεπτο. Σημαίνει πολλά.</string>
     <string name="settings_about_thanks_title">Ευχαριστούμε</string>
