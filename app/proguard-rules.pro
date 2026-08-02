@@ -178,7 +178,7 @@
 
 # ==================== App Components (declared in AndroidManifest) ====================
 # R8 auto-keeps these, but explicit rules for safety
--keep class app.wheelstop.android.OverdriveApplication { *; }
+-keep class app.wheelstop.android.WheelstopApplication { *; }
 -keep class app.wheelstop.android.ui.MainActivity { *; }
 -keep class app.wheelstop.android.ui.LocationStarterActivity { *; }
 -keep class app.wheelstop.android.BlockerActivity { *; }
