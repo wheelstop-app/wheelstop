@@ -461,7 +461,7 @@
         app:behavior_hideable="true"
         app:behavior_peekHeight="220dp"
         app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior"
-        app:shapeAppearanceOverlay="@style/ShapeAppearance.Overdrive.RouteSheet">
+        app:shapeAppearanceOverlay="@style/ShapeAppearance.Wheelstop.RouteSheet">
 
         <LinearLayout
             android:id="@+id/routeSheetContent"

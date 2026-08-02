@@ -53,7 +53,7 @@ class DaemonKeepaliveService : Service() {
         // killing LocationSidecarService).
         const val NOTIFICATION_GROUP_KEY = "app.wheelstop.android.STATUS"
         private const val SUMMARY_NOTIFICATION_ID = 19875
-        private const val SUMMARY_CHANNEL_ID = "overdrive_status_summary"
+        private const val SUMMARY_CHANNEL_ID = "wheelstop_status_summary"
 
         fun start(context: Context) {
             val intent = Intent(context, DaemonKeepaliveService::class.java)
@@ -339,8 +339,8 @@ class DaemonKeepaliveService : Service() {
             Notification.Builder(this)
         }
         val notification = builder
-            .setContentTitle(getString(R.string.overdrive_status_summary_title))
-            .setContentText(getString(R.string.overdrive_status_summary_text))
+            .setContentTitle(getString(R.string.wheelstop_status_summary_title))
+            .setContentText(getString(R.string.wheelstop_status_summary_text))
             .setSmallIcon(R.drawable.ic_sentry)
             .setContentIntent(pendingIntent)
             .setOngoing(true)

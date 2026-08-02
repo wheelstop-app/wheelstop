@@ -4,7 +4,7 @@
   the map. Surfaces the hazard's type / severity / confidence / status and
   lets the user CONFIRM (human-verify, optionally correcting severity/type)
   or DELETE (reject) it. Inflated by RoadSenseMapActivity into a
-  BottomSheetDialog themed Theme.Overdrive.M3.BottomSheet.
+  BottomSheetDialog themed Theme.Wheelstop.M3.BottomSheet.
 
   The severity / type correction chip groups are single-select; the
   Activity pre-checks the chip matching the hazard's current value and
@@ -178,7 +178,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnHazardDelete"
-            style="@style/Widget.Overdrive.M3.Button.Outlined"
+            style="@style/Widget.Wheelstop.M3.Button.Outlined"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginEnd="12dp"
@@ -189,7 +189,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnHazardConfirm"
-            style="@style/Widget.Overdrive.M3.Button.Tonal"
+            style="@style/Widget.Wheelstop.M3.Button.Tonal"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/roadsense_map_confirm" />

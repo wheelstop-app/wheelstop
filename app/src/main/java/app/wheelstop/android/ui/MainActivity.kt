@@ -2035,7 +2035,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(
-            this, R.style.Theme_Overdrive_M3_Dialog
+            this, R.style.Theme_Wheelstop_M3_Dialog
         )
             .setView(dialogView)
             .setNegativeButton(getString(R.string.dialog_close), null)
@@ -2963,7 +2963,7 @@ class MainActivity : AppCompatActivity() {
                     sohView.setTextColor(resources.getColor(colorRes, null))
                 }
 
-                val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(this, R.style.Theme_Overdrive_M3_Dialog)
+                val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(this, R.style.Theme_Wheelstop_M3_Dialog)
                     .setView(dialogView)
                     .setPositiveButton(getString(R.string.dialog_close), null)
                     .create()
@@ -3069,7 +3069,7 @@ class MainActivity : AppCompatActivity() {
      * Confirmation dialog before resetting SOH estimation.
      */
     private fun confirmSohReset() {
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this, R.style.Theme_Overdrive_M3_Dialog)
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this, R.style.Theme_Wheelstop_M3_Dialog)
             .setIcon(R.drawable.ic_warning)
             .setTitle(getString(R.string.dialog_reset_soh_title))
             .setMessage(getString(R.string.dialog_reset_soh_message))
@@ -3144,7 +3144,7 @@ class MainActivity : AppCompatActivity() {
                 dialogView.findViewById<com.google.android.material.checkbox.MaterialCheckBox>(id) to cat
             }
 
-        val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(this, R.style.Theme_Overdrive_M3_Dialog)
+        val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(this, R.style.Theme_Wheelstop_M3_Dialog)
             .setView(dialogView)
             .setPositiveButton(getString(R.string.dialog_reset_selected), null)  // Wired below to allow keep-open on validate
             .setNegativeButton(getString(R.string.action_cancel), null)
@@ -3190,7 +3190,7 @@ class MainActivity : AppCompatActivity() {
             "mediaTrips" to getString(R.string.reset_label_trip_files)
         )
         val list = categories.joinToString("\n") { "• " + (labels[it] ?: it) }
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this, R.style.Theme_Overdrive_M3_Dialog)
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this, R.style.Theme_Wheelstop_M3_Dialog)
             .setIcon(R.drawable.ic_warning)
             .setTitle(getString(R.string.dialog_reset_following_title))
             .setMessage(getString(R.string.dialog_reset_following_message, list))
@@ -3243,7 +3243,7 @@ class MainActivity : AppCompatActivity() {
                                 lines.append("• ").append(label).append(" — ").append(err).append("\n")
                             }
                         }
-                        com.google.android.material.dialog.MaterialAlertDialogBuilder(this, R.style.Theme_Overdrive_M3_Dialog)
+                        com.google.android.material.dialog.MaterialAlertDialogBuilder(this, R.style.Theme_Wheelstop_M3_Dialog)
                             .setIcon(R.drawable.ic_check_circle)
                             .setTitle(getString(R.string.dialog_reset_complete_title))
                             .setMessage(lines.toString().trim())
@@ -3332,7 +3332,7 @@ class MainActivity : AppCompatActivity() {
             // ADB not connected — retry the check and show explanation
             checkTrafficMonitorStatus()
             
-            com.google.android.material.dialog.MaterialAlertDialogBuilder(this, R.style.Theme_Overdrive_M3_Dialog)
+            com.google.android.material.dialog.MaterialAlertDialogBuilder(this, R.style.Theme_Wheelstop_M3_Dialog)
                 .setIcon(R.drawable.ic_warning)
                 .setTitle(getString(R.string.dialog_traffic_cannot_check_title))
                 .setMessage(getString(R.string.dialog_traffic_cannot_check_message))
@@ -3343,7 +3343,7 @@ class MainActivity : AppCompatActivity() {
 
         if (currentlyEnabled) {
             // Currently enabled — offer to disable with full explanation
-            com.google.android.material.dialog.MaterialAlertDialogBuilder(this, R.style.Theme_Overdrive_M3_Dialog)
+            com.google.android.material.dialog.MaterialAlertDialogBuilder(this, R.style.Theme_Wheelstop_M3_Dialog)
                 .setIcon(R.drawable.ic_traffic_monitor)
                 .setTitle(getString(R.string.dialog_traffic_disable_title))
                 .setMessage(getString(R.string.dialog_traffic_disable_message))
@@ -3354,7 +3354,7 @@ class MainActivity : AppCompatActivity() {
                 .show()
         } else {
             // Currently disabled — offer to re-enable
-            com.google.android.material.dialog.MaterialAlertDialogBuilder(this, R.style.Theme_Overdrive_M3_Dialog)
+            com.google.android.material.dialog.MaterialAlertDialogBuilder(this, R.style.Theme_Wheelstop_M3_Dialog)
                 .setIcon(R.drawable.ic_traffic_monitor)
                 .setTitle(getString(R.string.dialog_traffic_enable_title))
                 .setMessage(getString(R.string.dialog_traffic_enable_message))
@@ -3402,7 +3402,7 @@ class MainActivity : AppCompatActivity() {
                     logsViewModel.info("TrafficMonitor", "BYD Traffic Monitor $state")
                     
                     // Show reboot reminder
-                    com.google.android.material.dialog.MaterialAlertDialogBuilder(this@MainActivity, R.style.Theme_Overdrive_M3_Dialog)
+                    com.google.android.material.dialog.MaterialAlertDialogBuilder(this@MainActivity, R.style.Theme_Wheelstop_M3_Dialog)
                         .setIcon(R.drawable.ic_check_circle)
                         .setTitle(getString(R.string.dialog_traffic_status_title, state.replaceFirstChar { it.uppercase() }))
                         .setMessage(getString(R.string.dialog_traffic_reboot_message))

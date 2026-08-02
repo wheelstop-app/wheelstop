@@ -238,7 +238,7 @@
         android:allowBackup="false"
         android:label="@string/app_name"
         android:extractNativeLibs="true"
-        android:theme="@style/Theme.Overdrive.M3"
+        android:theme="@style/Theme.Wheelstop.M3"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:persistent="true"
@@ -292,7 +292,7 @@
             android:excludeFromRecents="true"
             android:screenOrientation="unspecified"
             android:configChanges="keyboardHidden"
-            android:theme="@style/Theme.Overdrive.M3" />
+            android:theme="@style/Theme.Wheelstop.M3" />
 
         <!-- RoadSense hazard map — native GPU MapLibre Activity. Launched from the
              RoadSense web tab via the AndroidBridge.openHazardMap() JS bridge. Not
@@ -304,7 +304,7 @@
             android:launchMode="singleTop"
             android:screenOrientation="unspecified"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|density|fontScale"
-            android:theme="@style/Theme.Overdrive.M3" />
+            android:theme="@style/Theme.Wheelstop.M3" />
 
         <!-- View-only cluster mirror of the map. A distinct component with its OWN
              taskAffinity + singleInstance so it lives in a SEPARATE OS task on the
@@ -332,7 +332,7 @@
             android:launchMode="singleInstance"
             android:excludeFromRecents="true"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|density|fontScale"
-            android:theme="@style/Theme.Overdrive.M3" />
+            android:theme="@style/Theme.Wheelstop.M3" />
 
         <!-- Exclusivity preflight blocker — shown when ExclusivityPreflight detects a live
              legacy Overdrive install (see ExclusivityPreflight.OLD_PKG) holding the shared
@@ -345,7 +345,7 @@
             android:excludeFromRecents="true"
             android:screenOrientation="unspecified"
             android:configChanges="orientation|screenSize|keyboardHidden"
-            android:theme="@style/Theme.Overdrive.M3" />
+            android:theme="@style/Theme.Wheelstop.M3" />
 
         <!-- Blocker Activity for Sentry Mode (transparent click blocker) -->
         <activity

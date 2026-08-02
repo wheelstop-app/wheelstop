@@ -64,7 +64,7 @@ import java.util.concurrent.Executors
  *   &lt;activity
  *       android:name="app.wheelstop.android.navmap.RoadSenseMapActivity"
  *       android:exported="false"
- *       android:theme="@style/Theme.Overdrive.M3"
+ *       android:theme="@style/Theme.Wheelstop.M3"
  *       android:configChanges="orientation|screenSize|keyboardHidden" /&gt;
  * </pre>
  * Nav-rail / launch wiring is intentionally NOT done here.
@@ -2059,7 +2059,7 @@ open class RoadSenseMapActivity : AppCompatActivity() {
         observations: Int
     ) {
         val view = layoutInflater.inflate(R.layout.sheet_roadsense_hazard, null)
-        val dialog = BottomSheetDialog(this, R.style.Theme_Overdrive_M3_BottomSheet).apply {
+        val dialog = BottomSheetDialog(this, R.style.Theme_Wheelstop_M3_BottomSheet).apply {
             setContentView(view)
             setCancelable(true)
         }
@@ -2792,7 +2792,7 @@ open class RoadSenseMapActivity : AppCompatActivity() {
         val isStop = existingIdx >= 0
 
         val sheet = com.google.android.material.bottomsheet.BottomSheetDialog(
-            this, R.style.Theme_Overdrive_M3_BottomSheet
+            this, R.style.Theme_Wheelstop_M3_BottomSheet
         )
         val view = layoutInflater.inflate(R.layout.sheet_poi_action, null)
         view.findViewById<TextView>(R.id.tvPoiName).text = title
@@ -2915,7 +2915,7 @@ open class RoadSenseMapActivity : AppCompatActivity() {
         // without this the prior sheet's in-flight reverse callback would still fire.
         openPlaceSheetAlive?.set(false)
         openPlaceSheet?.let { try { it.setOnDismissListener(null); it.dismiss() } catch (_: Throwable) {} }
-        val sheet = BottomSheetDialog(this, R.style.Theme_Overdrive_M3_BottomSheet)
+        val sheet = BottomSheetDialog(this, R.style.Theme_Wheelstop_M3_BottomSheet)
         openPlaceSheet = sheet
         val view = layoutInflater.inflate(R.layout.sheet_place_action, null)
         val nameView = view.findViewById<TextView>(R.id.tvPlaceName)

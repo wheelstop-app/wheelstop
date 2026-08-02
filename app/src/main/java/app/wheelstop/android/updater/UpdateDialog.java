@@ -41,7 +41,7 @@ public class UpdateDialog {
         }
 
         new com.google.android.material.dialog.MaterialAlertDialogBuilder(
-                context, R.style.Theme_Overdrive_M3_Dialog)
+                context, R.style.Theme_Wheelstop_M3_Dialog)
                 .setView(view)
                 .setPositiveButton(R.string.update_dialog_install_now, (d, w) -> { d.dismiss(); onUpdate.run(); })
                 .setNegativeButton(R.string.update_dialog_later, (d, w) -> { d.dismiss(); if (onDismiss != null) onDismiss.run(); })
@@ -74,7 +74,7 @@ public class UpdateDialog {
                                          VersionPickListener listener) {
         if (versions == null || versions.isEmpty()) {
             new com.google.android.material.dialog.MaterialAlertDialogBuilder(
-                    context, R.style.Theme_Overdrive_M3_Dialog)
+                    context, R.style.Theme_Wheelstop_M3_Dialog)
                     .setTitle(R.string.update_picker_title)
                     .setMessage(R.string.update_picker_empty)
                     .setPositiveButton(android.R.string.ok, (d, w) -> {
@@ -102,7 +102,7 @@ public class UpdateDialog {
 
         final int[] chosen = { preselect };
         new com.google.android.material.dialog.MaterialAlertDialogBuilder(
-                context, R.style.Theme_Overdrive_M3_Dialog)
+                context, R.style.Theme_Wheelstop_M3_Dialog)
                 .setTitle(R.string.update_picker_title)
                 .setIcon(R.drawable.ic_update)
                 .setSingleChoiceItems(labels, preselect, (d, which) -> chosen[0] = which)
@@ -128,7 +128,7 @@ public class UpdateDialog {
         TextView percentText = view.findViewById(R.id.updatePercentText);
 
         AlertDialog dialog = new com.google.android.material.dialog.MaterialAlertDialogBuilder(
-                context, R.style.Theme_Overdrive_M3_Dialog)
+                context, R.style.Theme_Wheelstop_M3_Dialog)
                 .setTitle(R.string.update_progress_title)
                 .setIcon(R.drawable.ic_update)
                 .setView(view)

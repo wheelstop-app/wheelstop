@@ -610,8 +610,8 @@
          or only the keepalive survived an OOM respawn. -->
     <string name="daemon_keepalive_notif_title">Wheelstop Ενεργού</string>
     <string name="daemon_keepalive_notif_text">Συστήματα παρακολούθησης οχημάτων</string>
-    <string name="overdrive_status_summary_title">Wheelstop</string>
-    <string name="overdrive_status_summary_text">Υπηρεσίες παρασκηνίου που εκτελούνται</string>
+    <string name="wheelstop_status_summary_title">Wheelstop</string>
+    <string name="wheelstop_status_summary_text">Υπηρεσίες παρασκηνίου που εκτελούνται</string>
     <!-- ============================================================== -->
     <!-- M3 Revamp: navigation rail + settings sub-rail + theme picker  -->
     <!-- ============================================================== -->

@@ -616,8 +616,8 @@
          or only the keepalive survived an OOM respawn. -->
     <string name="daemon_keepalive_notif_title">Wheelstop aktywny</string>
     <string name="daemon_keepalive_notif_text">Monitorowanie układów pojazdów</string>
-    <string name="overdrive_status_summary_title">Wheelstop</string>
-    <string name="overdrive_status_summary_text">Uruchomione usługi w tle</string>
+    <string name="wheelstop_status_summary_title">Wheelstop</string>
+    <string name="wheelstop_status_summary_text">Uruchomione usługi w tle</string>
     <!-- ============================================================== -->
     <!-- M3 Revamp: navigation rail + settings sub-rail + theme picker  -->
     <!-- ============================================================== -->

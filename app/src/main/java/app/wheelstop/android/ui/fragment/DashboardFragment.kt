@@ -826,7 +826,7 @@ class DashboardFragment : Fragment() {
     }
 
     private fun showRegenerateConfirmation() {
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext(), R.style.Theme_Overdrive_M3_Dialog)
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext(), R.style.Theme_Wheelstop_M3_Dialog)
             .setIcon(R.drawable.ic_warning)
             .setTitle(getString(R.string.dialog_regenerate_token_title))
             .setMessage(getString(R.string.dialog_regenerate_token_message))
@@ -1191,7 +1191,7 @@ class DashboardFragment : Fragment() {
         }
 
         val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(
-            ctx, R.style.Theme_Overdrive_M3_Dialog)
+            ctx, R.style.Theme_Wheelstop_M3_Dialog)
             .setTitle(getString(R.string.vehicle_dialog_title))
             .setView(dialogView)
             // Install button listeners after show so invalid capacity does not

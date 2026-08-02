@@ -142,7 +142,7 @@ public class SetupGuideDialog {
             });
         }
 
-        AlertDialog dialog = new com.google.android.material.dialog.MaterialAlertDialogBuilder(context, R.style.Theme_Overdrive_M3_Dialog)
+        AlertDialog dialog = new com.google.android.material.dialog.MaterialAlertDialogBuilder(context, R.style.Theme_Wheelstop_M3_Dialog)
                 .setView(view)
                 .setCancelable(true)
                 .create();

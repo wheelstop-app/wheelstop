@@ -150,7 +150,7 @@ class DaemonsFragment : Fragment() {
                 // Pre-fill with current token if exists
                 currentToken?.let { editToken.setText(it) }
                 
-                val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(context, R.style.Theme_Overdrive_M3_Dialog)
+                val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(context, R.style.Theme_Wheelstop_M3_Dialog)
                     .setIcon(R.drawable.ic_link)
                     .setTitle(getString(R.string.dialog_zrok_token_title))
                     .setView(dialogView)
@@ -231,7 +231,7 @@ class DaemonsFragment : Fragment() {
                 }
             }
 
-            val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(context, R.style.Theme_Overdrive_M3_Dialog)
+            val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(context, R.style.Theme_Wheelstop_M3_Dialog)
                 .setIcon(R.drawable.ic_mqtt)
                 .setTitle(getString(R.string.dialog_tailscale_settings_title))
                 .setView(dialogView)
@@ -264,7 +264,7 @@ class DaemonsFragment : Fragment() {
     private fun confirmEnableTailscaleProxy() {
         val context = context ?: return
 
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(context, R.style.Theme_Overdrive_M3_Dialog)
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(context, R.style.Theme_Wheelstop_M3_Dialog)
             .setIcon(R.drawable.ic_warning)
             .setTitle(getString(R.string.dialog_tailscale_proxy_enable_title))
             .setMessage(getString(R.string.dialog_tailscale_proxy_enable_message))
@@ -281,7 +281,7 @@ class DaemonsFragment : Fragment() {
     private fun confirmResetZrokEnvironment() {
         val context = context ?: return
         
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(context, R.style.Theme_Overdrive_M3_Dialog)
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(context, R.style.Theme_Wheelstop_M3_Dialog)
             .setIcon(R.drawable.ic_warning)
             .setTitle(getString(R.string.dialog_zrok_reset_title))
             .setMessage(getString(R.string.dialog_zrok_reset_message))
@@ -336,7 +336,7 @@ class DaemonsFragment : Fragment() {
     private fun confirmResetTailscaleEnvironment() {
         val context = context ?: return
 
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(context, R.style.Theme_Overdrive_M3_Dialog)
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(context, R.style.Theme_Wheelstop_M3_Dialog)
             .setIcon(R.drawable.ic_warning)
             .setTitle(getString(R.string.dialog_tailscale_reset_title))
             .setMessage(getString(R.string.dialog_tailscale_reset_message))
@@ -447,7 +447,7 @@ class DaemonsFragment : Fragment() {
                 getString(R.string.logs_send_subtitle, localizedName)
 
             val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(
-                ctx, R.style.Theme_Overdrive_M3_Dialog)
+                ctx, R.style.Theme_Wheelstop_M3_Dialog)
                 .setView(dialogView)
                 .setNegativeButton(android.R.string.cancel, null)
                 .create()
@@ -485,7 +485,7 @@ class DaemonsFragment : Fragment() {
         // returned code on the floor.
         val progressView = LayoutInflater.from(ctx).inflate(R.layout.dialog_log_uploading, null)
         val progressDialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(
-            ctx, R.style.Theme_Overdrive_M3_Dialog)
+            ctx, R.style.Theme_Wheelstop_M3_Dialog)
             .setView(progressView)
             .setCancelable(false)
             .show()
@@ -530,7 +530,7 @@ class DaemonsFragment : Fragment() {
         }
 
         val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(
-            ctx, R.style.Theme_Overdrive_M3_Dialog)
+            ctx, R.style.Theme_Wheelstop_M3_Dialog)
             .setView(view)
             .setPositiveButton(R.string.logs_copy_code) { _, _ -> copyCode() }
             .setNegativeButton(R.string.logs_done, null)
