@@ -478,6 +478,7 @@ public final class PermissionGranter {
     }
 
     private static void log(String msg) {
+<<<<<<< HEAD:app/src/main/java/app/wheelstop/android/daemon/PermissionGranter.java
         // DaemonLogger, not a bare System.out.println: proguard-rules.pro
         // applies -assumenosideeffects to java.io.PrintStream in EVERY release
         // build, so raw println calls are stripped and the field would see
@@ -486,5 +487,8 @@ public final class PermissionGranter {
         // DaemonLogConfig — the supported field-diagnostics path. Its stdout
         // channel also covers debug daemon runs (with timestamps).
         app.wheelstop.android.logging.DaemonLogger.getInstance(TAG).info(msg);
+=======
+        System.out.println(TAG + ": " + msg);
+>>>>>>> upstream/main:app/src/main/java/com/overdrive/app/daemon/PermissionGranter.java
     }
 }

@@ -183,6 +183,7 @@ public final class AppLauncher {
     /** Ghost activity component used to seed a split-screen-primary stack for the
      *  re-dock path (must match the AndroidManifest entry). */
     private static final String GHOST_COMPONENT =
+<<<<<<< HEAD:app/src/main/java/app/wheelstop/android/launcher/AppLauncher.java
             "app.wheelstop.android/app.wheelstop.android.launcher.AppLauncherGhostActivity";
     /** 
      * Bounded polls waiting for the ghost stack / re-docked task to materialise. 
@@ -191,6 +192,12 @@ public final class AppLauncher {
      */
     private static final int SPLIT_POLL_ATTEMPTS = 8;
     private static final long SPLIT_POLL_MS = 400L;
+=======
+            "com.overdrive.app/com.overdrive.app.launcher.AppLauncherGhostActivity";
+    /** Bounded polls waiting for the ghost stack / re-docked task to materialise. */
+    private static final int SPLIT_POLL_ATTEMPTS = 6;
+    private static final long SPLIT_POLL_MS = 250L;
+>>>>>>> upstream/main:app/src/main/java/com/overdrive/app/launcher/AppLauncher.java
 
     /**
      * Dock {@code pkg} into split-screen (SPLIT_SCREEN_PRIMARY / windowingMode 3).
@@ -251,11 +258,6 @@ public final class AppLauncher {
             return false;
         }
 
-        // Wait for the Ghost Activity window to stabilize on screen before moving the task.
-        // This prevents a race condition where the ghost activity finishes rendering *after*
-        // the task was moved, covering the target application.
-        sleepQuietly(150L);
-
         // move-task <taskId> <stackId> true  → the trailing bool is toTop. Re-read the
         // task id: it is stable for a running app, but a re-resolve costs nothing and
         // guards against the app dying between the two dumpsys reads.
@@ -266,12 +268,6 @@ public final class AppLauncher {
             logger.warn("openApp: move-task " + task + " → stack " + ghostStack + " failed");
             return false;
         }
-
-        // Force the app's activity to the front. On DiLink 3 (Android 10), AMS moves the 
-        // background task to the split stack silently without triggering a focus transition.
-        // A direct start command wakes the activity and forces the system to render it on top.
-        //runShell("am start --user 0 -n " + shellQuote(component));
-
         logger.info("openApp: re-docked task " + task + " into split stack " + ghostStack);
         return true;
     }
@@ -283,7 +279,7 @@ public final class AppLauncher {
      * followed by the task's activities. We match the task whose recorded package is
      * {@code pkg} by scanning each task block's first component reference.
      */
-    private static int findTaskId(String pkg) {
+    static int findTaskId(String pkg) {
         // Grep to the task-header + component lines so the parse stays cheap and the
         // output small. On API 29 the task-header class is `TaskRecord{...#<id>...}`
         // (newer platforms print `Task{...}`); match BOTH so this works across the
@@ -587,7 +583,7 @@ public final class AppLauncher {
             return false;
         }
     }
-    
+
     /**
      * Run a short shell command bounded at 5s and return its (stdout+stderr) output,
      * or null on failure/timeout. Output is capped at {@link #SHELL_CAPTURE_CAP_BYTES}
@@ -698,3 +694,4 @@ public final class AppLauncher {
         return true;
     }
 }
+

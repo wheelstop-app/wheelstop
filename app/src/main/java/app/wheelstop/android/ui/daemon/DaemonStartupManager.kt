@@ -3,6 +3,7 @@ package app.wheelstop.android.ui.daemon
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+<<<<<<< HEAD:app/src/main/java/app/wheelstop/android/ui/daemon/DaemonStartupManager.kt
 import app.wheelstop.android.launcher.AdbDaemonLauncher
 import app.wheelstop.android.launcher.AdbShellExecutor
 import app.wheelstop.android.launcher.ZrokLauncher
@@ -13,13 +14,40 @@ import app.wheelstop.android.preflight.ExclusivityPreflight
 import app.wheelstop.android.ui.model.DaemonType
 import app.wheelstop.android.ui.util.PreferencesManager
 import app.wheelstop.android.ui.viewmodel.DaemonsViewModel
+=======
+import com.overdrive.app.launcher.AdbDaemonLauncher
+import com.overdrive.app.launcher.AdbShellExecutor
+import com.overdrive.app.launcher.ZrokLauncher
+import com.overdrive.app.launcher.TailscaleLauncher
+import com.overdrive.app.logging.LogManager
+import com.overdrive.app.telegram.config.UnifiedTelegramConfig
+import com.overdrive.app.ui.model.DaemonType
+import com.overdrive.app.ui.util.PreferencesManager
+import com.overdrive.app.ui.viewmodel.DaemonsViewModel
+>>>>>>> upstream/main:app/src/main/java/com/overdrive/app/ui/daemon/DaemonStartupManager.kt
 
 class DaemonStartupManager(
     private val context: Context,
     private val daemonsViewModel: DaemonsViewModel? = null
 ) {
     private val log = LogManager.getInstance()
+    // Last supervised-optional-daemon set logged by this manager's health check, so the line is
+    // emitted on change rather than every 30s tick. Main-looper only; no @Volatile needed.
+    private var lastLoggedOptional: List<String>? = null
     private val handler = Handler(Looper.getMainLooper())
+
+    // Dedicated looper for the 30s daemon health check. That tick does blocking
+    // work — up to 8 file-open + Properties.load() reads (isDaemonStoppedViaTelegram)
+    // and 8 `ps -A | grep` shell probes — and it runs with NO Activity present
+    // (armed from DaemonKeepaliveService / KeepAliveAccessibilityService) for the
+    // entire process lifetime in the default onAndOff mode. On the main looper
+    // that stalls the app's main thread, which contends with system_server over
+    // binder and steals frames from the native head-unit UI. Only the loop's
+    // scheduling moves here; every callback that must touch the ViewModel still
+    // hops to `handler` (main) explicitly — see doRelaunchDaemon.
+    private val healthCheckThread =
+        android.os.HandlerThread("DaemonHealthCheck").apply { start() }
+    private val healthCheckHandler = Handler(healthCheckThread.looper)
     // Public so MainActivity / fragments / one-shot callers can route their
     // ADB-shell commands through this single shared launcher instead of
     // allocating fresh `AdbDaemonLauncher(this)` instances each call.
@@ -151,6 +179,16 @@ class DaemonStartupManager(
             try { bootManager?.cleanup() } catch (e: Exception) {
                 android.util.Log.w(TAG, "stopHealthChecks failed: ${e.message}")
             }
+            // DROP the reference: cleanup() now quitSafely()s the manager's
+            // healthCheckThread, so the instance is permanently un-armable — its
+            // looper is dead and startDaemonHealthCheck() would post into a queue
+            // that never runs. Leaving bootManager pointing at a cleaned-up
+            // instance would silently disable the health check for the rest of the
+            // process if anything re-armed it. recoverFromPark() already nulls it
+            // on the ACC-on edge; doing it here too means the guarantee no longer
+            // depends on those two paths staying paired. A fresh startOnBoot()
+            // builds a new manager (with a live thread), which is what we want.
+            bootManager = null
         }
 
         /**
@@ -369,6 +407,7 @@ class DaemonStartupManager(
         // post-update path; missing from the cold-start launch flow.)
         clearStaleSentinels()
 
+<<<<<<< HEAD:app/src/main/java/app/wheelstop/android/ui/daemon/DaemonStartupManager.kt
         // Wait 45 seconds for system to fully stabilize before starting any daemons.
         // Named Runnables (not inline lambdas) so a LATER CONTENDED verdict on
         // this instance can cancel them via cancelPendingDaemonStart() before
@@ -384,6 +423,69 @@ class DaemonStartupManager(
 
         // Start periodic health check after initial daemons have had time to start
         handler.postDelayed(healthCheckStart, 90000)
+=======
+        // Same Tailscale lead as the boot path. This path matters MORE in practice: BYD's
+        // broadcast suppression means the app is normally started by hand (`am start`) rather
+        // than by BOOT_COMPLETED, so initializeOnAppLaunch — not initializeOnBoot — is what
+        // actually runs. Hardware test 2026-07-31 with only the boot path fixed measured
+        // byd_cam_daemon at +50s and tailscaled at +65s, i.e. MQTT still came up 15s before
+        // its proxy existed.
+        scheduleTailscaleLead("App launch")
+
+        // Wait 45 seconds for system to fully stabilize before starting any daemons
+        handler.postDelayed({ startCoreDaemons() }, DaemonBootSchedule.CORE_DELAY_MS)
+        handler.postDelayed({ startOptionalDaemonsFromPreferences() }, DaemonBootSchedule.OPTIONAL_DELAY_MS)
+
+        // Start periodic health check after initial daemons have had time to start
+        handler.postDelayed({ startDaemonHealthCheck() }, DaemonBootSchedule.HEALTH_CHECK_DELAY_MS)
+    }
+
+    /**
+     * Give tailscaled a head start over the core daemons when the tunnel is enabled.
+     *
+     * The camera daemon owns the MQTT publisher, and with the tunnel enabled the broker is
+     * normally reachable ONLY through tailscaled's SOCKS listener. Starting the camera daemon
+     * first makes the publisher defer (issue #182). That deferral is cheap — the #182 fix does
+     * not bump `consecutiveFailures` while waiting, so the publish loop re-probes every 5s and
+     * connects as soon as the listener binds — but it is bounded by `PROXY_WARMUP_GRACE_MS`
+     * (60s), and past that the publisher falls through to a direct dial that can never reach a
+     * LAN address off Wi-Fi. The lead exists to keep the proxy inside that window, not to save
+     * the few seconds of telemetry a good boot would lose anyway. See [DaemonBootSchedule].
+     *
+     * The preference is read INSIDE the callback, not at schedule time: these initializers run
+     * at t=0, when PreferencesManager may not be initialized yet. The later optional-daemon
+     * pass still starts Tailscale too; that call is idempotent (TailscaleLauncher.launchTailscale
+     * probes isTunnelRunning and no-ops), so it doubles as a retry if this early start failed.
+     */
+    private fun scheduleTailscaleLead(phase: String) {
+        handler.postDelayed({
+            // Log the decision either way. An optional daemon that isn't "enabled" is skipped
+            // by BOTH the startup pass and runHealthCheck with NO log line at all, so a
+            // preference that reads back false is invisible — the daemon simply never starts
+            // and nothing says why. That silence cost a full hardware debug cycle on
+            // 2026-07-31; make it observable.
+            val enabled = try {
+                PreferencesManager.getEnabledDaemons().map { it.name }
+            } catch (e: Exception) {
+                log.warn(TAG, "$phase: could not read enabled daemons (${e.message}) — skipping Tailscale lead")
+                return@postDelayed
+            }
+            if (DaemonType.TAILSCALE_TUNNEL.name !in enabled) {
+                log.info(TAG, "$phase: Tailscale not enabled in preferences (enabled=$enabled) — no lead scheduled")
+                return@postDelayed
+            }
+
+            // ifNotUserStopped now checks the sentinel locally (see DaemonStopGate), so it can no
+            // longer be silently disarmed by a shut-down executor — which is what stopped this
+            // lead from ever firing on hardware before that fix.
+            ifNotUserStopped(DaemonType.TAILSCALE_TUNNEL) {
+                log.info(TAG, "$phase: starting Tailscale ${DaemonBootSchedule.proxyLeadMs() / 1000}s " +
+                    "ahead of the core daemons (if the SOCKS proxy toggle is on, this is what lets " +
+                    "MQTT start into a live proxy instead of deferring)")
+                startTailscaleOnBoot()
+            }
+        }, DaemonBootSchedule.TAILSCALE_LEAD_DELAY_MS)
+>>>>>>> upstream/main:app/src/main/java/com/overdrive/app/ui/daemon/DaemonStartupManager.kt
     }
 
     /**
@@ -458,6 +560,7 @@ class DaemonStartupManager(
         // immediately. See initializeOnAppLaunch for the full rationale.
         clearStaleSentinels()
 
+<<<<<<< HEAD:app/src/main/java/app/wheelstop/android/ui/daemon/DaemonStartupManager.kt
         // Wait 45 seconds for system to fully stabilize before starting any daemons.
         // Named Runnables — see proceedInitializeOnAppLaunch for why (cancellable
         // by a later CONTENDED verdict on this instance).
@@ -472,6 +575,16 @@ class DaemonStartupManager(
 
         // Start periodic health check after initial daemons have had time to start
         handler.postDelayed(healthCheckStart, 90000)
+=======
+        scheduleTailscaleLead("Boot")
+
+        // Wait 45 seconds for system to fully stabilize before starting any daemons
+        handler.postDelayed({ startCoreDaemonsViaAdb() }, DaemonBootSchedule.CORE_DELAY_MS)
+        handler.postDelayed({ startOptionalDaemonsViaAdb() }, DaemonBootSchedule.OPTIONAL_DELAY_MS)
+
+        // Start periodic health check after initial daemons have had time to start
+        handler.postDelayed({ startDaemonHealthCheck() }, DaemonBootSchedule.HEALTH_CHECK_DELAY_MS)
+>>>>>>> upstream/main:app/src/main/java/com/overdrive/app/ui/daemon/DaemonStartupManager.kt
     }
 
 
@@ -572,31 +685,41 @@ class DaemonStartupManager(
      * Core daemons don't need this gate — clearStaleSentinels intentionally
      * re-arms them — so this is only wired into the optional starts.
      *
-     * Probe runs as the app's shared launcher (UID lets it stat
-     * /data/local/tmp). On probe error we bias toward starting (same
-     * availability bias as relaunchDaemon): a missed start is recoverable by
-     * the user, and the daemon is already pref-enabled here.
+     * The sentinel is stat'd LOCALLY, from the app process. This was an ADB round-trip whose reply
+     * callback carried the actual start, so the decision depended on a reply that is not guaranteed
+     * to arrive (see [DaemonStopGate], including why `false` means "absent OR invisible"). Removing
+     * that dependency is hardening — it was NOT shown to be the cause of any observed failure.
+     *
+     * Delivery of [onAllowed] is unchanged: still posted to the main looper, because four of the
+     * call sites invoke this from an ADB worker thread inside a `*Controller.isRunning { }`
+     * callback and their bodies touch DaemonsViewModel.
      */
     private fun ifNotUserStopped(type: DaemonType, onAllowed: () -> Unit) {
-        adbLauncher.executeShellCommand(
-            "test -f ${type.sentinelPath} && echo STOPPED || echo OK",
-            object : AdbDaemonLauncher.LaunchCallback {
-                override fun onLog(message: String) {
-                    if (message.trim().contains("STOPPED")) {
-                        log.info(TAG, "Optional startup: ${type.displayName} has a user-stop " +
-                            "sentinel — not auto-starting")
-                    } else {
-                        handler.post { onAllowed() }
-                    }
-                }
-                override fun onLaunched() {}
-                override fun onError(error: String) {
-                    log.warn(TAG, "Optional startup sentinel probe failed for " +
-                        "${type.displayName} ($error) — starting (pref-enabled)")
-                    handler.post { onAllowed() }
-                }
-            }
-        )
+        // Decide stop-intent LOCALLY (no ADB round-trip — see [DaemonStopGate]), while preserving
+        // upstream's content-aware discrimination for Telegram: its sentinel's TEXT distinguishes a
+        // MACHINE stop (ACC-off sweep / the update sweep's write-if-absent "stopAllDaemons") from a
+        // real user stop, and only a user stop must suppress a pref-enabled start. Ported from the
+        // former `head -1 | grep -qE 'ACC-on|stopAllDaemons'` ADB probe to a local first-line read.
+        val blocked = if (type == DaemonType.TELEGRAM_DAEMON) {
+            DaemonStopGate.isStartBlockedContentAware(type.sentinelPath, fileExists, firstLineOf)
+        } else {
+            DaemonStopGate.isStartBlocked(type.sentinelPath, fileExists)
+        }
+        if (blocked) {
+            log.info(TAG, "Optional startup: ${type.displayName} has a user-stop " +
+                "sentinel — not auto-starting")
+            return
+        }
+        handler.post { onAllowed() }
+    }
+
+    /** Injected so the gate's policy stays unit-testable and the call sites stay honest. */
+    private val fileExists: (String) -> Boolean = { java.io.File(it).exists() }
+
+    /** Reads a sentinel's first line locally for the content-aware Telegram gate; null on any
+     *  read failure (caller treats null as "present but unreadable" — a user stop). */
+    private val firstLineOf: (String) -> String? = { path ->
+        try { java.io.File(path).bufferedReader().use { it.readLine() } } catch (_: Exception) { null }
     }
 
     private fun startOptionalDaemonsFromPreferences() {
@@ -628,12 +751,44 @@ class DaemonStartupManager(
 
         // Start Telegram Bot daemon if user enabled it and hasn't stopped it.
         if (PreferencesManager.isDaemonEnabled(DaemonType.TELEGRAM_DAEMON)) {
+            syncTelegramEnabledToUnifiedConfig(true)
             handler.postDelayed({
                 ifNotUserStopped(DaemonType.TELEGRAM_DAEMON) {
                     log.info(TAG, "Starting Telegram Bot daemon (user enabled)...")
                     vm.startDaemon(DaemonType.TELEGRAM_DAEMON)
                 }
             }, 15000)
+        }
+    }
+
+    /**
+     * Mirror the app-private "Telegram enabled" preference into the world-readable
+     * unified config so AccSentryDaemon (shell UID 2000) can see it on the
+     * ACC-off edge — it cannot read our SharedPreferences.
+     *
+     * The app-side preference is the single source of truth: this function's only
+     * job is to make it visible across the UID boundary. Called on every toggle
+     * AND on app launch, so a mirror write that was lost (the write is a failable
+     * socket IPC to the config daemon) is repaired on the next launch, and an
+     * install that enabled the daemon before this key existed gets backfilled
+     * without needing a re-toggle.
+     *
+     * Idempotent — no-ops when already in sync; updateSection merges, so it never
+     * disturbs the rest of the telegram section.
+     *
+     * (An earlier revision took an `authoritative` flag and refused to repair a
+     * disagreeing value, to protect a deliberate clear written by the web
+     * preferences endpoint. That endpoint no longer touches this key — the web
+     * surface is read-only for it — so the only states the guard could still
+     * catch were lost writes, where suppressing the repair is exactly wrong.)
+     */
+    private fun syncTelegramEnabledToUnifiedConfig(enabled: Boolean) {
+        try {
+            if (UnifiedTelegramConfig.isDaemonEnabled() == enabled) return  // in sync
+            UnifiedTelegramConfig.setBoolean(UnifiedTelegramConfig.K_DAEMON_ENABLED, enabled)
+            log.info(TAG, "Mirrored Telegram daemonEnabled=$enabled to unified config")
+        } catch (e: Exception) {
+            log.warn(TAG, "Failed to mirror Telegram daemonEnabled: ${e.message}")
         }
     }
 
@@ -727,6 +882,7 @@ class DaemonStartupManager(
 
             // Start Telegram Bot daemon if user enabled it and hasn't stopped it.
             if (PreferencesManager.isDaemonEnabled(DaemonType.TELEGRAM_DAEMON)) {
+                syncTelegramEnabledToUnifiedConfig(true)
                 handler.postDelayed({
                     ifNotUserStopped(DaemonType.TELEGRAM_DAEMON) {
                         log.info(TAG, "Boot: Starting Telegram Bot daemon...")
@@ -868,6 +1024,16 @@ class DaemonStartupManager(
             val state = if (enabled) "ON" else "OFF"
             log.info(TAG, "User toggled ${type.displayName} to $state - saving preference")
             PreferencesManager.setDaemonEnabled(type, enabled)
+            // Telegram additionally needs a CROSS-UID copy of this intent.
+            // PreferencesManager is app-private (UID 10xxx) and invisible to
+            // AccSentryDaemon (shell UID 2000), which decides on the ACC-off
+            // edge whether to bring the bot back up while parked. Mirrored to
+            // its own key — NOT autoStartAccOff, which additionally means
+            // "stop again on ACC-on" (parked-only mode) and would kill a
+            // daemon the user asked to keep running. Writes route via daemon IPC.
+            if (type == DaemonType.TELEGRAM_DAEMON) {
+                syncTelegramEnabledToUnifiedConfig(enabled)
+            }
         }
     }
 
@@ -926,7 +1092,11 @@ class DaemonStartupManager(
     }
 
     private fun scheduleNextHealthCheck() {
-        handler.postDelayed({
+        // Scheduled on the dedicated health-check looper, NOT the main looper —
+        // see healthCheckHandler. healthCheckRunning (AtomicBoolean) remains the
+        // authoritative stop signal, so cleanup()/stopHealthChecks() still halt
+        // the loop exactly as before; cadence and probe logic are unchanged.
+        healthCheckHandler.postDelayed({
             if (healthCheckRunning.get()) {
                 runHealthCheck()
                 scheduleNextHealthCheck()
@@ -935,19 +1105,74 @@ class DaemonStartupManager(
     }
 
     private fun runHealthCheck() {
+        // Build the candidate list first (cheap in-memory / file gates), then pay
+        // for exactly ONE `ps -A` and test every candidate against that snapshot.
+        //
+        // Previously each candidate called isDaemonRunning() individually, and
+        // because AdbShellExecutor.getOrCreateConnection() runs a
+        // `dadb.shell("echo ok")` liveness probe before every command, each of
+        // those cost TWO adb shell sessions plus a full /proc walk — all
+        // serialized on a process-wide lock. `adbd` is a shared SYSTEM service,
+        // so with 3+ daemons that load was being taken from the whole head unit
+        // every 30s, forever. One snapshot cuts it ~8x.
+        //
+        // Semantics are unchanged: same candidates, same gates, same order, same
+        // relaunch decisions (processAliveIn reproduces the old grep matching,
+        // including sentry's acc_ exclusion).
+        val candidates = ArrayList<DaemonType>(CORE_DAEMONS.size + OPTIONAL_DAEMONS.size)
+
         // Core daemons: always restart unless user explicitly stopped
         for (type in CORE_DAEMONS) {
             if (type in userStoppedDaemons) continue
             if (isDaemonStoppedViaTelegram(type)) continue
-            checkAndRelaunchDaemon(type)
+            candidates.add(type)
         }
 
-        // Optional daemons: only restart if user had them enabled in preferences
+        // Optional daemons: only restart if user had them enabled in preferences.
+        // #197: log the supervised optional set on CHANGE — the observability that would have
+        // surfaced the 2026-07-29 dead-tailscaled outage. Grafted onto upstream's batched check.
+        val enabledOptional = try {
+            PreferencesManager.getEnabledDaemons().filter { it in OPTIONAL_DAEMONS }.map { it.name }
+        } catch (e: Exception) {
+            log.warn(TAG, "Health check: cannot read enabled daemons: ${e.message}")
+            emptyList()
+        }
+        if (enabledOptional != lastLoggedOptional) {
+            lastLoggedOptional = enabledOptional
+            log.info(TAG, "Health check: supervising optional daemons $enabledOptional " +
+                "(others are skipped silently by design)")
+        }
+
+        // Guard ORDER matters for cost (upstream v36.6): the cheap in-memory isDaemonEnabled check
+        // runs before the file-reading isDaemonStoppedViaTelegram, so a disabled optional daemon no
+        // longer pays a disk read every tick.
         for (type in OPTIONAL_DAEMONS) {
             if (type in userStoppedDaemons) continue
-            if (isDaemonStoppedViaTelegram(type)) continue
             if (!PreferencesManager.isDaemonEnabled(type)) continue
-            checkAndRelaunchDaemon(type)
+            if (isDaemonStoppedViaTelegram(type)) continue
+            candidates.add(type)
+        }
+
+        if (candidates.isEmpty()) return
+
+        // ZROK keeps its bespoke two-layer check (process-alive AND edge-stale HTTP probe) — a `ps`
+        // snapshot cannot detect a stale zrok edge, so route it on its own path exactly as before.
+        val zrokCandidate = candidates.remove(DaemonType.ZROK_TUNNEL)
+        if (zrokCandidate) checkAndRelaunchDaemon(DaemonType.ZROK_TUNNEL)
+
+        if (candidates.isEmpty()) return
+
+        adbLauncher.snapshotProcessTable { snapshot ->
+            if (snapshot == null) {
+                log.warn(TAG, "Health check: ps snapshot unavailable — skipping this tick")
+                return@snapshotProcessTable
+            }
+            for (type in candidates) {
+                if (!adbLauncher.processAliveIn(snapshot, type.processName)) {
+                    log.warn(TAG, "Health check: ${type.displayName} is DEAD — relaunching...")
+                    relaunchDaemon(type)
+                }
+            }
         }
     }
 
@@ -1063,8 +1288,9 @@ class DaemonStartupManager(
         // the health-check) OR a user-initiated stop from the Daemons UI or
         // Telegram (sentinel present → leave it down). This probe is the only
         // check that works regardless of which UID wrote the stop: the
-        // sentinel is `chmod 666` in /data/local/tmp, readable by both the app
-        // and the UID-2000 daemon family. The in-memory userStoppedDaemons set
+        // stop files live in /data/local/tmp, which the app process can stat directly
+        // (search permission on the directory — the files' 0666 mode is irrelevant to
+        // exists(); see DaemonStopGate). The in-memory userStoppedDaemons set
         // is wiped on app relaunch, and the legacy Telegram .properties file is
         // unreadable across the UID boundary — so without this probe a
         // Telegram or post-restart stop gets resurrected within 30s.
@@ -1072,6 +1298,7 @@ class DaemonStartupManager(
         // Every relaunch path (generic dead-process, zrok PROCESS_DEAD, zrok
         // EDGE_STALE, boot-path ADB fallback) funnels through here, so gating
         // once at this chokepoint covers them all.
+<<<<<<< HEAD:app/src/main/java/app/wheelstop/android/ui/daemon/DaemonStartupManager.kt
         adbLauncher.executeShellCommand(
             "test -f ${type.sentinelPath} -o -f ${app.wheelstop.android.ui.model.ParkedShutdown.MARKER_PATH} && echo STOPPED || echo OK",
             object : app.wheelstop.android.launcher.AdbDaemonLauncher.LaunchCallback {
@@ -1100,6 +1327,23 @@ class DaemonStartupManager(
                 }
             }
         )
+=======
+        // Checked LOCALLY (see DaemonStopGate). Previously an ADB round-trip whose reply callback
+        // carried the relaunch, so a shut-down executor could disarm the health check — the one
+        // thing standing between a crashed daemon and an indefinitely dead stack.
+        // STOPPED = user disable sentinel present, OR the "Vehicle ON only" parked-shutdown marker
+        // present. In onOnly the whole stack is terminated on park and MUST NOT be revived by the
+        // 30s health-check until the ACC-on edge clears the marker.
+        if (DaemonStopGate.isRelaunchBlocked(
+                sentinelPath = type.sentinelPath,
+                markerPath = com.overdrive.app.ui.model.ParkedShutdown.MARKER_PATH,
+                exists = fileExists)) {
+            log.info(TAG, "Health check: ${type.displayName} is stopped " +
+                "(disable sentinel or parked-shutdown marker present) — NOT relaunching")
+            return
+        }
+        doRelaunchDaemon(type)
+>>>>>>> upstream/main:app/src/main/java/com/overdrive/app/ui/daemon/DaemonStartupManager.kt
     }
 
     private fun doRelaunchDaemon(type: DaemonType) {
@@ -1247,9 +1491,42 @@ class DaemonStartupManager(
         }
     }
 
+    /**
+     * Stops the health-check loop and QUITS its dedicated looper. Idempotent.
+     *
+     * Split out of [cleanup] so a caller that only needs to stop this manager's own
+     * thread (e.g. MainActivity.onDestroy) does not also trigger
+     * `adbLauncher.releasePerInstanceResources()` + the zrok launcher shutdown that
+     * [cleanup] performs — this Activity's adbLauncher is shared with other
+     * components. Without SOME caller doing this, every manager instance strands a
+     * live OS thread for the process lifetime: instances are created per
+     * MainActivity.onCreate as well as for the static bootManager, and Activity
+     * recreates are routine (language picker, theme switch, any config change
+     * outside the manifest's configChanges set) — each leaked thread also pins the
+     * destroyed Activity via the Context it was built with.
+     *
+     * `healthCheckRunning=false` is set first, so quitting cannot cut short a tick
+     * that would otherwise have run. Safe to call twice (quitSafely on an already-
+     * quit looper is a no-op).
+     */
+    fun stopHealthCheckThread() {
+        healthCheckRunning.set(false)
+        healthCheckHandler.removeCallbacksAndMessages(null)
+        try {
+            healthCheckThread.quitSafely()
+        } catch (e: Exception) {
+            log.warn(TAG, "healthCheckThread quit failed: ${e.message}")
+        }
+    }
+
     fun cleanup() {
         healthCheckRunning.set(false)
         handler.removeCallbacksAndMessages(null)
+        // The health-check loop now lives on its own looper, so clearing the main
+        // handler above no longer reaches it — drop its pending tick too (the
+        // healthCheckRunning flag already stops the re-post, this is the same
+        // belt-and-braces the main-handler clear provided before).
+        stopHealthCheckThread()
         // releasePerInstanceResources — NOT closePersistentConnection.
         // closePersistentConnection nulls the process-wide shared Dadb in
         // AdbShellExecutor's companion, which would force the new
