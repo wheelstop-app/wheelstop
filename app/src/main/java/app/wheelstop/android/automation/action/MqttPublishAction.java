@@ -1,5 +1,6 @@
 package app.wheelstop.android.automation.action;
 
+<<<<<<< HEAD:app/src/main/java/app/wheelstop/android/automation/action/MqttPublishAction.java
 import app.wheelstop.android.automation.AutomationAction;
 import app.wheelstop.android.automation.Automations;
 import app.wheelstop.android.automation.type.EnumType;
@@ -8,11 +9,19 @@ import app.wheelstop.android.automation.type.Type;
 import app.wheelstop.android.automation.value.Label;
 import app.wheelstop.android.daemon.CameraDaemon;
 import app.wheelstop.android.server.Messages;
+=======
+import com.overdrive.app.automation.AutomationAction;
+import com.overdrive.app.automation.TextInterpolator;
+import com.overdrive.app.automation.type.EnumType;
+import com.overdrive.app.automation.type.StringType;
+import com.overdrive.app.automation.type.Type;
+import com.overdrive.app.automation.value.Label;
+import com.overdrive.app.daemon.CameraDaemon;
+import com.overdrive.app.server.Messages;
+>>>>>>> upstream/main:app/src/main/java/com/overdrive/app/automation/action/MqttPublishAction.java
 
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Publish an MQTT message from an automation — the outbound sink that lets a rule notify
@@ -25,15 +34,16 @@ import java.util.regex.Pattern;
  * security boundary. This calls the connection manager IN-PROCESS instead, mirroring
  * {@link ManualClipAction} / {@link AutomationControlAction} / {@link RadioAction}.
  *
- * <p>Topic and payload both support {@code ${variable}} interpolation against the shared
- * automation state (same convention as {@link ApiAction} bodies), so a rule can publish a
- * counter/flag another action set. A relative topic is scoped under each connection's
+ * <p>Topic and payload both support {@code ${var:NAME}} / {@code ${signal:TYPE[:k=v]}} /
+ * bare {@code ${NAME}} interpolation against the shared automation state (see
+ * {@link com.overdrive.app.automation.TextInterpolator}, the same convention as
+ * {@link ApiAction} bodies), so a rule can publish a live signal or a counter another
+ * action set. A relative topic is scoped under each connection's
  * base topic; an absolute topic ("/…") is used as-is. No live MQTT connection → clean
  * no-op (logged), never throws.
  */
 public class MqttPublishAction extends BaseAction {
     private static final String TYPE = "mqttPublish";
-    private static final Pattern VAR = Pattern.compile("\\$\\{([^}]+)\\}");
 
     private final Label label;
     private final String description;
@@ -56,8 +66,8 @@ public class MqttPublishAction extends BaseAction {
 
     public void trigger(AutomationAction automationAction) {
         Map<String, Object> vars = automationAction.getVariables();
-        String topic = interpolate(str(vars.get("topic")));
-        String payload = interpolate(str(vars.get("payload")));
+        String topic = TextInterpolator.interpolate(str(vars.get("topic")));
+        String payload = TextInterpolator.interpolate(str(vars.get("payload")));
         boolean retain = "true".equals(str(vars.get("retain")));
         if (topic == null || topic.isEmpty()) {
             logger.warn("MqttPublishAction: empty topic, skipping");
@@ -76,6 +86,7 @@ public class MqttPublishAction extends BaseAction {
         }
     }
 
+<<<<<<< HEAD:app/src/main/java/app/wheelstop/android/automation/action/MqttPublishAction.java
     /** Replace ${name} with the current value of that automation variable, or leave the
      *  literal placeholder when unset. Best-effort — any error yields the input unchanged. */
     private static String interpolate(String input) {
@@ -100,5 +111,7 @@ public class MqttPublishAction extends BaseAction {
         }
     }
 
+=======
+>>>>>>> upstream/main:app/src/main/java/com/overdrive/app/automation/action/MqttPublishAction.java
     private static String str(Object o) { return o == null ? null : o.toString().trim(); }
 }
