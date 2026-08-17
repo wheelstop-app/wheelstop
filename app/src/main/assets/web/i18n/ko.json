@@ -220,7 +220,22 @@
     "bs_auto_base_left_title": "전진 방향 — 좌측",
     "bs_auto_base_right_title": "전진 방향 — 우측",
     "bs_rectify_title": "어안 보정",
-    "bs_rectify_desc": "단일 카메라 측면 및 후방 화면의 어안/배럴 곡률을 펴줍니다. 값이 높을수록 볼록함이 평평해지지만 가장자리가 약간 잘립니다. 합쳐진 화면에는 적용되지 않고 단일 카메라 화면에만 적용됩니다."
+    "bs_rectify_desc": "단일 카메라 측면 및 후방 화면의 어안/배럴 곡률을 펴줍니다. 값이 높을수록 볼록함이 평평해지지만 가장자리가 약간 잘립니다. 합쳐진 화면에는 적용되지 않고 단일 카메라 화면에만 적용됩니다.",
+    "warn_channel": "사운드 채널",
+    "warn_channel_desc": "경고 차임이 재생되는 오디오 채널입니다. 내비게이션은 차량 안내 채널을 사용하므로 음악과 겹치지 않게 음량을 낮추고 내비게이션 음량을 따릅니다.",
+    "warn_channel_navigation": "내비게이션",
+    "warn_channel_media": "미디어",
+    "warn_channel_voice": "음성",
+    "warn_channel_alarm": "알람",
+    "warn_volume": "차임 음량",
+    "warn_volume_desc": "RoadSense 경고의 최대 음량을 설정합니다. 경미 및 중간 차임은 심각 경고보다 부드럽게 유지됩니다.",
+    "warn_volume_min": "작게",
+    "warn_volume_max": "크게",
+    "warn_test": "차임 테스트",
+    "warn_test_desc": "선택한 최대 음량을 확인할 수 있도록 위 채널에서 가장 강한 경고 차임을 지금 재생합니다. 실제 경고는 RoadSense가 알고 있는 위험을 향해 주행할 때만 울립니다.",
+    "warn_test_btn": "차임 재생",
+    "warn_test_playing": "선택한 RoadSense 음량으로 차임을 보냈습니다",
+    "warn_test_failed": "차임을 보내지 못했습니다"
   },
   "status": {
     "device": "기기",

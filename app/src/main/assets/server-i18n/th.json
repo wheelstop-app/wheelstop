@@ -165,7 +165,7 @@
     "tyre_wheel_reading": "{0} — {1}",
     "tyre_fast_leak": "พบรอยรั่วเร็ว",
     "tyre_slow_leak": "พบรอยรั่วช้า",
-    "tyre_wheel_pressure": "{0} ({1} kPa)"
+    "tyre_wheel_pressure": "{0} ({1})"
   },
   "telegram": {
     "recording_caption": "วิดีโอ ({0}) - {1} วิ",
@@ -760,8 +760,8 @@
     "play_audio": "เล่นเสียง",
     "play_audio_description": "เล่นเสียงที่คุณอัปโหลด (MP3/WAV) หนึ่งรายการผ่านลำโพงเฮดยูนิตในช่องที่เลือก อัปโหลดเสียงใน Audio Library ที่หน้า Automations",
     "audio_file": "เสียง",
-    "play_video": "เล่นวิดีโอ",
-    "play_video_description": "เล่นวิดีโอที่คุณอัปโหลด (MP4) หนึ่งรายการโดยแสดงภาพบนหน้าจอเฮดยูนิตและเสียงในช่องที่เลือก อัปโหลดวิดีโอใน Audio Library ที่หน้า Automations",
+    "play_video": "เล่นวีดีโอ",
+    "play_video_description": "เล่นวิดีโอ (MP4) ที่คุณอัปโหลดไว้ โดยแสดงภาพบนหน้าจอ Head Unit และเล่นเสียงผ่านช่องสัญญาณที่เลือกไว้ อัปโหลดวิดีโอได้ใน คลังเสียง บนหน้า ระบบอัตโนมัติ",
     "video_file": "วิดีโอ",
     "audio_loop": "วนซ้ำ",
     "audio_loop_off": "เล่นครั้งเดียว",
@@ -1115,5 +1115,10 @@
     "update_installing_finishing": "กำลังติดตั้งลงจอรถ เดี๋ยวกลับมาทำงานต่อ",
     "update_install_failed": "ติดตั้งไม่สำเร็จ",
     "update_install_crashed": "การติดตั้งล้มเหลว"
+  },
+  "units": {
+    "bar": "bar",
+    "kpa": "kPa",
+    "psi": "PSI"
   }
 }

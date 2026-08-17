@@ -12,6 +12,8 @@ import app.wheelstop.android.client.CameraDaemonClient
 import app.wheelstop.android.logging.LogManager
 import app.wheelstop.android.ui.util.PreferencesManager
 import org.json.JSONObject
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 /**
  * ViewModel for recording screen state.
@@ -24,6 +26,9 @@ class RecordingViewModel(app: Application) : AndroidViewModel(app) {
     
     private val log = LogManager.getInstance()
     private val daemonClient = CameraDaemonClient()
+    private val storageExecutor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "RecordingStorageInfo").apply { isDaemon = true }
+    }
     
     private val _isRecording = MutableLiveData(false)
     val isRecording: LiveData<Boolean> = _isRecording
@@ -159,41 +164,46 @@ class RecordingViewModel(app: Application) : AndroidViewModel(app) {
     }
     
     fun updateStorageInfo() {
-        try {
-            // SOTA: Use StorageManager to get actual recordings storage info
-            val storageManager = StorageManager.getInstance()
-            val used = storageManager.recordingsSize
-            
-            // Get available space from the actual storage location
-            val recordingsPath = storageManager.recordingsPath
-            val stat = StatFs(recordingsPath)
+        if (storageExecutor.isShutdown) return
+        storageExecutor.execute {
+            val info = try {
+                val storageManager = StorageManager.getInstance()
+                val used = storageManager.recordingsSize
+                val stat = StatFs(storageManager.recordingsPath)
+                StorageInfo(
+                    usedBytes = used,
+                    availableBytes = stat.availableBytes,
+                    totalBytes = stat.totalBytes,
+                )
+            } catch (_: Exception) {
+                fallbackStorageInfo()
+            }
+            _storageInfo.postValue(info)
+        }
+    }
+
+    private fun fallbackStorageInfo(): StorageInfo {
+        return try {
+            val path = getApplication<Application>().getExternalFilesDir(null)?.absolutePath
+                ?: "/sdcard"
+            val stat = StatFs(path)
             val available = stat.availableBytes
             val total = stat.totalBytes
-            
-            _storageInfo.value = StorageInfo(
-                usedBytes = used,
+            StorageInfo(
+                usedBytes = total - available,
                 availableBytes = available,
-                totalBytes = total
+                totalBytes = total,
             )
-        } catch (e: Exception) {
-            // Fallback to old method
-            try {
-                val path = getApplication<Application>().getExternalFilesDir(null)?.absolutePath
-                    ?: "/sdcard"
-                val stat = StatFs(path)
-                val available = stat.availableBytes
-                val total = stat.totalBytes
-                val used = total - available
-                
-                _storageInfo.value = StorageInfo(
-                    usedBytes = used,
-                    availableBytes = available,
-                    totalBytes = total
-                )
-            } catch (e2: Exception) {
-                _storageInfo.value = StorageInfo(0, 0, 0)
-            }
+        } catch (_: Exception) {
+            StorageInfo(0, 0, 0)
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        handler.removeCallbacks(durationUpdater)
+        storageExecutor.shutdownNow()
+        daemonClient.destroy()
     }
     
     fun formatDuration(seconds: Long): String {
@@ -205,12 +215,6 @@ class RecordingViewModel(app: Application) : AndroidViewModel(app) {
         } else {
             String.format("%02d:%02d", minutes, secs)
         }
-    }
-    
-    override fun onCleared() {
-        super.onCleared()
-        handler.removeCallbacks(durationUpdater)
-        daemonClient.destroy()
     }
     
     data class StorageInfo(

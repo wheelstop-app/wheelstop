@@ -220,7 +220,22 @@
     "bs_auto_base_left_title": "前進方向 — 左側",
     "bs_auto_base_right_title": "前進方向 — 右側",
     "bs_rectify_title": "魚眼校正",
-    "bs_rectify_desc": "校正單鏡頭側方與後方檢視的魚眼／桶形畸變。數值越高，凸起越平，但邊緣會略被裁切。僅套用於單鏡頭檢視，不套用於合併檢視。"
+    "bs_rectify_desc": "校正單鏡頭側方與後方檢視的魚眼／桶形畸變。數值越高，凸起越平，但邊緣會略被裁切。僅套用於單鏡頭檢視，不套用於合併檢視。",
+    "warn_channel": "聲音通道",
+    "warn_channel_desc": "警告提示音播放所用的音訊通道。導航使用車輛的導航提示通道，因此提示音會降低音樂音量而不是與其混雜，並跟隨導航音量。",
+    "warn_channel_navigation": "導航",
+    "warn_channel_media": "媒體",
+    "warn_channel_voice": "語音",
+    "warn_channel_alarm": "鬧鐘",
+    "warn_volume": "提示音音量",
+    "warn_volume_desc": "設定 RoadSense 警告的最高音量。輕微和中等提示音會比嚴重警告更柔和。",
+    "warn_volume_min": "低",
+    "warn_volume_max": "高",
+    "warn_test": "測試提示音",
+    "warn_test_desc": "立即在上方所選通道播放最強警告提示音，以檢查選定的最高音量。實際警告只會在駛向 RoadSense 已知的危險時響起。",
+    "warn_test_btn": "播放提示音",
+    "warn_test_playing": "已按所選 RoadSense 音量傳送提示音",
+    "warn_test_failed": "無法傳送提示音"
   },
   "status": {
     "device": "裝置",

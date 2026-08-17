@@ -220,7 +220,22 @@
     "bs_auto_base_left_title": "Hướng tiến — trái",
     "bs_auto_base_right_title": "Hướng tiến — phải",
     "bs_rectify_title": "Hiệu chỉnh mắt cá",
-    "bs_rectify_desc": "Làm thẳng độ cong mắt cá/thùng của các chế độ xem một camera bên hông và phía sau. Giá trị cao hơn làm phẳng phần phồng nhưng cắt nhẹ các cạnh. Chỉ áp dụng cho chế độ xem một camera, không áp dụng cho chế độ xem ghép."
+    "bs_rectify_desc": "Làm thẳng độ cong mắt cá/thùng của các chế độ xem một camera bên hông và phía sau. Giá trị cao hơn làm phẳng phần phồng nhưng cắt nhẹ các cạnh. Chỉ áp dụng cho chế độ xem một camera, không áp dụng cho chế độ xem ghép.",
+    "warn_channel": "Kênh âm thanh",
+    "warn_channel_desc": "Kênh âm thanh phát chuông cảnh báo. Dẫn đường dùng kênh chỉ dẫn của xe, nên chuông sẽ giảm âm lượng nhạc thay vì lấn át và đi theo âm lượng dẫn đường.",
+    "warn_channel_navigation": "Dẫn đường",
+    "warn_channel_media": "Đa phương tiện",
+    "warn_channel_voice": "Giọng nói",
+    "warn_channel_alarm": "Báo thức",
+    "warn_volume": "Âm lượng chuông",
+    "warn_volume_desc": "Đặt mức âm lượng cao nhất cho cảnh báo RoadSense. Chuông nhẹ và vừa vẫn êm hơn cảnh báo nghiêm trọng.",
+    "warn_volume_min": "Nhỏ",
+    "warn_volume_max": "To",
+    "warn_test": "Thử chuông",
+    "warn_test_desc": "Phát chuông cảnh báo lớn nhất trên kênh đã chọn để kiểm tra mức tối đa. Cảnh báo thực chỉ phát khi lái xe về phía mối nguy mà RoadSense đã biết.",
+    "warn_test_btn": "Phát chuông",
+    "warn_test_playing": "Đã gửi chuông ở âm lượng RoadSense đã chọn",
+    "warn_test_failed": "Không thể gửi chuông"
   },
   "status": {
     "device": "Thiết bị",

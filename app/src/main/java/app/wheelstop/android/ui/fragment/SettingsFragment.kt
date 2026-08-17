@@ -19,16 +19,17 @@ import com.google.android.material.switchmaterial.SwitchMaterial
 import app.wheelstop.android.BuildConfig
 import app.wheelstop.android.R
 import app.wheelstop.android.config.UnifiedConfigManager
+import app.wheelstop.android.overlay.StatusOverlayUiWriter
 import app.wheelstop.android.roadsense.config.RoadSenseConfig
 import app.wheelstop.android.roadsense.overlay.RoadSenseOverlayService
 import app.wheelstop.android.ui.MainActivity
-import org.json.JSONObject
 import app.wheelstop.android.updater.AppUpdater
 import app.wheelstop.android.ui.dialog.LanguagePickerDialog
 import app.wheelstop.android.ui.fragment.settings.SettingsAppearanceFragment
 import app.wheelstop.android.ui.fragment.settings.SettingsDaemonsFragment
 import app.wheelstop.android.ui.fragment.settings.SettingsOverlayFragment
 import app.wheelstop.android.ui.fragment.settings.SettingsPrivacyFragment
+import app.wheelstop.android.ui.fragment.settings.RemoteCommunicationSettingsBinder
 import app.wheelstop.android.ui.fragment.settings.SettingsRecordingFragment
 import app.wheelstop.android.ui.fragment.settings.SettingsSecurityFragment
 import app.wheelstop.android.ui.fragment.settings.SettingsSurveillanceFragment
@@ -55,7 +56,13 @@ import java.util.Locale
  */
 class SettingsFragment : Fragment() {
     private var portraitRoadSenseSwitch: SwitchMaterial? = null
+    private var remoteCommunicationBinder: RemoteCommunicationSettingsBinder? = null
     private var applyingPortraitRoadSenseConfig = false
+
+    // Guards the camera/trip pill listeners while a failed write reverts its
+    // switch (setChecked fires the listener programmatically; an unguarded
+    // revert would re-enter the write with the stale value).
+    private var applyingStatusOverlayConfig = false
 
     /**
      * Sub-rail sections. The order here is the visual order in the rail
@@ -137,6 +144,7 @@ class SettingsFragment : Fragment() {
             setupLanguagePicker(view)
             setupSectionShortcuts(view)
             setupOverlayToggles(view)
+            remoteCommunicationBinder = RemoteCommunicationSettingsBinder(view)
             setupResetRow(view)
             setupFooter(view)
         }
@@ -145,9 +153,12 @@ class SettingsFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         refreshPortraitRoadSenseSwitch(forceReload = true)
+        remoteCommunicationBinder?.refresh()
     }
 
     override fun onDestroyView() {
+        remoteCommunicationBinder?.destroy()
+        remoteCommunicationBinder = null
         portraitRoadSenseSwitch = null
         super.onDestroyView()
     }
@@ -367,22 +378,52 @@ class SettingsFragment : Fragment() {
             swRoadSense.isChecked = !swRoadSense.isChecked
         }
 
-        swCamera.setOnCheckedChangeListener { _, checked ->
-            UnifiedConfigManager.setStatusOverlay(JSONObject().put("cameraVisible", checked))
-            kickOverlayRefresh()
+        // Write off the UI thread (updateSection is off-looper-only: blocking
+        // IPC + full JSON rewrite) and revert the switch if the write did not
+        // commit — same contract as the RoadSense switch below.
+        swCamera.setOnCheckedChangeListener { button, checked ->
+            if (!applyingStatusOverlayConfig) {
+                persistOverlayFlag("cameraVisible", checked, button)
+            }
         }
-        swTrip.setOnCheckedChangeListener { _, checked ->
-            UnifiedConfigManager.setStatusOverlay(JSONObject().put("tripVisible", checked))
-            kickOverlayRefresh()
+        swTrip.setOnCheckedChangeListener { button, checked ->
+            if (!applyingStatusOverlayConfig) {
+                persistOverlayFlag("tripVisible", checked, button)
+            }
         }
+        // Same off-looper + retry + revert-on-failure path as the two switches above.
+        // This used to call setOverlayVisible() inline on the looper with no retry, so an
+        // app-UID write deferred until the daemon provisions the stable .lock inode just
+        // sprang the switch back — RoadSense could not be toggled at all right after boot.
         swRoadSense.setOnCheckedChangeListener { button, checked ->
             if (applyingPortraitRoadSenseConfig) return@setOnCheckedChangeListener
-            if (RoadSenseConfig.setOverlayVisible(checked)) {
-                context?.let { RoadSenseOverlayService.syncWithConfig(it) }
-            } else {
-                applyingPortraitRoadSenseConfig = true
-                button.isChecked = !checked
-                applyingPortraitRoadSenseConfig = false
+            StatusOverlayUiWriter.writeWith(
+                "roadSense.overlayVisible",
+                { ok ->
+                    if (ok) {
+                        context?.let { RoadSenseOverlayService.syncWithConfig(it) }
+                    } else if (view != null) {  // fragment view still alive
+                        applyingPortraitRoadSenseConfig = true
+                        button.isChecked = !checked
+                        applyingPortraitRoadSenseConfig = false
+                    }
+                }
+            ) { RoadSenseConfig.setOverlayVisible(checked) }
+        }
+    }
+
+    private fun persistOverlayFlag(
+        key: String,
+        value: Boolean,
+        button: android.widget.CompoundButton
+    ) {
+        StatusOverlayUiWriter.write(key, value) { ok ->
+            if (ok) {
+                kickOverlayRefresh()
+            } else if (view != null) {  // fragment view still alive
+                applyingStatusOverlayConfig = true
+                button.isChecked = !value
+                applyingStatusOverlayConfig = false
             }
         }
     }

@@ -116,9 +116,10 @@
     "tyres_order": "A pressão máxima deve ser maior que a mínima em cada eixo",
     "tyres_critical_order": "A pressão crítica não deve exceder a mínima de nenhum dos eixos",
     "tyres_nothing_to_update": "Nada para atualizar",
-    "tyres_persist_failed": "Falha ao salvar os limites dos pneus",
+    "tyres_persist_failed": "Falha ao salvar os limites de pressão dos pneus",
     "recordings_index_unavailable": "Índice de gravações indisponível",
     "surveillance_all_classes_off": "Esta salvamento desativará todas as classes de objetos, desligando a detecção por IA por completo. Confirme para prosseguir.",
+    "tyres_invalid_unit": "pressureUnit deve ser kpa, psi ou bar",
     "vehicle_blocked_in_motion": "Esta ação não está disponível enquanto o veículo está em movimento"
   },
   "notifications": {
@@ -151,7 +152,7 @@
     "tyre_wheel_reading": "{0} — {1}",
     "tyre_fast_leak": "Vazamento rápido detectado",
     "tyre_slow_leak": "Vazamento lento detectado",
-    "tyre_wheel_pressure": "{0} ({1} kPa)",
+    "tyre_wheel_pressure": "{0} ({1})",
     "door_opened": "Porta {0} aberta",
     "door_closed": "Porta {0} fechada",
     "while_parked": "Enquanto estacionado",
@@ -620,7 +621,7 @@
     "outside_temperature_description": "A temperatura externa/ambiente em Celsius — o sensor externo, com fallback para a previsão do tempo local. Ao contrário do indicador de Temperatura, este nunca usa o sensor da cabine.",
     "celsius": "Celsius",
     "set_ac": "Ligar AC",
-    "set_ac_description": "Ligar ou desligar o Ar-Condicionado. Este controle não funciona quando o veículo estiver desligado.",
+    "set_ac_description": "Liga ou desliga o Ar-Condicionado. Este controle não funciona enquanto o veículo estiver desligado. Configure \"Desligar após\" para rodar o ar-condicionado por um tempo determinado e fazê-lo desligar sozinho — útil para que o pré-condicionamento ou a ventilação da cabine não descarreguem a bateria caso você se esqueça. \"Sem temporizador\" simplesmente não define um prazo aqui; para cancelar um temporizador que já esteja em contagem regressiva, use a ação Temporizador para Desligar o Ar-Condicionado.",
     "set_ac_temp": "Definir Temperatura do AC",
     "set_ac_temp_description": "Alterar a temperatura atual do Ar-Condicionado. Este controle não funciona quando o veículo estiver desligado.",
     "speed": "Velocidade",
@@ -1061,16 +1062,16 @@
     "mqtt_channel": "Canal",
     "mqtt_value": "Valor",
     "compute_variable": "Calcular Variável",
-    "compute_variable_description": "Calcular um número e armazená-lo em uma variável. Suporta + - * / %, parênteses e as funções min, max, clamp, round, floor, ceil, abs, sqrt e pow. Use ${signal:NAME} para um valor do veículo em tempo real e ${var:NAME} para outra variável — ex.: 500 + (${signal:batteryLevel} - 20) * 3.75. Se um valor não puder ser lido (um sinal que ainda não reportou), a variável permanece inalterada.",
+    "compute_variable_description": "Calcula um número e o armazena em uma variável. Suporta + - * / % , parênteses e as funções min, max, clamp, round, floor, ceil, abs, sqrt e pow. Use ${signal:NAME} para um valor do veículo em tempo real e ${var:NAME} para outra variável — ex.: 500 + (${signal:batteryLevel} - 20) * 3.75. Se um valor não puder ser lido (um sinal que ainda não tenha sido informado), a variável permanece inalterada.",
     "variable_expression": "Expressão",
     "blind_spot": "Alerta de Ponto Cego",
-    "blind_spot_description": "Se o aviso de ponto cego do radar está alertando para um lado. Abrange os avisos de ponto cego, de troca de faixa e de tráfego transversal. Os alertas são breves, portanto o sinal permanece ligado por alguns segundos após o último aviso.",
+    "blind_spot_description": "Se o alerta de ponto cego por radar está ativo para um dos lados. Cobre alertas de ponto cego, mudança de faixa e tráfego cruzado. Como os alertas são breves, o sinal é mantido ativo por alguns segundos após o último aviso.",
     "side_left": "Esquerda",
     "side_right": "Direita",
     "ambient_state": "Luz Ambiente",
     "ambient_state_description": "Dispara quando a luz ambiente interior liga ou desliga, independentemente de como foi acionada. Disponível apenas em veículos que informam o estado da luz ambiente.",
     "set_ac_auto_off": "Temporizador de Desligamento do AC",
-    "set_ac_auto_off_description": "Desligar o Ar-Condicionado automaticamente após um tempo definido, sem alterá-lo agora. Escolha \"Sem temporizador\" aqui para cancelar uma contagem que já esteja em andamento. Executar esta etapa novamente reinicia a contagem em vez de criar uma segunda; desligar o AC manualmente também a cancela. A contagem sobrevive a uma reinicialização, portanto o AC continua sendo desligado depois que o carro é estacionado.",
+    "set_ac_auto_off_description": "Desliga o ar-condicionado automaticamente após um tempo determinado, sem alterá-lo agora. Escolha \"Sem temporizador\" aqui para cancelar uma contagem regressiva que já esteja em andamento. Executar este passo novamente reinicia a contagem regressiva em vez de adicionar uma segunda; desligar o ar-condicionado manualmente também a cancela. A contagem regressiva permanece ativa mesmo após reiniciar, portanto ela ainda desligará o ar-condicionado depois que o carro for estacionado.",
     "ac_auto_off": "Desligar após (ao ligar)",
     "ac_auto_off_never": "Sem temporizador",
     "ac_auto_off_10": "10 minutos",
@@ -1115,5 +1116,10 @@
     "update_installing_finishing": "Instalando — a central multimídia estará online novamente em breve.",
     "update_install_failed": "Instalação falhou",
     "update_install_crashed": "Instalação travou"
+  },
+  "units": {
+    "bar": "bar",
+    "kpa": "kPa",
+    "psi": "PSI"
   }
 }
