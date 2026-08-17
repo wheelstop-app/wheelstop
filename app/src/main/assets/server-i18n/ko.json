@@ -118,8 +118,7 @@
     "tyres_nothing_to_update": "업데이트할 항목이 없습니다",
     "tyres_persist_failed": "타이어 공기압 기준값을 저장하지 못했습니다",
     "recordings_index_unavailable": "녹화 색인을 사용할 수 없음",
-    "surveillance_all_classes_off": "이대로 저장하면 모든 객체 클래스가 사용 중지되어 AI 감지가 완전히 꺼집니다. 계속하려면 확인하세요.",
-    "vehicle_blocked_in_motion": "차량이 주행 중일 때는 이 작업을 사용할 수 없습니다"
+    "surveillance_all_classes_off": "이대로 저장하면 모든 객체 클래스가 사용 중지되어 AI 감지가 완전히 꺼집니다. 계속하려면 확인하세요."
   },
   "notifications": {
     "charging_started": "충전 시작",
@@ -165,7 +164,7 @@
     "tyre_wheel_reading": "{0} — {1}",
     "tyre_fast_leak": "빠른 누출 감지",
     "tyre_slow_leak": "느린 누출 감지",
-    "tyre_wheel_pressure": "{0} ({1} kPa)"
+    "tyre_wheel_pressure": "{0} ({1})"
   },
   "telegram": {
     "recording_caption": " 녹음 ({0}) - {1}",
@@ -1115,5 +1114,10 @@
     "update_installing_finishing": " 헤드 유닛을 설치하는 것은 곧 다시 연결될 것입니다.",
     "update_install_failed": "설치 실패",
     "update_install_crashed": "설치 오류"
+  },
+  "units": {
+    "bar": "bar",
+    "kpa": "kPa",
+    "psi": "PSI"
   }
 }

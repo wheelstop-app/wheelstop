@@ -118,8 +118,7 @@
     "tyres_nothing_to_update": "Không có gì để cập nhật",
     "tyres_persist_failed": "Không thể lưu giới hạn áp suất lốp",
     "recordings_index_unavailable": "Không thể truy cập chỉ mục bản ghi",
-    "surveillance_all_classes_off": "Lần lưu này sẽ tắt tất cả lớp đối tượng, làm nhận diện AI tắt hoàn toàn. Xác nhận để tiếp tục.",
-    "vehicle_blocked_in_motion": "Thao tác này không khả dụng khi xe đang di chuyển"
+    "surveillance_all_classes_off": "Lần lưu này sẽ tắt tất cả lớp đối tượng, làm nhận diện AI tắt hoàn toàn. Xác nhận để tiếp tục."
   },
   "notifications": {
     "charging_started": "Sạc bắt đầu",
@@ -165,7 +164,7 @@
     "tyre_wheel_reading": "{0} — {1}",
     "tyre_fast_leak": "Phát hiện rò nhanh",
     "tyre_slow_leak": "Phát hiện rò chậm",
-    "tyre_wheel_pressure": "{0} ({1} kPa)"
+    "tyre_wheel_pressure": "{0} ({1})"
   },
   "telegram": {
     "recording_caption": " Đăng ký ({0}) - {1}s",
@@ -1115,5 +1114,10 @@
     "update_installing_finishing": "Việc lắp đặt bộ phận đầu sẽ sớm trở lại mạng.",
     "update_install_failed": "Thiết lập thất bại",
     "update_install_crashed": "Lắp đặt bị hỏng"
+  },
+  "units": {
+    "bar": "bar",
+    "kpa": "kPa",
+    "psi": "PSI"
   }
 }

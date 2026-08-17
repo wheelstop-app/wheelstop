@@ -118,8 +118,7 @@
     "tyres_nothing_to_update": "Güncellenecek bir şey yok",
     "tyres_persist_failed": "Lastik basıncı sınırları kaydedilemedi",
     "recordings_index_unavailable": "Kayıt dizini kullanılamıyor",
-    "surveillance_all_classes_off": "Bu kayıt tüm nesne sınıflarını devre dışı bırakarak yapay zekâ algılamasını tamamen kapatır. Devam etmek için onaylayın.",
-    "vehicle_blocked_in_motion": "Araç hareket halindeyken bu işlem kullanılamaz"
+    "surveillance_all_classes_off": "Bu kayıt tüm nesne sınıflarını devre dışı bırakarak yapay zekâ algılamasını tamamen kapatır. Devam etmek için onaylayın."
   },
   "notifications": {
     "charging_started": "Şarj başladı .",
@@ -165,7 +164,7 @@
     "tyre_wheel_reading": "{0} — {1}",
     "tyre_fast_leak": "Hızlı kaçak algılandı",
     "tyre_slow_leak": "Yavaş kaçak algılandı",
-    "tyre_wheel_pressure": "{0} ({1} kPa)"
+    "tyre_wheel_pressure": "{0} ({1})"
   },
   "telegram": {
     "recording_caption": " Kayıt ({0}) - {1}s",
@@ -1115,5 +1114,10 @@
     "update_installing_finishing": " baş ünitesinin kurulması kısa süre sonra tekrar çevrimiçi hale gelecek.",
     "update_install_failed": "Kurulum başarısız oldu",
     "update_install_crashed": "Kurulum bozuldu"
+  },
+  "units": {
+    "bar": "bar",
+    "kpa": "kPa",
+    "psi": "PSI"
   }
 }

@@ -220,7 +220,22 @@
     "bs_auto_base_left_title": "İleri yönü — sol",
     "bs_auto_base_right_title": "İleri yönü — sağ",
     "bs_rectify_title": "Balıkgözü düzeltmesi",
-    "bs_rectify_desc": "Tek kameralı yan ve arka görünümlerdeki balıkgözü/fıçı eğriliğini düzeltir. Yüksek değerler şişkinliği düzleştirir ancak kenarları biraz kırpar. Yalnızca tek kameralı görünümlere uygulanır, birleştirilmiş görünüme uygulanmaz."
+    "bs_rectify_desc": "Tek kameralı yan ve arka görünümlerdeki balıkgözü/fıçı eğriliğini düzeltir. Yüksek değerler şişkinliği düzleştirir ancak kenarları biraz kırpar. Yalnızca tek kameralı görünümlere uygulanır, birleştirilmiş görünüme uygulanmaz.",
+    "warn_channel": "Ses kanalı",
+    "warn_channel_desc": "Uyarı sesinin çalacağı ses kanalıdır. Navigasyon aracın yönlendirme kanalını kullanır; böylece uyarı müzikle yarışmak yerine müziği kısar ve navigasyon ses düzeyini izler.",
+    "warn_channel_navigation": "Navigasyon",
+    "warn_channel_media": "Medya",
+    "warn_channel_voice": "Ses",
+    "warn_channel_alarm": "Alarm",
+    "warn_volume": "Uyarı sesi düzeyi",
+    "warn_volume_desc": "RoadSense uyarılarının en yüksek düzeyini ayarlar. Hafif ve orta uyarılar ciddi uyarılardan daha yumuşak kalır.",
+    "warn_volume_min": "Düşük",
+    "warn_volume_max": "Yüksek",
+    "warn_test": "Uyarı sesini dene",
+    "warn_test_desc": "Seçilen en yüksek düzeyi kontrol edebilmeniz için en güçlü uyarı sesini yukarıdaki kanalda şimdi çalar. Gerçek uyarı yalnızca RoadSense'in bildiği bir tehlikeye doğru sürerken çalar.",
+    "warn_test_btn": "Uyarı sesini çal",
+    "warn_test_playing": "Uyarı sesi seçilen RoadSense düzeyinde gönderildi",
+    "warn_test_failed": "Uyarı sesi gönderilemedi"
   },
   "status": {
     "device": "Cihaz",

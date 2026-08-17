@@ -39,7 +39,7 @@
     <string name="cd_copy_url">Copiar URL</string>
     <string name="cd_clear_logs">Limpar logs</string>
     <string name="cd_expand_collapse">Expandir/Recolher</string>
-    <string name="cd_recording_status">Status de gravação</string>
+    <string name="cd_recording_status">Sair da tela cheia</string>
     <string name="cd_trip_tracking_status">Status de rastreamento de viagens</string>
     <string name="cd_mic_status">Status de captura do microfone</string>
     <string name="cd_video_thumbnail">Miniatura do vídeo</string>

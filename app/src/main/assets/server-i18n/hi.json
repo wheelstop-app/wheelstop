@@ -118,8 +118,7 @@
     "tyres_nothing_to_update": "अद्यतन करने के लिए कुछ भी नहीं",
     "tyres_persist_failed": "टायर सीमाएँ सहेजने में विफल",
     "recordings_index_unavailable": "रिकॉर्डिंग सूची अनुपलब्ध",
-    "surveillance_all_classes_off": "इस सेव से सभी ऑब्जेक्ट क्लास अक्षम हो जाएँगे और AI डिटेक्शन पूरी तरह बंद हो जाएगा। जारी रखने के लिए पुष्टि करें।",
-    "vehicle_blocked_in_motion": "वाहन चलते समय यह क्रिया उपलब्ध नहीं है"
+    "surveillance_all_classes_off": "इस सेव से सभी ऑब्जेक्ट क्लास अक्षम हो जाएँगे और AI डिटेक्शन पूरी तरह बंद हो जाएगा। जारी रखने के लिए पुष्टि करें।"
   },
   "notifications": {
     "charging_started": "चार्जिंग शुरू",
@@ -165,7 +164,7 @@
     "tyre_wheel_reading": "{0} — {1}",
     "tyre_fast_leak": "तेज़ रिसाव पाया गया",
     "tyre_slow_leak": "धीमा रिसाव पाया गया",
-    "tyre_wheel_pressure": "{0} ({1} kPa)"
+    "tyre_wheel_pressure": "{0} ({1})"
   },
   "telegram": {
     "recording_caption": " रिकॉर्डिंग ({0}) - {1}s",
@@ -1115,5 +1114,10 @@
     "update_installing_finishing": " हेड यूनिट की स्थापना जल्द ही ऑनलाइन होगी।",
     "update_install_failed": "स्थापना विफल",
     "update_install_crashed": "स्थापना दुर्घटनाग्रस्त"
+  },
+  "units": {
+    "bar": "bar",
+    "kpa": "kPa",
+    "psi": "PSI"
   }
 }
