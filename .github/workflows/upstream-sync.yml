@@ -1,0 +1,69 @@
+name: Upstream sync
+
+# Weekly assistant. Rebuilds the normalized vendor/upstream branch and opens a
+# REVIEWED PR into main. Never writes to main. See docs/upstream-sync.md.
+on:
+  schedule:
+    - cron: "0 8 * * 1" # Mondays 08:00 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    name: Vendor upstream and open a PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # A GitHub App token, not the built-in GITHUB_TOKEN: pushes made with the
+      # built-in token do not trigger other workflows, so build.yml would never run
+      # on the sync PR and it would look untested. Same App release-please uses.
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: bot
+        with:
+          app-id: Iv23livK39Yzp2c9rPlq
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Configure bot identity
+        run: |
+          git config user.name "wheelstop-sync[bot]"
+          git config user.email "wheelstop-sync@users.noreply.github.com"
+
+      # R15: the transform's acceptance gate lives here, not in build.yml.
+      # It reproduces the hand-made stage-A vendor tree byte for byte, which
+      # requires upstream's alpha-v36.6 commit -- a ref this repository does
+      # not contain. This job already fetches upstream and checks out full
+      # history; making every unrelated PR build fetch upstream to run one
+      # test is a price not worth paying.
+      #
+      # BEFORE the sync, deliberately: a regressed transform must not get to
+      # produce a PR. The gate never skips -- it fails and says what is
+      # missing -- so a green step here means it really ran.
+      - name: Transform acceptance gate (stage-A fixture)
+        run: |
+          set -euo pipefail
+          upstream=$(sed -n 's/^UPSTREAM_URL="\(.*\)"$/\1/p' scripts/upstream-sync.sh)
+          if [ -z "$upstream" ]; then
+            echo "::error::could not read UPSTREAM_URL from scripts/upstream-sync.sh"
+            exit 1
+          fi
+          git fetch --no-tags "$upstream" main
+          python3 scripts/acceptance_upstream_fixture.py
+
+      - name: Run sync
+        env:
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+          SYNC_PUSH_REMOTE: https://x-access-token:${{ steps.bot.outputs.token }}@github.com/${{ github.repository }}.git
+        run: scripts/upstream-sync.sh --open-pr

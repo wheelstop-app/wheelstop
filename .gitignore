@@ -30,3 +30,9 @@ docs/superpowers/
 
 # Superpowers SDD scratch (ledgers, review packages) — never commit
 .superpowers/
+
+# Python bytecode. The repo had no Python ignore rules at all, and scripts/ now carries
+# the upstream-sync tooling: CI imports those modules, and scripts/upstream-sync.sh
+# imports them in a contributor's own checkout, so the directory turns up unbidden.
+__pycache__/
+*.pyc
