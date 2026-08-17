@@ -1,5 +1,32 @@
 package app.wheelstop.android.server;
 
+import app.wheelstop.android.abrp.SohEstimator;
+import app.wheelstop.android.automation.condition.SolarCalculator;
+import app.wheelstop.android.byd.BydDataCollector;
+import app.wheelstop.android.byd.BydVehicleData;
+import app.wheelstop.android.byd.cloud.SmartChargeCache;
+import app.wheelstop.android.config.UnifiedConfigManager;
+import app.wheelstop.android.daemon.CameraDaemon;
+import app.wheelstop.android.geo.GeocodingResolver;
+import app.wheelstop.android.geo.PlaceResult;
+import app.wheelstop.android.monitor.AccMonitor;
+import app.wheelstop.android.monitor.BatterySocData;
+import app.wheelstop.android.monitor.BatteryThermalData;
+import app.wheelstop.android.monitor.ChargingDetector;
+import app.wheelstop.android.monitor.ChargingStateData;
+import app.wheelstop.android.monitor.DrivingRangeData;
+import app.wheelstop.android.monitor.GearMonitor;
+import app.wheelstop.android.monitor.GpsMonitor;
+import app.wheelstop.android.monitor.SocHistoryDatabase;
+import app.wheelstop.android.monitor.VehicleDataMonitor;
+import app.wheelstop.android.surveillance.Actor;
+import app.wheelstop.android.surveillance.GpuSurveillancePipeline;
+import app.wheelstop.android.surveillance.SurveillanceEngineGpu;
+import app.wheelstop.android.trips.DnaScores;
+import app.wheelstop.android.trips.TripAnalyticsManager;
+import app.wheelstop.android.trips.TripDatabase;
+import app.wheelstop.android.trips.TripRecord;
+import app.wheelstop.android.weather.WeatherTemperature;
 import app.wheelstop.android.logging.DaemonLogger;
 
 import org.json.JSONArray;
@@ -146,7 +173,7 @@ public final class LauncherApiHandler {
      *  name/isPhev from the models manifest entry for the selected modelId. */
     private static Object buildVehicle() {
         try {
-            JSONObject v = app.wheelstop.android.config.UnifiedConfigManager.getVehicle();
+            JSONObject v = UnifiedConfigManager.getVehicle();
             String modelId = v.optString("modelId", "seal");
             JSONObject o = new JSONObject();
             o.put("modelId", modelId);
@@ -160,7 +187,7 @@ public final class LauncherApiHandler {
                 // Manifest unreadable — name unknown, but probe live drivetrain.
                 o.put("name", JSONObject.NULL);
                 boolean phev = false;
-                try { phev = app.wheelstop.android.monitor.VehicleDataMonitor.getInstance().isPhev(); }
+                try { phev = VehicleDataMonitor.getInstance().isPhev(); }
                 catch (Throwable ignored) {}
                 o.put("isPhev", phev);
             }
@@ -179,27 +206,27 @@ public final class LauncherApiHandler {
 
             // acc: charging > on > off.
             boolean charging = false;
-            try { charging = app.wheelstop.android.monitor.ChargingDetector.getInstance().isCharging(); }
+            try { charging = ChargingDetector.getInstance().isCharging(); }
             catch (Throwable ignored) {}
             boolean accOn = false;
-            try { accOn = app.wheelstop.android.monitor.AccMonitor.isAccOn(); } catch (Throwable ignored) {}
+            try { accOn = AccMonitor.isAccOn(); } catch (Throwable ignored) {}
             o.put("acc", charging ? "charging" : (accOn ? "on" : "off"));
 
             // gear: prefer the live GearMonitor when its poll thread is running,
             // else the last BydVehicleData snapshot, else null.
             String gear = null;
             try {
-                app.wheelstop.android.monitor.GearMonitor gm = app.wheelstop.android.monitor.GearMonitor.getInstance();
+                GearMonitor gm = GearMonitor.getInstance();
                 if (gm != null && gm.isRunning()) {
-                    gear = app.wheelstop.android.monitor.GearMonitor.gearToString(gm.getCurrentGear());
+                    gear = GearMonitor.gearToString(gm.getCurrentGear());
                 }
             } catch (Throwable ignored) {}
             if (gear == null) {
                 try {
-                    app.wheelstop.android.byd.BydVehicleData vd =
-                            app.wheelstop.android.byd.BydDataCollector.getInstance().getData();
-                    if (vd != null && vd.gearMode != app.wheelstop.android.byd.BydVehicleData.UNAVAILABLE) {
-                        gear = app.wheelstop.android.monitor.GearMonitor.gearToString(vd.gearMode);
+                    BydVehicleData vd =
+                            BydDataCollector.getInstance().getData();
+                    if (vd != null && vd.gearMode != BydVehicleData.UNAVAILABLE) {
+                        gear = GearMonitor.gearToString(vd.gearMode);
                     }
                 } catch (Throwable ignored) {}
             }
@@ -213,8 +240,8 @@ public final class LauncherApiHandler {
             // renders an unknown state (honest).
             Object locked = JSONObject.NULL;
             try {
-                app.wheelstop.android.byd.BydVehicleData vd =
-                        app.wheelstop.android.byd.BydDataCollector.getInstance().getData();
+                BydVehicleData vd =
+                        BydDataCollector.getInstance().getData();
                 if (vd != null && vd.doorLockStatus != null && vd.doorLockStatus.length >= 7) {
                     int overall = vd.doorLockStatus[6];
                     if (overall == 1) locked = Boolean.TRUE;
@@ -234,10 +261,10 @@ public final class LauncherApiHandler {
     /** range: total/elec/fuel km + socPct + fuelPct from VehicleDataMonitor. */
     private static Object buildRange() {
         try {
-            app.wheelstop.android.monitor.VehicleDataMonitor vm =
-                    app.wheelstop.android.monitor.VehicleDataMonitor.getInstance();
-            app.wheelstop.android.monitor.DrivingRangeData r = vm.getDrivingRange();
-            app.wheelstop.android.monitor.BatterySocData soc = vm.getBatterySoc();
+            VehicleDataMonitor vm =
+                    VehicleDataMonitor.getInstance();
+            DrivingRangeData r = vm.getDrivingRange();
+            BatterySocData soc = vm.getBatterySoc();
             if (r == null && soc == null) return JSONObject.NULL;
             JSONObject o = new JSONObject();
             if (r != null) {
@@ -262,12 +289,12 @@ public final class LauncherApiHandler {
      *  tempC (pack thermal). */
     private static Object buildBattery() {
         try {
-            app.wheelstop.android.monitor.VehicleDataMonitor vm =
-                    app.wheelstop.android.monitor.VehicleDataMonitor.getInstance();
+            VehicleDataMonitor vm =
+                    VehicleDataMonitor.getInstance();
             JSONObject o = new JSONObject();
             boolean any = false;
 
-            app.wheelstop.android.monitor.BatterySocData soc = vm.getBatterySoc();
+            BatterySocData soc = vm.getBatterySoc();
             if (soc != null) { o.put("socPct", round1(soc.socPercent)); any = true; }
             else o.put("socPct", JSONObject.NULL);
 
@@ -275,8 +302,8 @@ public final class LauncherApiHandler {
             Object usableKwh = JSONObject.NULL;
             Object healthPct = JSONObject.NULL;
             try {
-                app.wheelstop.android.abrp.SohEstimator soh =
-                        app.wheelstop.android.monitor.SocHistoryDatabase.getInstance().getSohEstimator();
+                SohEstimator soh =
+                        SocHistoryDatabase.getInstance().getSohEstimator();
                 if (soh != null) {
                     double nominal = soh.getNominalCapacityKwh();
                     boolean hasSoh = soh.hasDisplaySoh();
@@ -294,7 +321,7 @@ public final class LauncherApiHandler {
             // tempC: pack thermal (avg / best available cell temp).
             Object tempC = JSONObject.NULL;
             try {
-                app.wheelstop.android.monitor.BatteryThermalData th = vm.getBatteryThermal();
+                BatteryThermalData th = vm.getBatteryThermal();
                 if (th != null) {
                     double t = th.getBestTemperature();
                     if (!Double.isNaN(t)) { tempC = (int) Math.round(t); any = true; }
@@ -316,14 +343,14 @@ public final class LauncherApiHandler {
             JSONObject o = new JSONObject();
 
             boolean active = false;
-            try { active = app.wheelstop.android.monitor.ChargingDetector.getInstance().isCharging(); }
+            try { active = ChargingDetector.getInstance().isCharging(); }
             catch (Throwable ignored) {}
             o.put("active", active);
 
             double kw = 0;
             try {
-                app.wheelstop.android.monitor.ChargingStateData cs =
-                        app.wheelstop.android.monitor.VehicleDataMonitor.getInstance().getChargingState();
+                ChargingStateData cs =
+                        VehicleDataMonitor.getInstance().getChargingState();
                 if (cs != null) kw = cs.chargingPowerKW;
             } catch (Throwable ignored) {}
             o.put("kw", round1(kw));
@@ -331,7 +358,7 @@ public final class LauncherApiHandler {
             // targetPct: BEV charge-cap target (valid 15..100), else null.
             Object targetPct = JSONObject.NULL;
             try {
-                int pct = app.wheelstop.android.byd.BydDataCollector.getInstance().getChargeCapPercent();
+                int pct = BydDataCollector.getInstance().getChargeCapPercent();
                 if (pct >= 15 && pct <= 100) targetPct = pct;
             } catch (Throwable ignored) {}
             o.put("targetPct", targetPct);
@@ -339,8 +366,8 @@ public final class LauncherApiHandler {
             // etaMin: time-to-full of the open charging session, else null.
             Object etaMin = JSONObject.NULL;
             try {
-                app.wheelstop.android.monitor.SocHistoryDatabase db =
-                        app.wheelstop.android.monitor.SocHistoryDatabase.getInstance();
+                SocHistoryDatabase db =
+                        SocHistoryDatabase.getInstance();
                 if (db != null && db.getOpenChargingSessionStart() > 0) {
                     int ttf = db.getOpenChargingSessionTimeToFullMin();
                     if (ttf > 0) etaMin = ttf;
@@ -355,8 +382,8 @@ public final class LauncherApiHandler {
             // is the cache's stored start time string (HH:mm) when present.
             JSONObject schedule = new JSONObject();
             try {
-                Boolean en = app.wheelstop.android.byd.cloud.SmartChargeCache.getEnabled();
-                String start = app.wheelstop.android.byd.cloud.SmartChargeCache.getStartChargeTime();
+                Boolean en = SmartChargeCache.getEnabled();
+                String start = SmartChargeCache.getStartChargeTime();
                 schedule.put("enabled", en == null ? JSONObject.NULL : en.booleanValue());
                 schedule.put("startHhmm", (start == null || start.isEmpty()) ? JSONObject.NULL : start);
             } catch (Throwable ignored) {
@@ -377,20 +404,20 @@ public final class LauncherApiHandler {
      *  route is null (TripRecord carries no place-name endpoints). */
     private static Object buildTrip() {
         try {
-            app.wheelstop.android.trips.TripAnalyticsManager tam =
-                    app.wheelstop.android.daemon.CameraDaemon.getTripAnalyticsManager();
+            TripAnalyticsManager tam =
+                    CameraDaemon.getTripAnalyticsManager();
             if (tam == null) return JSONObject.NULL;
-            app.wheelstop.android.trips.TripDatabase db = tam.getDatabase();
+            TripDatabase db = tam.getDatabase();
 
             boolean live = false;
-            app.wheelstop.android.trips.TripRecord trip = null;
+            TripRecord trip = null;
             try {
                 live = tam.isTripActive();
                 if (live) trip = tam.getActiveTrip();
             } catch (Throwable ignored) {}
             if (trip == null && db != null) {
                 try {
-                    java.util.List<app.wheelstop.android.trips.TripRecord> recent = db.getTrips(365, 1, 0);
+                    java.util.List<TripRecord> recent = db.getTrips(365, 1, 0);
                     if (recent != null && !recent.isEmpty()) trip = recent.get(0);
                 } catch (Throwable ignored) {}
             }
@@ -423,7 +450,7 @@ public final class LauncherApiHandler {
                 Object avg = JSONObject.NULL;
                 try {
                     if (db != null) {
-                        app.wheelstop.android.trips.DnaScores s = db.getAverageDna(30);
+                        DnaScores s = db.getAverageDna(30);
                         if (s != null) {
                             dna.put("overall", s.getOverall());
                             dna.put("anticipation", s.anticipation);
@@ -451,7 +478,7 @@ public final class LauncherApiHandler {
             JSONObject o = new JSONObject();
             boolean enabled = false;
             try {
-                JSONObject cfg = app.wheelstop.android.config.UnifiedConfigManager.loadConfig()
+                JSONObject cfg = UnifiedConfigManager.loadConfig()
                         .optJSONObject("roadSense");
                 enabled = cfg != null && cfg.optBoolean("enabled", false);
             } catch (Throwable ignored) {}
@@ -463,7 +490,7 @@ public final class LauncherApiHandler {
             // cameras: number of cameras the surveillance layer can serve (1..4).
             int cams = 0;
             try {
-                JSONArray avail = app.wheelstop.android.server.TcpCommandServer.getAvailableCameras();
+                JSONArray avail = TcpCommandServer.getAvailableCameras();
                 if (avail != null) cams = avail.length();
             } catch (Throwable ignored) {}
             o.put("cameras", cams);
@@ -496,8 +523,8 @@ public final class LauncherApiHandler {
      */
     private static Object buildTyres() {
         try {
-            app.wheelstop.android.byd.BydVehicleData vd =
-                    app.wheelstop.android.byd.BydDataCollector.getInstance().getData();
+            BydVehicleData vd =
+                    BydDataCollector.getInstance().getData();
             if (vd == null || vd.tyrePressure == null || vd.tyrePressure.length < 4) return JSONObject.NULL;
             int[] p = vd.tyrePressure;
             JSONObject o = new JSONObject();
@@ -513,7 +540,7 @@ public final class LauncherApiHandler {
             Object loBar = JSONObject.NULL;
             Object hiBar = JSONObject.NULL;
             try {
-                JSONObject th = app.wheelstop.android.config.UnifiedConfigManager.getTyreThresholds();
+                JSONObject th = UnifiedConfigManager.getTyreThresholds();
                 int low = Math.min(th.optInt("frontLow"), th.optInt("rearLow"));
                 int high = Math.max(th.optInt("frontHigh"), th.optInt("rearHigh"));
                 // Exact kPa/100 — see the band-precision note in the javadoc.
@@ -532,14 +559,14 @@ public final class LauncherApiHandler {
 
     private static Object buildAir() {
         try {
-            app.wheelstop.android.byd.BydVehicleData vd =
-                    app.wheelstop.android.byd.BydDataCollector.getInstance().getData();
+            BydVehicleData vd =
+                    BydDataCollector.getInstance().getData();
             if (vd == null) return JSONObject.NULL;
             JSONObject o = new JSONObject();
             // Always emit every key (never-omit contract); JSON null when unavailable.
-            o.put("pm25Inside", vd.pm25Inside != app.wheelstop.android.byd.BydVehicleData.UNAVAILABLE
+            o.put("pm25Inside", vd.pm25Inside != BydVehicleData.UNAVAILABLE
                     ? vd.pm25Inside : JSONObject.NULL);
-            o.put("pm25Outside", vd.pm25Outside != app.wheelstop.android.byd.BydVehicleData.UNAVAILABLE
+            o.put("pm25Outside", vd.pm25Outside != BydVehicleData.UNAVAILABLE
                     ? vd.pm25Outside : JSONObject.NULL);
             // No PM2.5 reading available → whole object null so the tile shows an empty state.
             if (o.get("pm25Inside") == JSONObject.NULL && o.get("pm25Outside") == JSONObject.NULL) {
@@ -561,7 +588,7 @@ public final class LauncherApiHandler {
      * (over-warn). Reading and band must share the same precision.
      */
     private static Object barOrNull(int kPa) {
-        if (kPa == app.wheelstop.android.byd.BydVehicleData.UNAVAILABLE || kPa <= 0) return JSONObject.NULL;
+        if (kPa == BydVehicleData.UNAVAILABLE || kPa <= 0) return JSONObject.NULL;
         return kPa / 100.0;   // 1 bar = 100 kPa
     }
 
@@ -578,7 +605,7 @@ public final class LauncherApiHandler {
             double lat = 0, lon = 0;
             boolean hasLoc = false;
             try {
-                app.wheelstop.android.monitor.GpsMonitor gps = app.wheelstop.android.monitor.GpsMonitor.getInstance();
+                GpsMonitor gps = GpsMonitor.getInstance();
                 if (gps != null && gps.hasLocation()) {
                     lat = gps.getLatitude();
                     lon = gps.getLongitude();
@@ -589,11 +616,11 @@ public final class LauncherApiHandler {
             // tempC: shared weather cache, else the BYD instrument external temp.
             Object tempC = JSONObject.NULL;
             try {
-                double wt = app.wheelstop.android.weather.WeatherTemperature.getCached();
+                double wt = WeatherTemperature.getCached();
                 if (!Double.isNaN(wt)) { tempC = (int) Math.round(wt); any = true; }
                 else if (hasLoc) {
                     // Nudge a background refresh so the next poll has a value; never blocks.
-                    app.wheelstop.android.weather.WeatherTemperature.refreshAsync(lat, lon);
+                    WeatherTemperature.refreshAsync(lat, lon);
                 }
             } catch (Throwable ignored) {}
             if (tempC == JSONObject.NULL) {
@@ -613,7 +640,7 @@ public final class LauncherApiHandler {
             // out of the mapping (never faked).
             Object condition = JSONObject.NULL;
             try {
-                int precip = app.wheelstop.android.weather.WeatherTemperature.getCachedPrecipProbability();
+                int precip = WeatherTemperature.getCachedPrecipProbability();
                 if (precip >= 0) { condition = precip >= 50 ? "rain" : "clear"; any = true; }
             } catch (Throwable ignored) {}
             o.put("condition", condition);
@@ -623,8 +650,8 @@ public final class LauncherApiHandler {
             Object place = JSONObject.NULL;
             if (hasLoc) {
                 try {
-                    app.wheelstop.android.geo.PlaceResult pr =
-                            app.wheelstop.android.geo.GeocodingResolver.getInstance().resolveCachedOnly(lat, lon);
+                    PlaceResult pr =
+                            GeocodingResolver.getInstance().resolveCachedOnly(lat, lon);
                     if (pr != null) {
                         String label = pr.mediumLabel();
                         if (label != null && !label.isEmpty()) { place = label; any = true; }
@@ -643,8 +670,8 @@ public final class LauncherApiHandler {
                 try {
                     java.time.ZoneId zone = java.time.ZoneId.systemDefault();
                     java.time.LocalDate today = java.time.LocalDate.now(zone);
-                    app.wheelstop.android.automation.condition.SolarCalculator.SunTimes st =
-                            app.wheelstop.android.automation.condition.SolarCalculator.compute(today, lat, lon, zone);
+                    SolarCalculator.SunTimes st =
+                            SolarCalculator.compute(today, lat, lon, zone);
                     if (st != null) {
                         if (st.alwaysUp) { isNight = Boolean.FALSE; }
                         else if (st.alwaysDown) { isNight = Boolean.TRUE; }
@@ -694,13 +721,13 @@ public final class LauncherApiHandler {
 
         JSONArray trips = new JSONArray();
         try {
-            app.wheelstop.android.trips.TripAnalyticsManager tam =
-                    app.wheelstop.android.daemon.CameraDaemon.getTripAnalyticsManager();
-            app.wheelstop.android.trips.TripDatabase db = (tam != null) ? tam.getDatabase() : null;
+            TripAnalyticsManager tam =
+                    CameraDaemon.getTripAnalyticsManager();
+            TripDatabase db = (tam != null) ? tam.getDatabase() : null;
             if (db != null) {
-                java.util.List<app.wheelstop.android.trips.TripRecord> recent = db.getTrips(365, 5, 0);
+                java.util.List<TripRecord> recent = db.getTrips(365, 5, 0);
                 if (recent != null) {
-                    for (app.wheelstop.android.trips.TripRecord t : recent) {
+                    for (TripRecord t : recent) {
                         if (t == null) continue;
                         JSONObject j = new JSONObject();
                         j.put("startTime", t.startTime);
@@ -724,8 +751,8 @@ public final class LauncherApiHandler {
 
         JSONArray charging = new JSONArray();
         try {
-            app.wheelstop.android.monitor.SocHistoryDatabase db =
-                    app.wheelstop.android.monitor.SocHistoryDatabase.getInstance();
+            SocHistoryDatabase db =
+                    SocHistoryDatabase.getInstance();
             JSONArray sessions = (db != null) ? db.getChargingSessionsV2(365, 5, 0) : null;
             if (sessions != null) {
                 for (int i = 0; i < sessions.length(); i++) {
@@ -757,14 +784,14 @@ public final class LauncherApiHandler {
         root.put("ts", System.currentTimeMillis());
         JSONArray actors = new JSONArray();
         try {
-            app.wheelstop.android.surveillance.GpuSurveillancePipeline pipe =
-                    app.wheelstop.android.daemon.CameraDaemon.getGpuPipeline();
-            app.wheelstop.android.surveillance.SurveillanceEngineGpu engine =
+            GpuSurveillancePipeline pipe =
+                    CameraDaemon.getGpuPipeline();
+            SurveillanceEngineGpu engine =
                     (pipe != null) ? pipe.getSentry() : null;
             if (engine != null) {
-                java.util.List<app.wheelstop.android.surveillance.Actor> live = engine.getLastActors();
+                java.util.List<Actor> live = engine.getLastActors();
                 if (live != null) {
-                    for (app.wheelstop.android.surveillance.Actor a : live) {
+                    for (Actor a : live) {
                         if (a == null) continue;
                         String cls = classLabel(a.classGroup);
                         if (cls == null) continue;   // UNKNOWN group — skip, don't invent
@@ -792,7 +819,7 @@ public final class LauncherApiHandler {
     /** Actor.ClassGroup → spec {@code cls}. VEHICLE maps to "car" (the coarse
      *  group can't separate car from truck — honest widening). UNKNOWN → null so
      *  the caller skips it rather than mislabelling. */
-    private static String classLabel(app.wheelstop.android.surveillance.Actor.ClassGroup g) {
+    private static String classLabel(Actor.ClassGroup g) {
         if (g == null) return null;
         switch (g) {
             case PERSON:  return "person";
@@ -814,7 +841,7 @@ public final class LauncherApiHandler {
         }
     }
 
-    private static String trendLabel(app.wheelstop.android.surveillance.Actor.Trend t) {
+    private static String trendLabel(Actor.Trend t) {
         if (t == null) return "steady";
         switch (t) {
             case APPROACHING: return "approaching";
@@ -909,7 +936,7 @@ public final class LauncherApiHandler {
     private static void sendAppearance(OutputStream out) throws Exception {
         JSONObject o = new JSONObject();
         try {
-            JSONObject app = app.wheelstop.android.config.UnifiedConfigManager.getAppearance();
+            JSONObject app = UnifiedConfigManager.getAppearance();
 
             // theme: accept a launcher theme name if one has been stored,
             // otherwise "auto".
@@ -923,7 +950,7 @@ public final class LauncherApiHandler {
             // locale: the persisted user pick, "auto", or (unset) → "auto".
             String locale;
             try {
-                String raw = app.wheelstop.android.server.LocaleManager.getRaw();
+                String raw = LocaleManager.getRaw();
                 locale = (raw == null || raw.isEmpty()) ? "auto" : raw;
             } catch (Throwable t) {
                 locale = "auto";

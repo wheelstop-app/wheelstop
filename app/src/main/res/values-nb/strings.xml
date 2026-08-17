@@ -744,7 +744,6 @@
     <string name="roadsense_sev_moderate">Moderat</string>
     <string name="settings_security_dialog_change_step1_title">Bekreft gjeldende PIN-kode</string>
 
-    <!-- Cloudflared paid-tunnel settings -->
     <string name="cloudflared_token_storage_note">Tokenet lagres kryptert og deles mellom appen og daemon-prosessen.</string>
     <string name="cloudflared_token_hint">Skriv inn cloudflared-token</string>
     <string name="cloudflare_paid_version">Cloudflare betalt versjon</string>
@@ -754,7 +753,6 @@
     <string name="toast_cloudflared_token_invalid">Ugyldig token: bruk kun bokstaver, tall og tegnene . _ - =</string>
     <string name="toast_cloudflared_saved_settings">Cloudflared-innstillinger lagret</string>
     <string name="roadsense_map_search_network">Kunne ikke nå søketjenesten. Sjekk tilkoblingen eller proxyen din og prøv igjen.</string>
-    <!-- Projection feature -->
     <string name="projection_hero_title">Projeksjon</string>
     <string name="projection_hero_subtitle">Kast en app til førerens instrumentpanel og speil den her.</string>
     <string name="projection_pick_app">Velg en app å projisere</string>

@@ -1,23 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Wheelstop</string>
-    <!-- Accessibility Service -->
     <string name="accessibility_service_description">讓 Wheelstop 的車輛監控在背景持續運作。本服務不會讀取或與螢幕內容互動。</string>
-    <!-- Recording Mode Labels -->
-    <!-- Proximity Guard Settings Labels -->
-    <!-- Quality Settings Labels -->
-    <!-- Storage Labels -->
-    <!-- Recording Status Labels -->
-    <!-- Event Types -->
-    <!-- Filter Labels -->
-    <!-- Storage Breakdown -->
-    <!-- Recording Controls -->
-    <!-- Slider Range Labels -->
-    <!-- ============================================================
-         i18n string extraction (Step 1: Layouts)
-         ============================================================ -->
-    <!-- Drawer menu -->
-    <!-- Common buttons / labels -->
     <string name="action_cancel">取消</string>
     <string name="action_clear_plain">清除</string>
     <string name="action_select_all">選擇所有</string>
@@ -29,8 +13,6 @@
     <string name="action_retry">重試</string>
     <string name="action_run">跑步</string>
     <string name="action_clear_output">清晰的輸出</string>
-    <!-- Nav header -->
-    <!-- Common content descriptions -->
     <string name="cd_camera">攝影機</string>
     <string name="cd_qr">沒有任何問題</string>
     <string name="cd_qr_code">如何使用QR圖碼</string>
@@ -65,46 +47,28 @@
     <string name="cd_battery">沒有電池</string>
     <string name="cd_step_completed">完成步骤</string>
     <string name="cd_permission_granted">授予許可</string>
-    <!-- overlay_status -->
     <string name="overlay_rec_inactive_label">其他國家</string>
     <string name="overlay_trip_inactive_label">旅行</string>
     <string name="overlay_mic_inactive_label">其他國家</string>
-    <!-- Quick-action chips revealed by tapping the REC pill: switch
-         recording mode without opening the app. Short labels read fine
-         cross-locale (matches existing REC/MIC/TRIP precedent), so
-         translatable=false to avoid bloating the i18n catalog. The
-         _cd content-descriptions are real prose and ARE translatable —
-         they go through the NLLB pipeline like every other a11y string. -->
     <string name="overlay_mode_off_cd">停止录音</string>
     <string name="overlay_mode_continuous_cd">连续录音</string>
     <string name="overlay_mode_drive_cd">驱动器模式录制</string>
     <string name="overlay_mode_proximity_cd">距离警卫录音</string>
-    <!-- item_log_entry placeholders (timestamp/tag/message are runtime, but these are
-         placeholder/preview text used at design time and visible in some empty states) -->
     <string name="log_entry_default_timestamp">這是一場非常棒的遊戲.</string>
     <string name="log_entry_default_tag">這就是我想要的東西.</string>
     <string name="log_entry_default_message">這裡的帳號訊息</string>
-    <!-- item_safe_location -->
-    <!-- item_daemon_card -->
     <string name="daemon_card_default_name">妖怪的名字</string>
     <string name="daemon_card_default_status">狀況訊息</string>
     <string name="daemon_card_subprocesses">超級進步</string>
-    <!-- item_time_window -->
-    <!-- fragment_logs_panel -->
     <string name="logs_panel_title">記錄時間</string>
-    <!-- activity_main_new / activity_main-land -->
     <string name="url_connecting">聯繫我們.</string>
-    <!-- Shown when an external link can't open (no browser on the head unit):
-         the URL is copied to the clipboard instead. %1$s = the URL. -->
     <string name="url_copied_no_browser">未找到浏览器。链接已复制： %1$s</string>
-    <!-- dialog_tailscale_settings -->
     <string name="tailscale_generate_login_url">生成登入 URL</string>
     <string name="tailscale_scan_to_login">掃描到登入</string>
     <string name="tailscale_qr_waiting">在 URL登入等待...</string>
     <string name="tailscale_enable_proxy">啟用Tailscale代理</string>
     <string name="tailscale_proxy_explainer">透過MQTT通往Tailscale,</string>
     <string name="tailscale_proxy_warning">在啟用時, MQTT 傳達到公共經紀商 (HiveMQ, AWS IoT 等) 會失败.  Tailscale 只有通往尾聲網的路由.</string>
-    <!-- Camera ingestion mode selector (Default vs DiLink 4) -->
     <string name="camera_mode_title">攝入方式</string>
     <string name="camera_mode_subtitle">選擇與您的頭部相匹配的路徑.默認適用於大部分BYD車型;DiLink 4是需要在更新的裝修 (Han / Tang 2024+) 上, AVM HAL 發出預先編成的2x2圖像.</string>
     <string name="camera_mode_option_default">預設  在 Seal, Atto, Dolphin (大部分車輛) 上工作</string>
@@ -113,14 +77,12 @@
     <string name="camera_mode_current_dilink4">現在: 迪林克 4</string>
     <string name="camera_mode_save">應用模式</string>
     <string name="camera_mode_hint">如果影片看起來錯誤 (截圖,缺少四分之一,紅色覆蓋),</string>
-    <!-- DiLink 4 quadrant tweaks (only effective when cameraMode = DiLink 4) -->
     <string name="camera_dilink4_tweaks_title">這樣的數據,</string>
     <string name="camera_dilink4_tweaks_subtitle">單車對DiLink 4路徑的調整. 只有在上面選擇DiLink 4模式時才有效.</string>
     <string name="camera_dilink4_save">應用調整</string>
     <string name="camera_dilink4_hint">只有在 HAL 將紅色的\"校準失敗\" 染色符塗上源時才可切換.</string>
     <string name="camera_dilink4_red_mask_label">壓制紅色校準覆蓋 (GL)</string>
     <string name="camera_dilink4_red_mask_subtitle">添加一段碎片遮光器,可檢測明亮紅色的 HAL \"校準失敗\" 像素,並取代其以鄰近的樣本 (或光度灰色,當標籤太大,不能涂上). 化品只有不影響底部校準狀態.</string>
-    <!-- dialog_camera_selection -->
     <string name="camera_selection_title">攝影機選擇</string>
     <string name="camera_selection_subtitle">選擇全景攝影機來源</string>
     <string name="camera_current_auto">目前: 自動</string>
@@ -132,7 +94,6 @@
     <string name="camera_option_4">攝影機 4</string>
     <string name="camera_option_5">攝影機 5</string>
     <string name="camera_selection_hint">自動選取對照相機的裝置.相機 1 = BYD Seal,相機 0 = Atto 裝置.</string>
-    <!-- OEM Dashcam camera ID picker (Phase 5: separate forward-sensor pipeline) -->
     <string name="camera_oem_dashcam_title">OEM Dashcam 摄像头 ID</string>
     <string name="camera_oem_dashcam_hint">选择指向前向行车记录仪传感器的 AVMCamera id。行车记录仪与全景相反：Seal/Han 全景 = 1 → 行车记录仪 = 0；Atto / Tang 全景 = 0 → 行车记录仪 = 1。保持“自动”可让 Wheelstop 自动选择。</string>
     <string name="camera_oem_dashcam_auto_resolved">自动-使用 id %1$d (pano id %2$d)</string>
@@ -140,15 +101,8 @@
     <string name="camera_oem_dashcam_save">保存</string>
     <string name="camera_concurrent_probe_label">下次開機時測試雙相機支援</string>
     <string name="camera_concurrent_probe_subtitle">一次性檢查，會同時開啟兩個相機，以確認本車可同時執行環景＋行車記錄。停車時在下次重新啟動時執行一次。除非錄影看起來有誤，否則請保持關閉 — 此功能並非必要，且若執行時正在錄影，可能會短暫中斷錄影。</string>
-    <!-- Dashcam-side camera labels — REVERSE of the pano labels above. The
-         OEM dashcam id is the opposite of the pano id, so the helpful
-         "this is what your trim should pick" hint flips between the two
-         dialogs. Without these strings the dashcam picker re-used the pano
-         labels and told Seal owners to pick "Camera 1 — Seal" for their
-         dashcam, which is the pano camera, not the dashcam. -->
     <string name="camera_oem_option_0">摄像头 0 - 密封/汉(默认)</string>
     <string name="camera_oem_option_1">相机 1 — Atto/Tang</string>
-    <!-- Camera mapping dialog (multi-vehicle role-to-slice routing) -->
     <string name="camera_mapping_title">攝影機映射</string>
     <string name="camera_role_label">角色映射</string>
     <string name="camera_candidate_previous">上一篇:</string>
@@ -163,7 +117,6 @@
     <string name="camera_mapping_current_format">目前的映射:%1$s</string>
     <string name="camera_mapping_current_none">目前映射:自动 /默认</string>
     <string name="camera_mapping_hint">Wheelstop默認保留舊的啟動行為, 但現在讓你正確校對合并的全景帶. 預覽每個原始合并的片段, 將 logical 360 角色映射到實際上顯示你的車輛前/右/後/左的片段,</string>
-    <!-- fragment_dashboard -->
     <string name="dashboard_scan_to_connect">掃描至連接</string>
     <string name="dashboard_qr_waiting">在等待道...</string>
     <string name="dashboard_daemons_running_default">0/5 運行</string>
@@ -171,8 +124,6 @@
     <string name="dashboard_access_code">接入代碼</string>
     <string name="dashboard_token_masked">••••••••</string>
     <string name="dashboard_regenerate_token">恢復代號</string>
-    <!-- fragment_recording_controls -->
-    <!-- dialog_setup_guide -->
     <string name="setup_guide_title">開始工作</string>
     <string name="setup_guide_subtitle">快速取得最佳體驗的三步:</string>
     <string name="setup_step_one_label">其他國家</string>
@@ -187,9 +138,6 @@
     <string name="setup_overlay_title">在其他應用程式上允許顯示</string>
     <string name="setup_overlay_body">在其他應用程式上顯示浮動狀態指標,</string>
     <string name="setup_overlay_button">打開覆蓋設定</string>
-    <!-- Onboarding guide (novice track). Parked-only, glanceable. Wheelstop is a
-         protected brand name — keep it verbatim. -->
-    <!-- Shared button labels -->
     <string name="onboarding_next">下一个</string>
     <string name="onboarding_back">后退</string>
     <string name="onboarding_skip">跳过</string>
@@ -197,7 +145,6 @@
     <string name="onboarding_dismiss">关闭</string>
     <string name="onboarding_exit">退出游览</string>
     <string name="onboarding_done_short">明白了</string>
-    <!-- Step 0: authorize the daemon (system ADB popup) -->
     <string name="onboarding_authorize_title">唤醒 Wheelstop</string>
     <string name="onboarding_authorize_body">Wheelstop runs your cameras through a small on-device helper. Android will ask once to allow USB debugging — tap <b>Allow</b> and check <b>Always allow from this device</b> so it stays on after every restart.</string>
     <string name="onboarding_authorize_button">允许访问</string>
@@ -210,7 +157,6 @@
     <string name="onboarding_mode_body">选择关闭车辆后 Wheelstop 的行为方式。\n\n<b>开机 &amp; 关机</b> 会在停车时持续守护 — 监控和后台监测保持启用，因此车辆夜间会消耗少量电量。\n\n<b>仅开机</b> 会在您离开后完全关闭 Wheelstop。行车记录仪、行程和充电在您行车期间仍然正常工作，下次开启车辆时一切都会自动重新启动。您可以随时在设置中更改此项。</string>
     <string name="onboarding_mode_on_off_button">开机 &amp; 关机</string>
     <string name="onboarding_mode_on_only_button">仅开机</string>
-    <!-- Camera mapping chapter -->
     <string name="onboarding_camera_step_label">相机 · 步长 %1$d ，共 %2$d</string>
     <string name="onboarding_camera_intro_title">设置您的摄像头</string>
     <string name="onboarding_camera_intro_body">让我们告诉 Wheelstop 哪个摄像头是您的 360 全景视图，哪个是您的 dashcam。大约需要一分钟，稍后您也可以更改。</string>
@@ -237,22 +183,18 @@
     <string name="onboarding_camera_windshield_body">对于OEM仪表盘布局——风盾摄像头作为屏幕顶部录制件——在角色菜单中选择风盾。 选择前方摄像头并保存。 大多数所有者都可以跳过这个。</string>
     <string name="onboarding_camera_windshield_primary">显示我</string>
     <string name="onboarding_camera_windshield_skip">不要谢谢。</string>
-    <!-- Vehicle profile chapter -->
     <string name="onboarding_vehicle_title">告诉 Wheelstop 您的电池信息</string>
     <string name="onboarding_vehicle_body">选择您的模型，我们填充了 kWh，或者输入自己(15-120)。 这使得范围和充电估计准确。您可以跳过并稍后设置。</string>
     <string name="onboarding_vehicle_primary">设置电池</string>
-    <!-- Dashboard orientation chapter -->
     <string name="onboarding_dash_tiles_title">你的鸡蛋一眼！</string>
     <string name="onboarding_dash_tiles_body">这些卡片是按钮 — 点击打开实时摄像头、录音、服务或您的车辆。</string>
     <string name="onboarding_dash_chips_title">这些仅显示状态</string>
     <string name="onboarding_dash_chips_body">顶部显示录制、服务和您的远程链接。他们自己更新了 — — 他们不是按钮。</string>
     <string name="onboarding_dash_chips_body_land">您的实时状态 — 录制、 服务和远程链接 — 在这里显示。它是自己的更新。</string>
-    <!-- Completion -->
     <string name="onboarding_done_title">Cockpit 已就绪</string>
     <string name="onboarding_done_body">相机映射和电池组。点击实时观看您的订阅源 — 或随时探索更深的设置。</string>
     <string name="onboarding_done_primary">完成</string>
     <string name="onboarding_done_secondary">探索设置</string>
-    <!-- Expert track (chaptered walkthrough of deeper config; footguns warned, never fired) -->
     <string name="onboarding_help_cd">导游览</string>
     <string name="onboarding_reset_toast">开机重置-重播指南</string>
     <string name="onboarding_expert_chapter_label">%1$d 第 %2$d 章</string>
@@ -292,21 +234,13 @@
     <string name="onboarding_expert_reset_body">这会擦除录音、事件和设置，不能撤消。如果你出售了这辆车——不是正常使用的一部分。</string>
     <string name="onboarding_expert_done_title">那是游览</string>
     <string name="onboarding_expert_done_body">您已经看到了更深的设置。随时从帮助按钮重新打开本指南。</string>
-    <!-- Language picker (drawer footer + bottom sheet) -->
     <string name="cd_close">關閉</string>
     <string name="language_picker_title">語言</string>
-    <!-- Subtitle on the language-picker bottom sheet. %1$d is the supported
-         language count (Auto adds an extra row but isn't counted). -->
     <string name="language_picker_subtitle_fmt">提供%1$d語言</string>
-    <!-- Subtitle placeholder while the count is being computed. -->
     <string name="language_picker_subtitle_pending">選擇一種語言</string>
     <string name="language_auto_title">自動使用</string>
-    <!-- %1$s is the native-script name of the locale that "Auto" currently
-         resolves to, e.g. "Auto · English". -->
     <string name="language_auto_subtitle">追蹤系統 · %1$s</string>
-    <!-- Drawer footer subtitle when on Auto, e.g. "English · Auto". -->
     <string name="language_label_auto_fmt">%1$s · 自动</string>
-    <!-- fragment_adb_console -->
     <string name="adb_prompt">其他國家</string>
     <string name="adb_command_hint">進入指令...</string>
     <string name="adb_preset_commands_header">預設命令</string>
@@ -314,17 +248,13 @@
     <string name="adb_output_ready">准备使用命令.</string>
     <string name="adb_console_hero_title">網路控制台</string>
     <string name="adb_console_hero_subtitle">在裝置上執行 shell 命令</string>
-    <!-- fragment_webview -->
     <string name="webview_loading">接收了這些東西.</string>
     <string name="webview_camera_daemon_not_running">攝影機的 Daemon 沒有運行</string>
     <string name="webview_start_camera_daemon">啟動攝影機戴蒙,</string>
-    <!-- dialog_roi_drawing -->
-    <!-- dialog_zrok_token -->
     <string name="zrok_enable_token_hint">啟動令牌</string>
     <string name="zrok_token_storage_note">該代碼是安全存儲的,</string>
     <string name="zrok_reset_environment">重置Zrok環境</string>
     <string name="zrok_reset_environment_desc">您需要使用您的代號重新啟用 (使用裝置插槽).</string>
-    <!-- dialog_reset_data -->
     <string name="reset_title">復元數據</string>
     <string name="reset_subtitle">按類別清除累積的數據</string>
     <string name="reset_warning">這樣的情況無法取消.</string>
@@ -346,8 +276,6 @@
     <string name="reset_cat_proximity_desc">雷達啟動事件MP4</string>
     <string name="reset_cat_trip_files">旅行遠隔測量檔案</string>
     <string name="reset_cat_trip_files_desc">在磁盤上進行 JSON 每次旅行遠隔測量</string>
-    <!-- fragment_abrp_settings -->
-    <!-- fragment_recording_library -->
     <string name="recording_lib_chip_any">沒有任何問題</string>
     <string name="recording_lib_chip_person">人</string>
     <string name="recording_lib_chip_vehicle">汽車</string>
@@ -357,7 +285,6 @@
     <string name="recording_lib_chip_critical">關鍵的</string>
     <string name="recording_lib_selected_count_zero">0 選擇</string>
     <string name="recording_lib_no_recordings">沒有錄音</string>
-    <!-- v4 redesign: collapsible filter bar + single-row date jump -->
     <string name="recording_lib_filter_button">濾網</string>
     <string name="recording_lib_filter_button_active">濾鏡 · %1$d</string>
     <string name="recording_lib_filter_sheet_title">濾鏡錄音</string>
@@ -368,8 +295,6 @@
     <string name="recording_lib_filter_section_type">類別</string>
     <string name="recording_lib_filter_section_place">地方</string>
     <string name="recording_lib_filter_section_storage">存储</string>
-    <!-- Storage filter chip labels (full words; the tile badge uses the short
-         SD/USB/INT forms above). -->
     <string name="recording_lib_storage_filter_internal">内部设置</string>
     <string name="recording_lib_storage_filter_sd">SD 卡</string>
     <string name="recording_lib_storage_filter_usb">USB</string>
@@ -391,51 +316,30 @@
     <string name="cd_next_day">接下來的一天</string>
     <string name="cd_open_filters">打開過濾器</string>
     <string name="cd_clear_filter">清晰的濾鏡</string>
-    <!-- v5 redesign: SOTA empty state with CTA + tile type badges -->
     <string name="recording_lib_empty_title">没有录制匹配</string>
     <string name="recording_lib_empty_body">尝试调整您的日期范围或芯片过滤器。</string>
     <string name="recording_lib_empty_clear_filters">清除过滤器</string>
-    <!-- Shown on the empty-state body when there are zero clips on disk
-         (no filter is active). Sets a friendlier tone than "No recordings match". -->
     <string name="recording_lib_empty_disk_title">还没有记录</string>
     <string name="recording_lib_empty_disk_body">一旦跟踪摄像头或监视管道写入一段片段，捕获就会立即显示在这里。</string>
-    <!-- Shown while the daemon is warming the H2 recording index on cold
-         start. Includes a progress counter when the daemon reports done/total,
-         otherwise a static body. The library re-polls every 1.5s and
-         transitions out automatically once results land. -->
     <string name="recording_lib_building_index_title">建筑库索引</string>
     <string name="recording_lib_building_index_body">守护进程扫描您的录音。</string>
     <string name="recording_lib_building_index_progress">已索引 %1$d 的 %2$d 片段…</string>
-    <!-- Tile type badge labels — short, glanceable, mirrors the on-disk
-         filename prefix (cam_/event_/dvr_/proximity_) so power users can
-         map a tile back to its file group at a glance. -->
     <string name="recording_lib_type_normal">卡姆文</string>
     <string name="recording_lib_type_event">物品栏</string>
     <string name="recording_lib_type_proximity">PROX</string>
     <string name="recording_lib_type_oem">OEM</string>
-    <!-- Per-clip storage tag — where the clip actually landed. Surfaces the
-         silent SD→internal fallback (SD bridged behind the USB power rail). -->
     <string name="recording_lib_storage_sd">SD</string>
     <string name="recording_lib_storage_usb">USB</string>
     <string name="recording_lib_storage_internal">内置</string>
-    <!-- Toast shown when a multi-select share is dispatched. -->
     <string name="toast_share_recordings">正在分享 %1$d 录音</string>
-    <!-- fragment_sentry_config -->
-    <!-- fragment_video_player -->
     <string name="player_title_recording">錄音</string>
     <string name="player_time_zero">沒有人知道.</string>
     <string name="player_time_separator"> / </string>
-    <!-- fragment_daemons -->
     <string name="daemons_hero_title">背景服務</string>
-    <!-- Subtitle on the Daemons hero header before the first state arrives. -->
     <string name="daemons_count_pending">這裡有許多貨物.</string>
-    <!-- Subtitle on the Daemons hero header. %1$d running, %2$d total. -->
     <string name="daemons_count_fmt">在 %1$d 的 %2$d 上行</string>
-    <!-- dialog_time_window -->
-    <!-- dialog_update_progress -->
     <string name="update_preparing">準備更新...</string>
     <string name="update_percent_zero">沒有任何問題</string>
-    <!-- dialog_battery_health -->
     <string name="battery_health_title">電池健康</string>
     <string name="battery_health_subtitle">衛生狀況</string>
     <string name="battery_health_dashes">--</string>
@@ -466,14 +370,7 @@
     <string name="toast_soh_observed_value_saved">包裝容量更新至%1$.1f kWh.</string>
     <string name="toast_soh_observed_value_failed">沒有更新包裝容量 (%1$s).</string>
     <string name="diagnostics_battery_needs_review">需要檢閱</string>
-    <!-- ============================================================
-         Step 2: Kotlin / Java UI literal extraction
-         ============================================================ -->
-    <!-- Notifications -->
-    <!-- Toasts / dialogs -->
     <string name="dialog_ok">確定</string>
-    <!-- Dynamic format strings -->
-    <!-- Plurals -->
     <plurals name="recordings_deleted_count">
         <item quantity="other">删除了%d录音</item>
     </plurals>
@@ -483,16 +380,11 @@
     <plurals name="delete_recordings_message">
         <item quantity="other">这将永久删除%d录音.</item>
     </plurals>
-    <!-- ============================================================
-         Step 2 (continued): MainActivity, fragments, dialogs
-         ============================================================ -->
-    <!-- MainActivity -->
     <string name="toast_updated_to">更新至 %1$s</string>
     <string name="toast_update_install_failed">更新安裝失敗: %1$s</string>
     <string name="toast_checking_for_updates">檢查是否有更新.</string>
     <string name="toast_app_up_to_date">應用程式已更新 (v%1$s)</string>
     <string name="toast_update_check_failed">更新檢查失敗: %1$s</string>
-    <!-- Update dialog + version picker -->
     <string name="update_dialog_available_title">有可用的更新</string>
     <string name="update_dialog_subtitle">有新版本可供安裝</string>
     <string name="update_dialog_current">目前版本：v%1$s</string>
@@ -507,7 +399,6 @@
     <string name="update_picker_empty">尚未發佈任何版本。</string>
     <string name="update_picker_current_suffix">%1$s (已安裝)</string>
     <string name="update_picker_older_suffix">%1$s (舊版本)</string>
-    <!-- Update progress (title + per-step status; no emoji — state icon carries the cue) -->
     <string name="update_progress_title">正在更新 Wheelstop</string>
     <string name="update_step_downloading">正在下載更新…</string>
     <string name="update_step_verifying">正在驗證下載…</string>
@@ -521,7 +412,6 @@
     <string name="update_error_start_failed">無法啟動更新：%1$s</string>
     <string name="update_error_lost_headunit">安裝完成前與車機失去連線。是否在隧道中？請查看 Telegram 以取得新網址，或使用本機 IP。</string>
     <string name="update_hide">隱藏</string>
-    <!-- Update channel selector (Settings → About) -->
     <string name="settings_update_channel_title">更新頻道</string>
     <string name="settings_update_channel_alpha">阿尔法</string>
     <string name="settings_update_channel_braveheart">脑心</string>
@@ -529,7 +419,6 @@
     <string name="settings_update_channel_braveheart_desc">最前瞻的版本，發佈後立即提供。您將搶先體驗新功能，但它們可能不穩定或存在錯誤。如果發生問題，請開啟「守護程式」畫面，點擊守護程式的日誌，選擇「上傳並取得代碼」，然後在社群頻道上與我們分享代碼。</string>
     <string name="settings_update_channel_save_failed">無法儲存更新頻道</string>
     <string name="settings_update_channel_braveheart_toast">已切換至 Braveheart。版本可能不穩定 — 如果發生問題，請傳送守護程式日誌並在 Discord/GitHub/WhatsApp 上回報。</string>
-    <!-- Community / report-a-bug links -->
     <string name="toast_storage_permission_required">需要存儲許可,</string>
     <string name="toast_url_copied_short">這就是 URL複製!</string>
     <string name="toast_camera_set_to_auto">攝影機設定為自動</string>
@@ -574,7 +463,6 @@
     <string name="dialog_traffic_reboot_message">請重新啟動: 按下中央控制台按5秒.</string>
     <string name="traffic_monitor_loading">交通監測:檢查...</string>
     <string name="traffic_monitor_tap_to_check">交通監測器 (點擊查詢)</string>
-    <!-- Reset categories -->
     <string name="reset_label_trips">行程</string>
     <string name="reset_label_soc_history">關於 SoC + 12V 的歷史</string>
     <string name="reset_label_soh">顯示的數量</string>
@@ -584,10 +472,6 @@
     <string name="reset_label_sentry_events">監控活動</string>
     <string name="reset_label_proximity">靠近的記錄</string>
     <string name="reset_label_trip_files">旅行遠隔測量檔案</string>
-    <!-- ROI dialog -->
-    <!-- Sentry config -->
-    <!-- Format helpers -->
-    <!-- Dashboard -->
     <string name="toast_access_code_copied">已複製的接入代碼</string>
     <string name="dialog_regenerate_token_title">恢復代號</string>
     <string name="dialog_regenerate_token_message">這將取消當前的代碼. 所有活跃的會議將會被關閉.</string>
@@ -604,7 +488,6 @@
     <string name="tunnel_label_cloudflared">Cloudflared</string>
     <string name="tunnel_label_zrok">Zrok</string>
     <string name="tunnel_label_tailscale">Tailscale</string>
-    <!-- Daemon names — shown on the Daemons list and dashboard. -->
     <string name="daemon_name_camera">攝影機 Daemon</string>
     <string name="daemon_name_surveillance">監控 Daemon</string>
     <string name="daemon_name_acc_surveillance">ACC 監控</string>
@@ -615,8 +498,6 @@
     <string name="daemon_name_telegram">Telegram 機械人</string>
     <string name="clip_label_access_code">接入代碼</string>
     <string name="clip_label_url">URL</string>
-    <!-- ABRP -->
-    <!-- Daemons fragment -->
     <string name="toast_no_config_needed">%1$s 沒有必要的配置</string>
     <string name="dialog_zrok_token_title">Zrok道標記</string>
     <string name="dialog_zrok_token_message">請輸入Zrok啟用代號.</string>
@@ -658,7 +539,6 @@
     <string name="log_header_source">源:%1$s</string>
     <string name="log_header_exported">輸出:%1$s</string>
     <string name="log_header_truncated">註: 截圖截圖為10000行 (總數:%1$d行)</string>
-    <!-- Braveheart log send (upload to Cloudflare or share-sheet) -->
     <string name="logs_send_title">傳送 %1$s 日誌</string>
     <string name="logs_send_title_plain">傳送守護程式日誌</string>
     <string name="logs_send_subtitle">%1$s · 选择如何向我们发送它</string>
@@ -675,8 +555,6 @@
     <string name="logs_done">完成</string>
     <string name="placeholder_dash">—</string>
     <string name="errors_network">網路錯誤</string>
-    <!-- Recording controls -->
-    <!-- Recording library -->
     <string name="toast_cannot_play_video">不能播放影片: %1$s</string>
     <string name="dialog_delete_recording_title">删除錄音</string>
     <string name="dialog_delete_recording_message">删除%1$s?</string>
@@ -684,51 +562,34 @@
     <string name="toast_recording_delete_failed">沒有删除錄音</string>
     <string name="toast_batch_delete_partial">%1$d 已被删除, %2$d 失败</string>
     <string name="play_with_chooser">玩一下</string>
-    <!-- Setup guide -->
     <string name="setup_version_banner">更新至v%1$s 重新確認自动啟動,BYD在每次安裝都擦除它</string>
     <string name="setup_overlay_already_granted">已授予</string>
-    <!-- Setup guide — post-setup tips section -->
     <string name="setup_tips_header">解決問題的建議</string>
     <string name="setup_traffic_title">禁用BYD 交通監控器</string>
     <string name="setup_traffic_body">BYD 交通監測器阻止第三方應用程序進入網路. 禁用它,讓 Wheelstop 和您安裝的任何其他應用程式實際上使用網路.</string>
     <string name="setup_traffic_button">公開的交通監測器</string>
     <string name="setup_camera_fix_title">攝影機提供黑色或不正确的訊息?</string>
     <string name="setup_camera_fix_body">打開診斷 → 攝影機探測器,設定攝影機ID為0,按 Save,然後重新啟動攝影機模擬器. 如果傳遞仍錯誤,請使用攝影機ID重複.</string>
-    <!-- Recording storage path -->
-    <!-- MainActivity status -->
     <string name="camera_current_manual">目前:%1$d相機 (手動)</string>
     <string name="camera_current_auto_label">目前: 自動</string>
     <string name="soh_estimation_active">估算活動</string>
     <string name="soh_no_estimate_yet">目前沒有估算 等待數據</string>
-    <!-- Recording tabs -->
-    <!-- Misc -->
     <string name="recording_lib_selected_count">選擇%1$d</string>
     <string name="video_player_playback_error">播放錯誤</string>
     <string name="video_player_no_events">沒有事件</string>
     <string name="daemon_configuration_required">需要配置</string>
     <string name="daemon_configuration_message">%1$s</string>
-    <!-- Navigation graph fragment labels (shown as toolbar/ActionBar titles) -->
     <string name="nav_page_video_player">影片播放器</string>
     <string name="nav_page_telegram">Telegram</string>
     <string name="nav_page_abrp">ABRP</string>
     <string name="nav_page_mqtt">MQTT</string>
     <string name="nav_page_byd_cloud">BYD Cloud</string>
-    <!-- StatusOverlayService persistent notification (foreground service) -->
     <string name="status_overlay_notif_title">Wheelstop 狀態</string>
     <string name="status_overlay_notif_text">狀態覆蓋活動</string>
-    <!-- DaemonKeepaliveService persistent notification (foreground service)
-         and the group-summary row that collapses Wheelstop's three FGS
-         notifications into one shade entry. The summary text is intentionally
-         generic so it stays accurate whether all three services are running
-         or only the keepalive survived an OOM respawn. -->
     <string name="daemon_keepalive_notif_title">Wheelstop 激活</string>
     <string name="daemon_keepalive_notif_text">监测车辆系统</string>
     <string name="wheelstop_status_summary_title">Wheelstop</string>
     <string name="wheelstop_status_summary_text">后台服务运行</string>
-    <!-- ============================================================== -->
-    <!-- M3 Revamp: navigation rail + settings sub-rail + theme picker  -->
-    <!-- ============================================================== -->
-    <!-- Top-level destinations (navigation rail labels) -->
     <string name="rail_dashboard">顯示板</string>
     <string name="rail_live">活下去</string>
     <string name="rail_recordings">錄影</string>
@@ -741,7 +602,6 @@
     <string name="rail_integrations">集成</string>
     <string name="rail_diagnostics">診斷結果</string>
     <string name="rail_settings">設定</string>
-    <!-- Settings sub-rail -->
     <string name="settings_section_appearance">這樣的外觀</string>
     <string name="settings_section_recording">錄音</string>
     <string name="settings_section_surveillance">監控</string>
@@ -754,23 +614,15 @@
     <string name="settings_overlay_camera_subtitle">在錄音活動中顯示REC/ PROX標志.</string>
     <string name="settings_overlay_trip_title">表示 Trip</string>
     <string name="settings_overlay_trip_subtitle">顯示TRIP章, 在檢測行程進行時.</string>
-    <!-- Was "About & updates" — Check for Updates row was removed from
-         the About page, so the menu / rail label is now just "About". -->
     <string name="settings_section_about">關於</string>
-    <!-- Settings sub-rail (landscape) — overline + a11y -->
     <string name="settings_subrail_overline">設定方式</string>
     <string name="cd_settings_subrail">設定子線</string>
-    <!-- Settings → Vehicle data placeholder pane -->
-    <!-- Settings → Privacy pane copy -->
     <string name="settings_privacy_title">隱私與資料</string>
     <string name="settings_privacy_body">復元清除錄音索引,預存資料,惡魔狀態和裝置上偏好.</string>
-    <!-- Settings → About pane copy -->
     <string name="settings_about_title">關於Wheelstop</string>
     <string name="settings_about_version_label">版本</string>
     <string name="settings_about_package_label">建構</string>
     <string name="settings_about_check_update_value">檢查最新的GitHub版本，如果較新，請安裝。</string>
-    <!-- Backup & Restore (same-device). The backup file contains credentials +
-         the device key, so the copy warns the user to keep it private. -->
     <string name="settings_backup_export_title">导出设置</string>
     <string name="settings_backup_export_value">保存您当前设置的备份文件。保持隐私 — — 它持有您的凭据。</string>
     <string name="settings_backup_import_title">还原设置</string>
@@ -796,9 +648,6 @@
     <string name="settings_backup_trips_prompt">包括您的旅行历史记录(距离、能源、成本、分数、起始/结束位置？不包括每次旅行的详细遥测数据。 该文件将包含您的位置历史记录——保持其隐私。</string>
     <string name="settings_backup_settings_only">仅设置</string>
     <string name="settings_backup_with_trips">包括旅行</string>
-    <!-- Support-development section: tiered options, low-cost first.
-         star → spread → coffee, in that visual order. Copy aims for
-         personality without being corny — short, warm, specific. -->
     <string name="settings_about_support_section">靠像你這樣的人動力</string>
     <string name="settings_about_support_share_title">告訴另一位車主</string>
     <string name="settings_about_support_share_value">每個共享的連結都幫助另一位BYD老板發現Wheelstop.</string>
@@ -819,34 +668,25 @@
     <string name="settings_about_contributors_title">貢獻者</string>
     <string name="settings_about_supporters_title">支持者</string>
     <string name="settings_about_thanks_empty">隨著大家加入,這裡會被填滿。</string>
-    <!-- Settings → General -->
     <string name="settings_theme_label">主題:</string>
     <string name="settings_theme_auto">自動 (跟蹤系統)</string>
     <string name="settings_theme_light">燈光</string>
     <string name="settings_theme_dark">黑暗的時間</string>
     <string name="settings_language_label">語言</string>
-    <!-- Recordings page (header + segmented control + page actions) -->
     <string name="recordings_title">錄影</string>
     <string name="recordings_segment_dashcam">沒有任何樓盤符合您的搜尋</string>
     <string name="recordings_segment_surveillance">監控</string>
     <string name="recordings_action_settings">設定</string>
-    <!-- Hero subtitle: "%1$d today · %2$d total · %3$s" where %3$s is a pre-formatted size like "42 GB". -->
     <string name="recordings_summary_format">現在的%1$d · %2$d總數 · %3$s</string>
-    <!-- Per-segment label with running count, e.g. "Dashcam · 118". -->
     <string name="recordings_segment_dashcam_count">幕 · %d</string>
     <string name="recordings_segment_surveillance_count">監控 · %d</string>
-    <!-- Layout-time placeholder for the counts subtitle before the scan completes. -->
     <string name="recordings_summary_pending"> 其他國家</string>
-    <!-- Landscape recordings preview placeholder (right pane). -->
     <string name="recordings_preview_placeholder_title">選擇錄音</string>
     <string name="recordings_preview_placeholder_body">請按左邊任何項目的鍵,</string>
-    <!-- Diagnostics page -->
     <string name="diagnostics_section_adb_console">網路控制台</string>
     <string name="diagnostics_section_traffic">交通監測器</string>
     <string name="diagnostics_section_camera_probe">攝影機探測器</string>
     <string name="diagnostics_section_battery">電池健康</string>
-    <!-- Sub-label used on diagnostics utility cards in landscape (hint to tap). -->
-    <!-- SOTA Diagnostics dashboard -->
     <string name="diagnostics_hero_title">系統診斷</string>
     <string name="diagnostics_hero_subtitle">檢查了該裝置的情況,</string>
     <string name="diagnostics_health_clear">沒有任何問題.</string>
@@ -857,19 +697,14 @@
     <string name="diagnostics_health_battery">沒有電池</string>
     <string name="diagnostics_metric_pending"> 其他國家</string>
     <string name="diagnostics_metric_online">在網路上</string>
-    <!-- Network tile: bottom line tunnel state (e.g. "Tunnel · Online"). %1$s is one of
-         tunnel_state_online / tunnel_state_offline / tunnel_state_connecting. -->
     <string name="diagnostics_network_tunnel_label">道 · %1$s</string>
     <string name="diagnostics_tunnel_state_online">在網路上</string>
     <string name="diagnostics_tunnel_state_offline">沒有線上</string>
     <string name="diagnostics_tunnel_state_connecting">聯繫</string>
-    <!-- Network top-line fallbacks when no Wi-Fi SSID is available. -->
     <string name="diagnostics_network_mobile">移動式</string>
     <string name="diagnostics_network_ethernet">網際網路</string>
     <string name="diagnostics_network_offline">沒有線上</string>
-    <!-- Storage tile lines. %1$d clip count, %2$s human-readable used size. -->
     <string name="diagnostics_storage_used_line">使用的%1$d剪辑 ·%2$s</string>
-    <!-- Storage tile bottom line. %1$s human-readable free size. -->
     <string name="diagnostics_storage_free_line">%1$s 免費使用</string>
     <string name="diagnostics_logs_card_title">活動記錄</string>
     <string name="diagnostics_logs_card_subtitle">在運行服務中流出.</string>
@@ -879,7 +714,6 @@
     <string name="diagnostics_adb_subtitle">打開上裝置的終端.</string>
     <string name="diagnostics_battery_subtitle">檢查SOH的細胞,</string>
     <string name="diagnostics_settings_subtitle">應用程式偏好,主題和語言.</string>
-    <!-- SOTA Integrations page -->
     <string name="integrations_hero_title">集成</string>
     <string name="integrations_hero_subtitle">聯繫Wheelstop與您的服務.</string>
     <string name="integrations_status_unknown">點擊設定</string>
@@ -890,31 +724,19 @@
     <string name="integrations_mqtt_desc">發表車輛遠隔測量資料給家庭助理或任何MQTT經紀人.</string>
     <string name="integrations_byd_cloud_desc">連接您的BYD應用帳戶以啟用遠程命令，如車門鎖定、閃燈和喇叭。</string>
     <string name="integrations_configure_button">設定方式</string>
-    <!-- Settings → About / Privacy actions (rows) -->
     <string name="settings_action_check_update">查看是否有更新</string>
     <string name="settings_action_reset_data">請重新設定資料.</string>
-    <!-- Content descriptions for rail / segmented controls -->
     <string name="cd_brand_logo">Wheelstop</string>
-    <!-- ============================================================== -->
-    <!-- Dashboard SOTA revamp                                            -->
-    <!-- ============================================================== -->
-    <!-- Hero card -->
-    <!-- SOTA hero headline. Static identity statement (not a time-of-day
-         greeting) — pairs with the WHEELSTOP overline above and the live
-         status row of chips below. Locale catalogs auto-translate. -->
     <string name="dashboard_hero_headline">守望中</string>
     <string name="dashboard_subtitle_all_systems">所有系統都在網路上</string>
     <string name="dashboard_subtitle_some_offline">在網路上提供%1$d的%2$d服務</string>
     <string name="dashboard_subtitle_no_tunnel">遠端接入無線</string>
-    <!-- Metric tiles -->
     <string name="dashboard_metric_recordings">這就是今天的錄音.</string>
     <string name="dashboard_metric_storage">使用的儲存</string>
     <string name="dashboard_metric_tunnel">遠端接入</string>
     <string name="dashboard_metric_services">背景服務</string>
     <string name="dashboard_metric_value_pending"> 其他國家</string>
     <string name="dashboard_metric_vehicle">汽車</string>
-    <!-- Hero chips: at-a-glance pills under the greeting that summarize the
-         three most important live signals (tunnel, services, recording). -->
     <string name="dashboard_chip_recording_active">正在錄音</string>
     <string name="dashboard_chip_recording_idle">閒置</string>
     <string name="dashboard_vehicle_tap_to_set">按一下設定</string>
@@ -933,56 +755,36 @@
     <string name="vehicle_dialog_summary_model">模型:%1$s</string>
     <string name="vehicle_dialog_summary_calibration">最后校準:%1$.1f%% 在%2$s</string>
     <string name="vehicle_dialog_soh_unavailable">沒有使用</string>
-    <!-- Combined Recordings+Storage chip: e.g. "8.4 GB used · 12 GB free" -->
     <string name="dashboard_metric_storage_chip">使用的%1$s · 免費的%2$s</string>
     <string name="dashboard_metric_storage_chip_pending">存儲 </string>
     <string name="dashboard_tunnel_offline">沒有線上</string>
     <string name="dashboard_tunnel_online">在網路上</string>
     <string name="dashboard_tunnel_connecting">聯繫我們.</string>
-    <!-- Quick actions (now rendered as same-size tiles, not chips) -->
     <string name="dashboard_action_live">在線觀看</string>
     <string name="dashboard_action_live_subtitle">打開相機顯示器</string>
     <string name="dashboard_action_recordings">錄影</string>
     <string name="dashboard_action_settings">設定</string>
     <string name="dashboard_action_settings_subtitle">喜好與關于</string>
-    <!-- ============================================================ -->
-    <!-- Settings — SOTA portrait hub + section pages                  -->
-    <!-- ============================================================ -->
-    <!-- Hero -->
     <string name="settings_hero_title">設定</string>
     <string name="settings_hero_overline">WHEELSTOP</string>
     <string name="settings_hero_subtitle">調節外觀,錄音,監控和裝置上的數據.</string>
-    <!-- Section overlines -->
     <string name="settings_overline_preferences">首頁 &gt; 列表</string>
     <string name="settings_overline_about_data">關於 &amp; 資料</string>
-    <!-- Quick toggles -->
     <string name="settings_quick_theme_label">主題:</string>
     <string name="settings_quick_language_label">語言</string>
-    <!-- Section row subtitles (portrait) -->
     <string name="settings_section_recording_subtitle">預備/後期緩衝器,代克,存儲限制.</string>
     <string name="settings_section_surveillance_subtitle">檢測區域,時間表,運動敏感性.</string>
     <string name="settings_section_daemons_subtitle">Cloudflared、Zrok、Telegram、MQTT 執行程式。</string>
-    <!-- About / data row subtitles -->
     <string name="settings_about_row_title">關於Wheelstop</string>
     <string name="settings_about_row_subtitle">版本,授權,支持開發.</string>
     <string name="settings_reset_row_subtitle">或是所有隱藏資料.</string>
-    <!-- Footer -->
     <string name="settings_footer_format">Wheelstop %1$s · %2$s</string>
-    <!-- ============================================================ -->
-    <!-- Appearance pane — SOTA visual theme picker                    -->
-    <!-- ============================================================ -->
     <string name="settings_appearance_subtitle">標題,語言和視覺偏好.</string>
     <string name="settings_theme_active_auto_caption">自動追蹤您的系統主題.</string>
     <string name="settings_theme_active_light_caption">燈光主題總是開啟.</string>
     <string name="settings_theme_active_dark_caption">黑色的主題總是開啟.</string>
     <string name="settings_language_count_format">在 %2$d 語言中可用的 %1$d</string>
     <string name="settings_language_card_title">顯示語言</string>
-    <!-- ============================================================ -->
-    <!-- Vehicle data pane — manifest permissions + integrations       -->
-    <!-- ============================================================ -->
-    <!-- ============================================================ -->
-    <!-- Privacy pane — stance + storage summary + reset               -->
-    <!-- ============================================================ -->
     <string name="settings_privacy_stance_title">預設在裝置上</string>
     <string name="settings_privacy_stance_body">Wheelstop 完全在車機主機上運作。除了透過您明確設定的通道與整合之外，沒有任何遙測資料會離開您的車輛。</string>
     <string name="settings_privacy_overline_storage">地方儲存</string>
@@ -993,10 +795,6 @@
     <string name="settings_privacy_storage_count_format">片 %1$d</string>
     <string name="settings_privacy_storage_count_format_plural">片 %1$d</string>
     <string name="settings_privacy_reset_subtitle">選取類別:錄音,事件,惡魔設定,預存遠隔測量...</string>
-    <!-- Settings → Security pane copy + PIN unlock screen.
-         The lock guards the Wheelstop UI only. Cam daemon, AccSentry,
-         surveillance, recording, Telegram alerts, status overlay, and the
-         deterrent screen all run independently regardless of this state. -->
     <string name="settings_security_title">安全</string>
     <string name="settings_security_subtitle">锁定Wheelstop应用，否则乘客和阀无法在没有您的 PIN 码的情况下打开它。</string>
     <string name="settings_security_stance_title">仅锁定界面</string>
@@ -1016,9 +814,6 @@
     <string name="settings_security_autolock_never">从不按时间自动锁定</string>
     <string name="settings_security_recovery_title">ADB 恢复</string>
     <string name="settings_security_recovery_body">可通过 USB 调试而无需出厂重置，通过主机机清理遗忘的 PIN 码。运行此命令，然后重新打开应用程序。</string>
-    <!-- Verbatim ADB command. translatable=false so the i18n pipeline
-         doesn't localize the literal path/command — translators following
-         Crowdin would otherwise risk breaking the only recovery path. -->
     <string name="settings_security_dialog_set_title">设置 PIN 码</string>
     <string name="settings_security_dialog_set_body">选择一个 4-8 位数字PIN。每次打开应用程序时你都需要这个。</string>
     <string name="settings_security_dialog_disable_title">关闭PIN锁？</string>
@@ -1038,106 +833,62 @@
     <string name="settings_security_error_persist">无法保存 PIN 码。请重试。</string>
     <string name="settings_security_toast_set_ok">PIN码已设置。应用程序锁已开启。</string>
     <string name="settings_security_toast_disable_ok">应用程序锁已关闭。</string>
-    <!-- PIN unlock screen (PinLockActivity). Shown over MainActivity when
-         the app lock is enabled and the session isn\'t fresh. -->
     <string name="pin_lock_title">输入 PIN 码</string>
     <string name="pin_lock_title_unlocked">已解锁</string>
     <string name="pin_lock_subtitle_default">解锁Wheelstop以继续。</string>
     <string name="pin_lock_subtitle_wrong">错误的 PIN，请重试。</string>
     <string name="pin_lock_subtitle_locked_out">尝试次数过多，请稍后再试。</string>
-    <!-- %1$s is a formatted countdown like "30s" or "2:45". -->
     <string name="pin_lock_subtitle_locked_out_countdown">锁定。请在 %1$s 中再试一次。</string>
     <string name="pin_lock_lockout_seconds">%1$d秒</string>
     <string name="pin_lock_lockout_minutes">%1$d：%2$02d</string>
-    <!-- Lock-screen recovery hint. Two-part: a translatable prose prefix
-         and a translatable=false literal command (reuses the same
-         settings_security_recovery_command resource so a future edit to
-         the command stays in sync across both surfaces). The lock screen
-         concatenates them at runtime via String.format. -->
     <string name="pin_lock_recovery_hint_prefix">忘记您的 PIN？从连接的计算机运行：\n%1$s</string>
     <string name="pin_lock_backspace_cd">背空格</string>
     <plurals name="pin_lock_dot_a11y">
         <item quantity="other">输入的 %1$d 数字</item>
     </plurals>
-    <!-- Place tagging (reverse geocoding) — recording row chip fallback. -->
     <string name="recording_unknown_location">沒有位置</string>
-    <!-- ============================================================== -->
-    <!-- Diagnostics health-tile values (Camera + Battery)                -->
-    <!-- ============================================================== -->
-    <!-- Camera tile primary value: %1$d is the probed camera id (0..N). -->
     <string name="diagnostics_camera_value_camera_n">攝影機%1$d</string>
-    <!-- Camera tile primary value when manual override is active. -->
     <string name="diagnostics_camera_value_camera_n_manual">攝影機%1$d (手動)</string>
     <string name="diagnostics_camera_value_probing">檢查這些問題.</string>
     <string name="diagnostics_camera_value_offline">沒有線上</string>
-    <!-- Battery tile primary value: %1$.0f is the SOH percent (0..100). -->
     <string name="diagnostics_battery_value_soh">%1$.0f%%</string>
     <string name="diagnostics_battery_value_pending">目前的數據</string>
-    <!-- Dashboard recordings tile: live-record indicator prefix.
-         %1$d is today's clip count. The leading bullet is the red dot. -->
     <string name="dashboard_recordings_value_live">●%1$d</string>
-    <!-- ============================================================== -->
-    <!-- Dashboard hero subtitle — auto-rotating insights carousel        -->
-    <!-- ============================================================== -->
-    <!-- Each line replaces the static subtitle for ~5s, then cross-fades
-         to the next available insight. Numbers are bolded + tinted in the
-         provider, so translators should keep numeric placeholders intact
-         (do not spell out the digits). -->
-    <!-- First-launch welcome — only shown on the very first dashboard visit. -->
     <string name="dashboard_insight_welcome">歡迎使用 — Wheelstop 現在是您的第二雙眼睛。</string>
-    <!-- Parking delta. %1$s = absolute SOC delta string ("8%"); %2$s = absolute kWh string ("4 kWh"). -->
     <string name="dashboard_insight_parked_charged_kwh">在停車場上, 接收了%1$s (≈%2$s)</string>
     <string name="dashboard_insight_parked_charged">在停車場上拿起%1$s</string>
     <string name="dashboard_insight_parked_drained_kwh">自從你停車後使用了%1$s (≈%2$s)</string>
     <string name="dashboard_insight_parked_drained">自從你停車後使用了%1$s</string>
-    <!-- Most recent surveillance clip. %1$s = relative time, e.g. "2 hr. ago" / "yesterday". -->
     <string name="dashboard_insight_last_alert">最后的監控警報: %1$s</string>
-    <!-- Most recent completed charging session in the last 24h.
-         %1$s = energy added (e.g. "12.4 kWh"); %2$s = duration (e.g. "1 hr 45 min"). -->
     <string name="dashboard_insight_last_charge">最后一次充電: +%1$s 在 %2$s</string>
-    <!-- Storage milestone. %1$d = clip count; %2$s = total size (e.g. "42 GB"). -->
     <string name="dashboard_insight_storage_milestone">%1$d剪辑 · %2$s錄製</string>
-    <!-- Number formatters used inside other insights. Translators may localize
-         the unit suffix (e.g. "키와트" / "квт·ч") but should leave the float
-         placeholder shape so the bold-ifier still finds the digits. -->
     <string name="dashboard_insight_kwh_format">%1$.1f kWh</string>
     <string name="dashboard_insight_percent_format">%1$.1f%%</string>
     <string name="dashboard_insight_hours_minutes">时间:%1$d小时%2$d分钟</string>
-    <!-- Today's clips. -->
     <plurals name="dashboard_insight_today_clips">
         <item quantity="other">今天录制的%1$d片段</item>
     </plurals>
-    <!-- Process uptime. Days form takes (days, hours); hours form takes hours only. -->
     <plurals name="dashboard_insight_uptime_days_hours">
         <item quantity="other">在线Wheelstop%1$d天,%2$d小时</item>
     </plurals>
     <plurals name="dashboard_insight_uptime_hours">
         <item quantity="other">在线Wheelstop%1$d小时</item>
     </plurals>
-    <!-- Duration helpers used inside insights (last_charge etc.). -->
     <plurals name="dashboard_insight_minutes">
         <item quantity="other">%1$d min</item>
     </plurals>
     <plurals name="dashboard_insight_hours">
         <item quantity="other">%1$d hr</item>
     </plurals>
-    <!-- ============================================================
-         RoadSense — road-hazard detection feature
-         ============================================================ -->
     <string name="rail_roadsense">RoadSense</string>
     <string name="rail_hazard_map">地图</string>
     <string name="roadsense_title">RoadSense</string>
     <string name="roadsense_pill_scanning">正在扫描</string>
     <string name="roadsense_pill_idle">RoadSense</string>
     <string name="roadsense_status_idle">空闲的</string>
-    <!-- VEHICLE calibration (suspension-learning) — the green/orange/red dot. Worded
-         about the car, not the route, since that's what maturity actually measures. -->
     <string name="roadsense_cal_learning">学习你的车辆</string>
     <string name="roadsense_cal_ready">车辆校准</string>
     <string name="roadsense_cal_partial">校准改进</string>
-    <!-- Idle caption — ROUTE coverage (distinct from vehicle calibration). "Clear
-         ahead" only when we've actually mapped this stretch; "New road" when we
-         haven't, so an unsurveyed road isn't mistaken for confirmed-safe. -->
     <string name="roadsense_clear_ahead">前方清空</string>
     <string name="roadsense_road_mapped">已绘制的道路 · 清除</string>
     <string name="roadsense_road_new">新的道路·学习</string>
@@ -1146,7 +897,6 @@
     <string name="roadsense_warn_label">警告</string>
     <string name="roadsense_toggle_audio">音频</string>
     <string name="roadsense_toggle_visual">可视化</string>
-    <!-- severity / type readouts (formatted at runtime) -->
     <string name="roadsense_sev_minor">次要的</string>
     <string name="roadsense_sev_moderate">中度</string>
     <string name="roadsense_sev_severe">严重的</string>
@@ -1154,53 +904,37 @@
     <string name="roadsense_type_pothole">平滑模式</string>
     <string name="roadsense_type_hazard">危险</string>
     <string name="roadsense_type_rough">粗略部分</string>
-    <!-- "Moderate · Pothole" style line -->
     <string name="roadsense_hazard_format">%1$s · %2$s</string>
-    <!-- Zone readouts (D-032): cluster of hazards announced as one. -->
-    <!-- "3 bumps ahead" — %1$d = count -->
     <string name="roadsense_zone_count">%1$d bumps 前</string>
-    <!-- "Rough section · 40 m" — %1$d = length in metres -->
     <string name="roadsense_zone_rough">粗制部分 · %1$d m</string>
-    <!-- Calibration-Mode confirm card (R-OVL-6) -->
     <string name="roadsense_confirm_prompt">这是一种危险吗？</string>
     <string name="roadsense_confirm_reject">不是危险</string>
     <string name="roadsense_confirm_accept">确认</string>
-    <!-- content descriptions -->
     <string name="roadsense_cd_cal_level">路由校准级别</string>
     <string name="roadsense_cd_direction">下一个危险的方向</string>
-    <!-- Blind Spot overlay labels (native overlay window). -->
     <string name="blindspot_overlay_left">左</string>
     <string name="blindspot_overlay_right">右</string>
-    <!-- ============================================================== -->
-    <!-- RoadSense Map (native MapLibre map view + tap-to-verify sheet). -->
-    <!-- ============================================================== -->
     <string name="roadsense_map_title">地图</string>
     <string name="roadsense_map_route_clear">清空</string>
     <string name="roadsense_map_route_unmapped">尚未映射</string>
     <string name="roadsense_map_back">后退</string>
     <string name="roadsense_map_recenter">在我的位置上恢复</string>
-    <!-- Tap-to-verify bottom sheet -->
     <string name="roadsense_map_severity_label">严重程度</string>
     <string name="roadsense_map_type_label">类型</string>
     <string name="roadsense_map_type_unknown">未知的</string>
     <string name="roadsense_map_confirm">确认</string>
     <string name="roadsense_map_delete">删除</string>
-    <!-- Status chip labels: candidate / on-device / shared with fleet -->
     <string name="roadsense_map_status_candidate">候选人</string>
     <string name="roadsense_map_status_local">在设备上</string>
     <string name="roadsense_map_status_cloud">共享的</string>
-    <!-- Meta line: "Moderate · 82% confidence · 3 reports" -->
     <string name="roadsense_map_meta_format">%1$s · %2$d%% confidence · %3$s</string>
-    <!-- "3 reports" / "1 report" -->
     <plurals name="roadsense_map_reports">
         <item quantity="other">%1$d 报告</item>
     </plurals>
-    <!-- Snackbar / toast confirmations -->
     <string name="roadsense_map_confirmed_toast">危险已确认</string>
     <string name="roadsense_map_deleted_toast">已移除危险</string>
     <string name="roadsense_map_action_failed">无法到达RoadSense。请重试。</string>
     <string name="roadsense_map_no_location">正在等待 GPS 修复…</string>
-    <!-- Navigation: search + routing + turn-by-turn -->
     <string name="roadsense_map_search_hint">搜索目标</string>
     <string name="roadsense_map_search_action">搜索</string>
     <string name="roadsense_map_searching">正在搜索…</string>
@@ -1220,22 +954,18 @@
     <string name="roadsense_map_end_nav">结束导航</string>
     <string name="roadsense_map_zoom_in">缩放</string>
     <string name="roadsense_map_zoom_out">缩放</string>
-    <!-- Hazard visibility filter -->
     <string name="roadsense_map_hazards_filter">危险可见性</string>
     <string name="roadsense_map_hazards_all">显示所有危险</string>
     <string name="roadsense_map_hazards_moderate">中度和严重度</string>
     <string name="roadsense_map_hazards_severe">仅严重的</string>
     <string name="roadsense_map_hazards_hidden">隐藏危险</string>
-    <!-- POI along route (EV charging / fuel) -->
     <string name="roadsense_map_poi_toggle">充电和燃料</string>
-    <!-- 2D / 3D buildings toggle -->
     <string name="roadsense_map_dimension_toggle">2D / 3D 建筑</string>
     <string name="roadsense_map_3d_on">3D 建筑已开启</string>
     <string name="roadsense_map_3d_off">3D 建筑已关闭</string>
     <string name="roadsense_map_poi_loading">寻找充电站和燃料站…</string>
     <string name="roadsense_map_poi_none">附近未找到气象站</string>
     <string name="roadsense_map_poi_need_route">先选择一个目标</string>
-    <!-- POI tap action sheet -->
     <string name="roadsense_map_stop_added">停止添加</string>
     <string name="roadsense_map_remove_stop_action">移除停止</string>
     <string name="roadsense_map_poi_navigate">导航到这里</string>
@@ -1244,27 +974,19 @@
     <string name="roadsense_map_poi_charging_generic">充电站</string>
     <string name="roadsense_map_poi_fuel_generic">燃料站</string>
     <string name="roadsense_map_route_switched">切换路由</string>
-    <!-- "then <next maneuver>" preview shown in the maneuver banner -->
     <string name="roadsense_map_then">然後</string>
-    <!-- Roundabout exit ordinal in the maneuver banner (%1$d = exit number) -->
     <string name="roadsense_map_exit_n">結束 %1$d</string>
-    <!-- Hazards-along-route pills (%1$d = count) -->
     <string name="roadsense_map_pill_severe">%1$d 严重的</string>
     <string name="roadsense_map_pill_moderate">%1$d 审核</string>
     <string name="roadsense_map_pill_minor">%1$d 小的</string>
-    <!-- Shown briefly if the basemap can\'t be reached. -->
     <string name="roadsense_map_offline">离线地图数据不可用</string>
-    <!-- Navigation: autocomplete + route options -->
     <string name="roadsense_map_clear_search">清除搜索</string>
-    <!-- Route-options sheet -->
     <string name="roadsense_map_routes_title">选择路由</string>
     <string name="roadsense_map_routes_to">到 %1$s 的路由</string>
     <string name="roadsense_map_routes_cancel">取消</string>
-    <!-- Per-route row label, %1$d is the 1-based route number. -->
     <string name="roadsense_map_route_option">路由 %1$d</string>
     <string name="roadsense_map_fastest">最快的</string>
     <string name="roadsense_map_start">开始</string>
-    <!-- Stops / waypoints in the route-options sheet -->
     <string name="roadsense_map_your_location">您的位置</string>
     <string name="roadsense_map_add_stop">添加停止</string>
     <string name="roadsense_map_add_stop_hint">搜索一个站点以添加</string>
@@ -1272,19 +994,15 @@
     <string name="roadsense_map_remove_stop">移除停止</string>
     <string name="roadsense_map_move_stop_up">停止上移</string>
     <string name="roadsense_map_move_stop_down">下移停止</string>
-    <!-- %1$d is the maximum number of stops allowed. -->
     <string name="roadsense_map_max_stops">最多允许 %1$d 停止</string>
-    <!-- Map day/night override (Auto → Light → Dark) -->
     <string name="roadsense_map_theme_toggle">地圖主題</string>
     <string name="roadsense_map_theme_auto">地圖主題：自動</string>
     <string name="roadsense_map_theme_light">地圖主題：淺色</string>
     <string name="roadsense_map_theme_dark">地圖主題：深色</string>
-    <!-- Saved places (Home / Work / custom favourites) -->
     <string name="roadsense_map_saved_home">住家</string>
     <string name="roadsense_map_saved_work">公司</string>
     <string name="roadsense_map_saved_set_home">設定住家</string>
     <string name="roadsense_map_saved_set_work">設定公司</string>
-    <!-- Short action label for the "save as a custom favourite" button. -->
     <string name="roadsense_map_saved_favourite">最愛</string>
     <string name="roadsense_map_save_place">儲存地點</string>
     <string name="roadsense_map_save_as_home">儲存為住家</string>
@@ -1299,14 +1017,10 @@
     <string name="roadsense_map_custom_label_title">命名此地點</string>
     <string name="roadsense_map_save">儲存</string>
     <string name="roadsense_map_cancel">取消</string>
-    <!-- Place-action sheet (long-press the map or a search result to save/navigate) -->
     <string name="roadsense_map_dropped_pin">已放置圖釘</string>
     <string name="roadsense_map_navigate_here">導航至此</string>
-    <!-- Shown after tapping an unset Home/Work chip: search picks the place to save. -->
     <string name="roadsense_map_search_to_save">搜尋地點以設定為 %1$s</string>
-    <!-- Shown when re-entering the map with a previously-set trip restored. -->
     <string name="roadsense_map_trip_restored">行程已恢復</string>
-    <!-- Cloudflared paid-tunnel settings -->
     <string name="cloudflared_token_storage_note">令牌安全地存储并在应用程序和守护进程之间共享。</string>
     <string name="cloudflared_token_hint">输入云端令牌</string>
     <string name="cloudflare_paid_version">Cloudflare已付费版本</string>
@@ -1315,7 +1029,6 @@
     <string name="toast_cloudflared_token_cannot_be_empty">如果您设置为付费版本，令牌不能为空</string>
     <string name="toast_cloudflared_token_invalid">无效的令牌：只使用字母、数字和 . _ - = 字符</string>
     <string name="toast_cloudflared_saved_settings">Cloudflared 设置已保存</string>
-    <!-- Projection screen -->
     <string name="projection_hero_title">投影</string>
     <string name="projection_hero_subtitle">将应用投射到仪表盘，并在此处镜像显示。</string>
     <string name="projection_pick_app">选择要投影的应用</string>
