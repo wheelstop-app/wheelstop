@@ -89,38 +89,42 @@ TEXT_SUFFIXES = {".java", ".kt", ".kts", ".js", ".mjs", ".css", ".html",
                  ".json", ".xml", ".pro", ".txt", ".md", ".cpp", ".h", ".svg"}
 
 
-def in_scope(rel):
+def in_scope(rel, scope=SCOPE):
     """True if a repo-relative path participates in upstream parity."""
     rel = rel.replace(os.sep, "/")
     if rel.startswith(NEVER_SYNC):
         return False
-    return rel.startswith(SCOPE)
+    return rel.startswith(scope)
 
 
-def should_rewrite(rel):
+def should_rewrite(rel, scope=SCOPE):
     """True if an in-scope path's CONTENT should have identifiers
     substituted. False for in-scope-but-NO_REWRITE paths (locale
     catalogues) and for anything out of scope."""
     rel = rel.replace(os.sep, "/")
-    if not in_scope(rel):
+    if not in_scope(rel, scope):
         return False
     return not rel.startswith(NO_REWRITE)
 
 
-def normalize_tree(root):
+def normalize_tree(root, scope=SCOPE):
     """Rewrite and move every in-scope file under root. Content is rewritten
     only where should_rewrite() is true; an in-scope file is still MOVED if
     its path changes under the transform, even when its content is not
-    rewritten. Returns (files_rewritten, files_moved)."""
+    rewritten. Returns (files_rewritten, files_moved).
+
+    `scope` defaults to the module SCOPE and only needs overriding by callers
+    reproducing a narrower historical scope (see the stage-A fixture test) --
+    the sync script and CLI never pass it, so their behaviour is unchanged."""
     root = pathlib.Path(root)
     rewritten = moved = 0
     for dirpath, _dirs, files in os.walk(root):
         for name in files:
             path = pathlib.Path(dirpath) / name
             rel = str(path.relative_to(root)).replace(os.sep, "/")
-            if not in_scope(rel):
+            if not in_scope(rel, scope):
                 continue
-            if should_rewrite(rel) and path.suffix in TEXT_SUFFIXES:
+            if should_rewrite(rel, scope) and path.suffix in TEXT_SUFFIXES:
                 try:
                     old = path.read_text(encoding="utf-8")
                 except (UnicodeDecodeError, OSError):
