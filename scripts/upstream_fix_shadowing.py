@@ -79,19 +79,26 @@ def needs_fix(text):
     return DECL_RE.search(text) is not None
 
 
-def _code_mask(text):
-    """Boolean list, one entry per character in `text`: True where that
-    character is ordinary Java/Kotlin code, False where it's inside a
-    string literal, a char literal, or a line/block comment.
+def _char_states(text):
+    """List of per-character state labels, one entry per character in
+    `text`: one of "code", "line_comment", "block_comment", "string",
+    "char", or "triple_string".
+
+    This is the one Java/Kotlin lexer in this codebase. `_code_mask`
+    below derives its plain code/not-code boolean from it; other
+    consumers that need a finer distinction -- e.g.
+    scripts/upstream_invariants.py, which needs "not in a comment" as a
+    *different* condition from "not in a string" -- import this function
+    directly rather than re-implementing the state machine.
 
     This is a lightweight tokenizer, not a full parser -- it knows just
-    enough to keep the FQN rewrite out of literals and comments, which is
-    all it needs to do. It does not special-case Kotlin string-template
-    expressions (`"${...}"`); those are treated as string content (masked
-    out), which is the conservative choice -- see the module docstring.
+    enough to keep rewrites and needle-matches out of the wrong places.
+    It does not special-case Kotlin string-template expressions
+    (`"${...}"`); those are treated as string content, which is the
+    conservative choice -- see the module docstring.
     """
     n = len(text)
-    mask = [True] * n
+    states = ["code"] * n
     state = "code"
     i = 0
     while i < n:
@@ -99,52 +106,52 @@ def _code_mask(text):
         if state == "code":
             two = text[i:i + 2]
             if two == "//":
-                mask[i] = mask[i + 1] = False
+                states[i] = states[i + 1] = "line_comment"
                 state = "line_comment"
                 i += 2
                 continue
             if two == "/*":
-                mask[i] = mask[i + 1] = False
+                states[i] = states[i + 1] = "block_comment"
                 state = "block_comment"
                 i += 2
                 continue
             if text[i:i + 3] == '"""':
-                mask[i] = mask[i + 1] = mask[i + 2] = False
+                states[i] = states[i + 1] = states[i + 2] = "triple_string"
                 state = "triple_string"
                 i += 3
                 continue
             if c == '"':
-                mask[i] = False
+                states[i] = "string"
                 state = "string"
                 i += 1
                 continue
             if c == "'":
-                mask[i] = False
+                states[i] = "char"
                 state = "char"
                 i += 1
                 continue
             i += 1
             continue
         if state == "line_comment":
-            mask[i] = False
+            states[i] = "line_comment"
             if c == "\n":
                 state = "code"
             i += 1
             continue
         if state == "block_comment":
             if text[i:i + 2] == "*/":
-                mask[i] = mask[i + 1] = False
+                states[i] = states[i + 1] = "block_comment"
                 i += 2
                 state = "code"
                 continue
-            mask[i] = False
+            states[i] = "block_comment"
             i += 1
             continue
         if state == "string" or state == "char":
-            mask[i] = False
+            states[i] = state
             if c == "\\":
                 if i + 1 < n:
-                    mask[i + 1] = False
+                    states[i + 1] = state
                 i += 2
                 continue
             end_char = '"' if state == "string" else "'"
@@ -154,14 +161,26 @@ def _code_mask(text):
             continue
         if state == "triple_string":
             if text[i:i + 3] == '"""':
-                mask[i] = mask[i + 1] = mask[i + 2] = False
+                states[i] = states[i + 1] = states[i + 2] = "triple_string"
                 i += 3
                 state = "code"
                 continue
-            mask[i] = False
+            states[i] = "triple_string"
             i += 1
             continue
-    return mask
+    return states
+
+
+def _code_mask(text):
+    """Boolean list, one entry per character in `text`: True where that
+    character is ordinary Java/Kotlin code, False where it's inside a
+    string literal, a char literal, or a line/block comment.
+
+    A thin derivation of `_char_states` -- kept as its own function
+    because plain code-vs-not-code is all the FQN rewrite in this module
+    needs.
+    """
+    return [s == "code" for s in _char_states(text)]
 
 
 def _import_line_mask(text):

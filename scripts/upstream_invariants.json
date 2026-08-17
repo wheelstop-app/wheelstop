@@ -4,41 +4,47 @@
     "reason": "PR #165 gate on screen/HUD writes while moving. Upstream deleted theirs; see yash-srivastava/Overdrive-release#233.",
     "glob": "app/src/main/java/**/server/VehicleControlApiHandler.java",
     "needle": "DrivingSafetyGuard.isMovementBlocked",
-    "min_total": 2
+    "min_total": 2,
+    "code_only": true
   },
   {
     "name": "driving-safety-gate-outcome",
-    "reason": "Both gated call sites must still return the blocked_driving outcome.",
-    "glob": "app/src/main/java/**/server/*.java",
+    "reason": "Both gated call sites must still return the blocked_driving outcome. Scoped to the single handler file that owns the gate -- a broader glob would let an unrelated file's stray mention of the string satisfy this.",
+    "glob": "app/src/main/java/**/server/VehicleControlApiHandler.java",
     "needle": "blocked_driving",
-    "min_total": 2
+    "min_total": 2,
+    "code_only": false
   },
   {
     "name": "credential-cipher-salt",
     "reason": "MUST-PRESERVE: changing KD_SALT breaks every stored credential.",
     "glob": "app/src/main/java/**/CredentialCipher.*",
     "needle": "KD_SALT",
-    "min_total": 1
+    "min_total": 1,
+    "code_only": true
   },
   {
     "name": "backup-bundle-format",
     "reason": "MUST-PRESERVE: changing BUNDLE_FORMAT breaks existing config backups.",
     "glob": "app/src/main/java/**/ConfigBackupService.*",
     "needle": "BUNDLE_FORMAT",
-    "min_total": 1
+    "min_total": 1,
+    "code_only": true
   },
   {
     "name": "exclusivity-preflight-old-package",
-    "reason": "Detects a running com.overdrive.app install so the two apps can coexist. The normalize transform must not rewrite it.",
+    "reason": "Detects a running com.overdrive.app install so the two apps can coexist. The normalize transform must not rewrite it. The needle is the string-literal package name itself, so code_only is false -- it still can never match inside a comment.",
     "glob": "app/src/main/java/**/ExclusivityPreflight.*",
     "needle": "com.overdrive.app",
-    "min_total": 1
+    "min_total": 1,
+    "code_only": false
   },
   {
     "name": "update-repo-points-at-wheelstop",
-    "reason": "The auto-updater must never be re-pointed at upstream releases.",
+    "reason": "The auto-updater must never be re-pointed at upstream releases. The needle is the string-literal repo slug itself, so code_only is false -- it still can never match inside a comment.",
     "glob": "app/build.gradle.kts",
     "needle": "wheelstop-app/wheelstop",
-    "min_total": 2
+    "min_total": 2,
+    "code_only": false
   }
 ]
