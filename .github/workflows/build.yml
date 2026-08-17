@@ -127,3 +127,19 @@ jobs:
       # version/licence was changed in the lock without regenerating the notice.
       - name: THIRD_PARTY_NOTICES.md matches app/tunnel-binaries.lock
         run: python3 scripts/gen-third-party-notices.py --check
+
+      # The full test_*.py glob, never a single file: the fixture acceptance test alone
+      # cannot catch substitution-ordering or scope regressions (its frozen tree has no
+      # content that exercises them) — only sibling tests in this same glob catch those.
+      - name: Upstream-sync tooling unit tests
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
+
+      # Fail if an upstream sync (or any other change) dropped Wheelstop-specific
+      # behaviour we deliberately keep. See docs/upstream-sync.md.
+      #
+      # This exists because upstream once deleted a driving-safety gate — the check that
+      # stops a client blanking the driver's screen/cluster/HUD while the car is moving —
+      # and the deletion produced no merge conflict: the merged tree compiled and would
+      # have passed CI. A red build here means an invariant broke, not a style nit.
+      - name: Upstream-sync invariants hold
+        run: python3 scripts/upstream_invariants.py
