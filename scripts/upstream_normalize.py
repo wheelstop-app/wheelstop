@@ -46,9 +46,17 @@ def apply_substitutions(text):
 # R1: res/ is in SCOPE. Excluding it fails the build outright -- Kotlin/Java
 # bind R.id/R.string at compile time, and omitting it produced ~17
 # unresolved-reference errors during the stage-A merge.
+#
+# R6: assets/server-i18n/ is in SCOPE. It is read at runtime by
+# Messages.get("errors...."), a string-key lookup rather than a compile-time
+# symbol, so an upstream-added key that never syncs would NOT fail the
+# build -- it silently falls back to a missing string on a real car. That
+# is a worse failure mode than the loud compile error res/ already gives
+# us, so this directory must be reachable, not just listed in NO_REWRITE.
 SCOPE = (
     "app/src/main/java/",
     "app/src/main/assets/web/",
+    "app/src/main/assets/server-i18n/",
     "app/src/main/res/",
     "app/src/test/",
 )
@@ -78,7 +86,7 @@ NEVER_SYNC = (
 )
 
 TEXT_SUFFIXES = {".java", ".kt", ".kts", ".js", ".mjs", ".css", ".html",
-                 ".json", ".xml", ".pro", ".txt", ".md", ".cpp", ".h"}
+                 ".json", ".xml", ".pro", ".txt", ".md", ".cpp", ".h", ".svg"}
 
 
 def in_scope(rel):

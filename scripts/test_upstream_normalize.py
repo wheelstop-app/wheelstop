@@ -56,10 +56,14 @@ class TestScope(unittest.TestCase):
     def test_build_config_is_out_of_scope(self):
         self.assertFalse(in_scope("app/build.gradle.kts"))
 
-    def test_server_i18n_is_out_of_scope(self):
-        # Not under any SCOPE prefix (only assets/web/ is scoped, not
-        # assets/server-i18n/), independent of the NO_REWRITE/NEVER_SYNC split.
-        self.assertFalse(in_scope("app/src/main/assets/server-i18n/en.json"))
+    def test_server_i18n_is_in_scope_but_not_rewritten(self):
+        # R6: server-i18n is read at runtime by string key (Messages.get),
+        # not a compile-time symbol, so an upstream key that never syncs
+        # would silently fall back to a missing string on a real car rather
+        # than fail the build -- it must be reachable via SCOPE. Its values
+        # are still prose, so should_rewrite stays False for it.
+        self.assertTrue(in_scope("app/src/main/assets/server-i18n/en.json"))
+        self.assertFalse(should_rewrite("app/src/main/assets/server-i18n/en.json"))
 
     # --- R1: res/ joins SCOPE -------------------------------------------
     # Excluding res/ fails the build outright: Kotlin/Java bind R.id/R.string
@@ -141,6 +145,20 @@ class TestNormalizeTree(unittest.TestCase):
             self.assertEqual(src.read_text(encoding="utf-8"),
                              '{"a":"com.overdrive.app"}')
             self.assertEqual((rewritten, moved), (0, 0))
+
+    def test_svg_content_is_rewritten(self):
+        # .svg joins TEXT_SUFFIXES: robustness for future upstream files
+        # (the three SVGs currently vendored contain no identifiers).
+        with tempfile.TemporaryDirectory() as d:
+            root = pathlib.Path(d)
+            src = root / "app/src/main/assets/web/icon.svg"
+            src.parent.mkdir(parents=True)
+            src.write_text('<svg data-app="com.overdrive.app"></svg>',
+                            encoding="utf-8")
+            rewritten, moved = normalize_tree(root)
+            self.assertEqual(src.read_text(encoding="utf-8"),
+                             '<svg data-app="app.wheelstop.android"></svg>')
+            self.assertEqual((rewritten, moved), (1, 0))
 
     def test_never_sync_file_is_left_completely_alone(self):
         with tempfile.TemporaryDirectory() as d:
