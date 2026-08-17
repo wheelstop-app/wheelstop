@@ -7,8 +7,10 @@ import unittest
 from upstream_merge_locales import (
     brand_sweep,
     discover_locale_paths,
+    dropped_keys,
     main,
     merge_json,
+    merge_one,
     merge_xml,
     parse_xml_entries,
 )
@@ -356,6 +358,103 @@ class TestBrandSweep(unittest.TestCase):
         obj_result, obj_n = brand_sweep({"a": "Plain"})
         self.assertEqual(obj_n, 0)
         self.assertEqual(obj_result, {"a": "Plain"})
+
+    def test_xml_comment_structure_survives_the_sweep(self):
+        # R7 regression guard. An earlier sweep reconstructed the file from
+        # parsed entries and silently deleted 7140 XML comments across the
+        # tree -- caught by a human reading the diff, not by a test, which
+        # is exactly the review this branch is not allowed to depend on.
+        # Comments must survive: above an entry, between entries, after the
+        # last one, and their own brand terms must still be swept.
+        text = (
+            '<?xml version="1.0" encoding="utf-8"?>\n'
+            "<!-- file header: Overdrive catalogue -->\n"
+            "<resources>\n"
+            "\n"
+            "    <!-- section: playback -->\n"
+            '    <string name="a">Overdrive One</string>\n'
+            "    <!-- between two entries -->\n"
+            '    <string name="b">Plain Two</string>\n'
+            "\n"
+            "    <!-- trailing note -->\n"
+            "</resources>\n")
+        result, n = brand_sweep(text)
+        for comment in ("<!-- file header: Wheelstop catalogue -->",
+                        "<!-- section: playback -->",
+                        "<!-- between two entries -->",
+                        "<!-- trailing note -->"):
+            self.assertIn(comment, result)
+        self.assertEqual(result.count("<!--"), 4)
+        self.assertEqual(result, text.replace("Overdrive", "Wheelstop"))
+        self.assertEqual(n, 2)
+
+
+class TestDroppedKeys(unittest.TestCase):
+    """The merge's one silent removal path: theirs-deleted + ours-unchanged
+    -> drop. Correct policy, but it deleted the driving-safety gate's
+    blocked-in-motion message from 17 locales with zero conflicts and zero
+    clash entries, so it has to be reported."""
+
+    def test_xml_drop_is_reported(self):
+        ours = xml_doc('    <string name="keep">A</string>\n',
+                       '    <string name="gone">B</string>\n')
+        merged = xml_doc('    <string name="keep">A</string>\n')
+        self.assertEqual(dropped_keys(ours, merged, xml=True), ["gone"])
+
+    def test_json_drop_is_reported_as_a_dotted_path(self):
+        ours = {"errors": {"keep": "A", "vehicle_blocked_in_motion": "B"}}
+        merged = {"errors": {"keep": "A"}}
+        self.assertEqual(dropped_keys(ours, merged, xml=False),
+                         ["errors.vehicle_blocked_in_motion"])
+
+    def test_nothing_dropped_reports_nothing(self):
+        ours = xml_doc('    <string name="keep">A</string>\n')
+        self.assertEqual(dropped_keys(ours, ours, xml=True), [])
+        self.assertEqual(dropped_keys({"a": 1}, {"a": 1, "b": 2}, xml=False), [])
+
+    def test_a_file_we_never_had_cannot_have_dropped_anything(self):
+        self.assertEqual(dropped_keys(None, xml_doc(), xml=True), [])
+
+    def test_merge_one_reports_the_key_the_merge_rule_removed(self):
+        # The real shape of the incident, end to end through merge_one:
+        # upstream deletes the key, we never touched it, so the merge drops
+        # it -- and says so.
+        with tempfile.TemporaryDirectory() as d:
+            root = pathlib.Path(d)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True,
+                           capture_output=True)
+            for key, value in (("user.email", "t@example.com"),
+                                ("user.name", "T")):
+                subprocess.run(["git", "config", key, value], cwd=root,
+                               check=True, capture_output=True)
+            rel = "app/src/main/assets/server-i18n/de.json"
+            path = root / rel
+            path.parent.mkdir(parents=True)
+            catalogue = {"errors": {"vehicle_blocked_in_motion": "gesperrt",
+                                     "other": "x"}}
+            path.write_text(json.dumps(catalogue), encoding="utf-8")
+            subprocess.run(["git", "add", "-A"], cwd=root, check=True,
+                           capture_output=True)
+            subprocess.run(["git", "commit", "-q", "-m", "base"], cwd=root,
+                           check=True, capture_output=True)
+            base = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root,
+                                   check=True, capture_output=True,
+                                   text=True).stdout.strip()
+            path.write_text(json.dumps({"errors": {"other": "x"}}),
+                            encoding="utf-8")
+            subprocess.run(["git", "commit", "-aqm", "upstream deletes it"],
+                           cwd=root, check=True, capture_output=True)
+            theirs = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root,
+                                     check=True, capture_output=True,
+                                     text=True).stdout.strip()
+            # "Ours" on disk == base: we never touched the key.
+            path.write_text(json.dumps(catalogue), encoding="utf-8")
+
+            clashes, _branded, drops = merge_one(root, rel, base, theirs)
+            self.assertEqual(clashes, [])
+            self.assertEqual(drops, ["errors.vehicle_blocked_in_motion"])
+            self.assertNotIn("vehicle_blocked_in_motion",
+                             path.read_text(encoding="utf-8"))
 
 
 class TestParseXmlEntries(unittest.TestCase):

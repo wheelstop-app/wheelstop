@@ -23,6 +23,18 @@ dropped; one we changed is kept even though upstream deleted it. Keys where
 BOTH sides changed are reported as clashes (ours is kept, but the caller
 needs to know).
 
+That "dropped" branch is the one that can hurt without saying anything. The
+policy is right -- a string upstream retired and we never edited should not
+be resurrected forever -- but it is also the ONLY way this merger removes
+user-facing text, and it does so with no conflict, no clash entry and no
+error. It cost 17 locales of the driving-safety gate's blocked-in-motion
+message before a human noticed, because the only trace was a `-` line
+inside a ~900-file diff. So dropped keys are now reported the same way
+clashes are: per file, in the summary, and (via the sync script) in the log
+and the PR body. Reported by comparing the merged output against "ours"
+rather than by trusting the branch that did it -- a key that vanished for
+some other reason would be just as invisible and just as wrong.
+
 Because upstream's brand-new keys carry "OverDrive"/"Overdrive" in their
 translated values, and those keys produce no conflict (we never had them),
 the brand walks straight into merged output unless swept afterwards. On the
@@ -341,45 +353,83 @@ def discover_locale_paths(root, theirs_ref):
     return sorted(found)
 
 
+def json_leaf_paths(obj, prefix=""):
+    """Yield the dotted path of every leaf in a parsed JSON catalogue."""
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            child = f"{prefix}.{key}" if prefix else key
+            yield from json_leaf_paths(value, child)
+    else:
+        yield prefix
+
+
+def dropped_keys(ours, merged, xml):
+    """Keys present in "ours" that the merged output no longer has.
+
+    Computed from the two documents, not from the merge rule that removed
+    them: the point is to notice a key that left, whatever the reason. For
+    XML this is entry `name=` attributes; for JSON, dotted leaf paths.
+    `ours` being None (we never had the file) means nothing can have been
+    dropped from it.
+    """
+    if ours is None:
+        return []
+    if xml:
+        before = list(parse_xml_entries(ours))
+        after = set(parse_xml_entries(merged))
+    else:
+        before = list(json_leaf_paths(ours))
+        after = set(json_leaf_paths(merged))
+    return [k for k in before if k not in after]
+
+
 def merge_one(root, rel, base_ref, theirs_ref):
-    """Merge a single locale catalogue in place. Returns (clash_keys, n_branded)."""
+    """Merge a single locale catalogue in place. Returns
+    (clash_keys, n_branded, dropped_keys)."""
     abs_path = root / rel
     ours = abs_path.read_text(encoding="utf-8") if abs_path.exists() else None
     base = git_show(base_ref, rel, cwd=root)
     theirs = git_show(theirs_ref, rel, cwd=root)
 
-    if is_xml_path(rel):
+    xml = is_xml_path(rel)
+    if xml:
         merged, clashes = merge_xml(base, ours, theirs)
         merged, n = brand_sweep(merged)
+        drops = dropped_keys(ours, merged, xml=True)
     else:
         base_obj = json.loads(base) if base else None
         ours_obj = json.loads(ours) if ours else None
         theirs_obj = json.loads(theirs) if theirs else None
         merged_obj, clashes = merge_json(base_obj, ours_obj, theirs_obj)
         merged_obj, n = brand_sweep(merged_obj)
+        drops = dropped_keys(ours_obj, merged_obj, xml=False)
         merged = json.dumps(merged_obj, ensure_ascii=False, indent=2) + "\n"
 
     abs_path.parent.mkdir(parents=True, exist_ok=True)
     abs_path.write_text(merged, encoding="utf-8")
-    return clashes, n
+    return clashes, n, drops
 
 
 def run_merge(root, base_ref, theirs_ref):
     """Merge every locale catalogue in root's working tree against
     base_ref/theirs_ref, writing results back in place. Returns
-    (files_merged, clash_report) where clash_report maps path -> clash
-    keys. Prints per-file progress."""
+    (files_merged, clash_report, drop_report), where clash_report and
+    drop_report each map path -> key names. Prints per-file progress."""
     clash_report = {}
+    drop_report = {}
     files_merged = 0
     for rel in discover_locale_paths(root, theirs_ref):
-        clashes, n = merge_one(root, rel, base_ref, theirs_ref)
+        clashes, n, drops = merge_one(root, rel, base_ref, theirs_ref)
         files_merged += 1
         if clashes:
             clash_report[rel] = clashes
+        if drops:
+            drop_report[rel] = drops
         flag = f" clashes={len(clashes)}" if clashes else ""
         branded = f" branded={n}" if n else ""
-        print(f"  {rel}{flag}{branded}")
-    return files_merged, clash_report
+        gone = f" dropped={len(drops)}" if drops else ""
+        print(f"  {rel}{flag}{branded}{gone}")
+    return files_merged, clash_report, drop_report
 
 
 def main(argv, cwd=None):
@@ -388,8 +438,11 @@ def main(argv, cwd=None):
         return 2
     base_ref, theirs_ref = argv[1], argv[2]
     root = repo_root(cwd)
-    files_merged, clash_report = run_merge(root, base_ref, theirs_ref)
+    files_merged, clash_report, drop_report = run_merge(
+        root, base_ref, theirs_ref)
     total_clashes = sum(len(v) for v in clash_report.values())
+    total_drops = sum(len(v) for v in drop_report.values())
+    distinct_drops = sorted({k for keys in drop_report.values() for k in keys})
     print(f"\nmerged {files_merged} locale catalogue(s)")
     if clash_report:
         print(f"{total_clashes} key(s) where both sides changed (ours kept):")
@@ -397,6 +450,21 @@ def main(argv, cwd=None):
             print(f"  {rel}: {', '.join(keys)}")
     else:
         print("no clashing keys")
+    if drop_report:
+        print(f"\n{total_drops} key(s) REMOVED from {len(drop_report)} "
+              f"catalogue(s) -- upstream deleted them and we had not edited "
+              f"them. Check that none of them is load-bearing before merging:")
+        for name in distinct_drops:
+            where = sorted(rel for rel, keys in drop_report.items()
+                           if name in keys)
+            print(f"  {name}: {len(where)} file(s) -- {', '.join(where)}")
+    else:
+        print("no dropped keys")
+    # Machine-readable tail, parsed by scripts/upstream-sync.sh to build the
+    # PR body. Keep the prefixes stable; the script greps for them.
+    print(f"\nsummary-clashing-keys: {total_clashes}")
+    print(f"summary-dropped-keys: {total_drops}")
+    print(f"summary-dropped-key-names: {', '.join(distinct_drops)}")
     return 0
 
 
