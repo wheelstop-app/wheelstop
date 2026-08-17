@@ -120,7 +120,27 @@ for line in sys.stdin:
 Upstream-Commit: ${NEW}" )
 
 # 2. Merge into a sync branch off main.
-git branch -f "$BRANCH" main
+#
+# R12: base on origin/main, not the local `main` ref. A local `main` that
+# hasn't been fetched in a while is invisible in CI (fresh checkout, always
+# current) but silently wrong when this script is run locally after any gap
+# -- it would branch from a stale tree, resurrect files real `main` already
+# deleted, and report conflict counts that don't reflect reality. Fetching
+# origin here is not a new class of dependency: the script already talks to
+# a remote (upstream) before this point. BASE_REF is the single source of
+# truth for "what is the sync branch based on" -- used for both the branch
+# creation below and the locale "ours" restore in the merge subshell, so the
+# two can't independently drift onto different bases.
+git fetch --quiet origin main
+BASE_REF="origin/main"
+BASE_SHA=$(git rev-parse "$BASE_REF")
+if git rev-parse -q --verify refs/heads/main >/dev/null && \
+   [ "$(git rev-parse refs/heads/main)" != "$BASE_SHA" ]; then
+  echo "note: local main ($(git rev-parse --short refs/heads/main)) differs from $BASE_REF ($(git rev-parse --short "$BASE_SHA")) -- basing the sync on $BASE_REF, not local main" >&2
+fi
+echo "base: $BASE_REF @ $(git rev-parse --short "$BASE_SHA")"
+
+git branch -f "$BRANCH" "$BASE_REF"
 git worktree add --quiet "$WT-merge" "$BRANCH"
 STATUS=clean
 ( cd "$WT-merge"
@@ -134,23 +154,25 @@ STATUS=clean
   # branch even exists) can't fix that: at that point "ours" on disk is the
   # freshly-checked-out upstream tree itself, so ours==theirs and the merge
   # degenerates to a no-op there -- its only real effect in step 1 is the
-  # brand sweep. The genuine reconciliation needs main's actual branding as
-  # "ours", which only exists here. So: discard whatever git's line-level
-  # pass did to these paths (conflict markers or a wrong-but-clean
-  # auto-merge alike), restore them to main's real content, and rerun the
-  # key-level merger with base=fork point, theirs=the vendor tip just built
-  # (normalized identifiers + brand-swept locale values).
+  # brand sweep. The genuine reconciliation needs $BASE_REF's actual
+  # branding as "ours", which only exists here. So: discard whatever git's
+  # line-level pass did to these paths (conflict markers or a wrong-but-
+  # clean auto-merge alike), restore them to $BASE_REF's real content, and
+  # rerun the key-level merger with base=fork point, theirs=the vendor tip
+  # just built (normalized identifiers + brand-swept locale values).
   shopt -s nullglob
   LOCALE_FILES=(app/src/main/res/values*/strings.xml
                 app/src/main/assets/web/i18n/*.json
                 app/src/main/assets/server-i18n/*.json)
   shopt -u nullglob
   for f in "${LOCALE_FILES[@]:+${LOCALE_FILES[@]}}"; do
-    # A path main never had (a locale upstream just introduced) has nothing
-    # to restore from -- leave whatever the merge attempt already placed
-    # there; the key-level merger below treats a missing "ours" as "take
-    # theirs" anyway.
-    git checkout main -- "$f" 2>/dev/null || true
+    # A path $BASE_REF never had (a locale upstream just introduced) has
+    # nothing to restore from -- leave whatever the merge attempt already
+    # placed there; the key-level merger below treats a missing "ours" as
+    # "take theirs" anyway. Must be the SAME ref the branch was created
+    # from (R12) -- restoring from a different "ours" than the branch's
+    # actual base would just reintroduce the drift this fix closes.
+    git checkout "$BASE_REF" -- "$f" 2>/dev/null || true
   done
   python3 "$ROOT/scripts/upstream_merge_locales.py" "$FORK_POINT" vendor/upstream
 
