@@ -115,7 +115,8 @@
     "tyres_order": "يجب أن يكون الحد الأقصى للضغط أعلى من الحد الأدنى لكل محور",
     "tyres_critical_order": "يجب ألا يتجاوز الضغط الحرج الحد الأدنى لأي من المحورين",
     "tyres_nothing_to_update": "لا يوجد شيء للتحديث",
-    "tyres_persist_failed": "فشل في حفظ حدود ضغط الإطارات"
+    "tyres_persist_failed": "فشل في حفظ حدود ضغط الإطارات",
+    "vehicle_blocked_in_motion": "هذا الإجراء غير متاح أثناء تحرك السيارة"
   },
   "notifications": {
     "charging_started": "بدأ الشحن",

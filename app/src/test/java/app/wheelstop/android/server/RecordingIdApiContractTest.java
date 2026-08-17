@@ -42,7 +42,10 @@ public class RecordingIdApiContractTest {
 
         assertTrue(methodBody(api, "public static void invalidateRecordingCache")
                 .contains("removeByPath(absMp4Path)"));
-        assertFalse(methodBody(api, "private static void deleteSidecars")
+        // Comments are stripped first: upstream's own deleteSidecars explains the
+        // change in a comment that mentions RecordingsIndex.remove(filename), which a
+        // raw text assertion reads as a live call. Assert against code, not prose.
+        assertFalse(stripComments(methodBody(api, "private static void deleteSidecars"))
                 .contains("remove(filename)"));
         assertTrue(watcher.contains("removeByPath(new File(dir, path).getAbsolutePath())"));
         assertFalse(storage.contains("remove(file.getName())"));
@@ -93,5 +96,10 @@ public class RecordingIdApiContractTest {
             current = current.getParent();
         }
         throw new AssertionError("Could not locate repository file: " + relativePath);
+    }
+
+    /** Strip // and block comments so a text assertion sees code, not prose. */
+    private static String stripComments(String source) {
+        return source.replaceAll("(?s)/\\*.*?\\*/", "").replaceAll("//[^\n]*", "");
     }
 }

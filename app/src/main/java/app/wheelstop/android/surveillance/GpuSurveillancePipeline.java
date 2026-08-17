@@ -12,7 +12,6 @@ import app.wheelstop.android.config.UnifiedConfigManager;
 import app.wheelstop.android.daemon.CameraDaemon;
 import app.wheelstop.android.monitor.AccMonitor;
 import app.wheelstop.android.monitor.GearMonitor;
-import app.wheelstop.android.od.Od;
 import app.wheelstop.android.overlay.StatusOverlayService;
 import app.wheelstop.android.recording.ManualClipService;
 import app.wheelstop.android.recording.RecordingModeManager;
@@ -4129,11 +4128,7 @@ public class GpuSurveillancePipeline {
             android.content.Context odCtx = savedContext;
             if (odCtx == null) odCtx = CameraDaemon.getAppContext();
             if (odCtx != null) {
-<<<<<<< HEAD
                 app.wheelstop.android.blindspot.BsCoefficients.authorize(odCtx);
-=======
-                Od.authorize(odCtx);
->>>>>>> vendor/upstream
             } else {
                 logger.error("od authorize skipped: no context available");
             }
@@ -4950,13 +4945,8 @@ public class GpuSurveillancePipeline {
         // libod host-authorization (same context fallback as the stream lane).
         try {
             android.content.Context odCtx = savedContext;
-<<<<<<< HEAD
             if (odCtx == null) odCtx = app.wheelstop.android.daemon.CameraDaemon.getAppContext();
             if (odCtx != null) app.wheelstop.android.blindspot.BsCoefficients.authorize(odCtx);
-=======
-            if (odCtx == null) odCtx = CameraDaemon.getAppContext();
-            if (odCtx != null) Od.authorize(odCtx);
->>>>>>> vendor/upstream
         } catch (Throwable t) {
             logger.warn("BS: od init failed: " + t.getMessage());
         }
@@ -5153,29 +5143,11 @@ public class GpuSurveillancePipeline {
                 r = clampBsRect(r[0], r[1], r[2], r[3]);
             }
             bsGeomRect = new int[]{r[0], r[1], r[2], r[3]};   // atomic publish
-<<<<<<< HEAD
             // Push the resolved rotation onto the layer so the setGeometry calls that
             // follow (enable / show / retarget) composite the buffer at the right
             // angle. Cheap store; the rect above already matches the rotated aspect.
             app.wheelstop.android.surveillance.BsNativeLayer layer = bsLayer;
             if (layer != null) layer.setBufferRotation(bsRotationDeg);
-=======
-            // Rotation is applied in the GL render (bsScaler.setContentRotation via
-            // applyBlindSpotCalibration), so the SurfaceControl layer stays at IDENTITY
-            // orientation — a 90/270 LAYER transform is dropped by this firmware's
-            // compositor and blanks the card (issue #164). Force the layer's buffer
-            // rotation to 0 so no setGeometry call ever re-introduces a layer-level
-            // transform, and keep the dest rect at the buffer's native 4:3 (done above).
-            BsNativeLayer layer = bsLayer;
-            if (layer != null) layer.setBufferRotation(0);
-            // Keep the GL scaler's card rotation in sync with the freshly-resolved angle
-            // (covers the settings-write / enable path; the turn-tick AUTO path syncs it
-            // too). Gated to side/rear inside resolveBsRotation. bsCorner is resolved for
-            // the current side just above (preset branch), so align the rotated card to
-            // that corner's edge — a 90/270 card hugs left/right per side, not centered.
-            GpuStreamScaler bss = bsScaler;
-            if (bss != null) bss.setContentRotation(bsRotationDeg, bsRotationAlignX());
->>>>>>> vendor/upstream
         } catch (Throwable t) {
             logger.warn("resolveBsGeometry failed: " + t.getMessage());
             if (bsGeomRect[2] <= 0) bsGeomRect = new int[]{24, 24, 640, 480};
@@ -5928,7 +5900,6 @@ public class GpuSurveillancePipeline {
                 int wantRot = resolveBsRotation(bs, bsViewMode);
                 if (wantRot != bsRotationDeg) {
                     bsRotationDeg = wantRot;
-<<<<<<< HEAD
                     app.wheelstop.android.surveillance.BsNativeLayer rl = bsLayer;
                     if (rl != null) {
                         rl.setBufferRotation(wantRot);
@@ -5937,13 +5908,6 @@ public class GpuSurveillancePipeline {
                             rl.setGeometry(g[0], g[1], g[2], g[3]);
                         }
                     }
-=======
-                    GpuStreamScaler bss = bsScaler;
-                    // bsCorner reflects the current side (setBlindSpotViewMode's
-                    // reposition runs before this on a side change), so align the
-                    // rotated card to that side's edge.
-                    if (bss != null) bss.setContentRotation(wantRot, bsRotationAlignX());
->>>>>>> vendor/upstream
                 }
             }
             boolean debugPreview = bs.optBoolean("debugPreview", false);
@@ -6530,11 +6494,7 @@ public class GpuSurveillancePipeline {
             if (odCtx == null) odCtx = CameraDaemon.getAppContext();
             if (odCtx != null) {
                 if (this.savedContext == null) this.savedContext = odCtx;
-<<<<<<< HEAD
                 app.wheelstop.android.blindspot.BsCoefficients.authorize(odCtx);
-=======
-                Od.authorize(odCtx);
->>>>>>> vendor/upstream
             } else {
                 logger.error("od authorize retry skipped: no context available");
             }
@@ -6623,7 +6583,6 @@ public class GpuSurveillancePipeline {
         logger.info("Blind-spot merge mode set to " + mode);
     }
 
-<<<<<<< HEAD
     /** Forward blind-spot card clarity (views 7/8) to the scaler(s): contrast
      *  pivot (1.0 = neutral) and unsharp amount (0.0 = off). Pushes to BOTH the
      *  shared stream scaler (browser preview) and the dedicated BS lane's scaler
@@ -6633,22 +6592,6 @@ public class GpuSurveillancePipeline {
         if (ss != null) ss.setBlindSpotClarity(contrast, sharpen);
         app.wheelstop.android.streaming.GpuStreamScaler bs = bsScaler;
         if (bs != null) bs.setBlindSpotClarity(contrast, sharpen);
-=======
-    /**
-     * Fisheye/lens-dewarp strength (0..100) for the single-camera blind-spot views
-     * (side/rear). Separate knob from recording.rectifyStrength. Pushes to BOTH the
-     * shared stream scaler (browser preview) and the dedicated BS lane's scaler (what
-     * the overlay renders), mirroring {@link #setBlindSpotMergeMode}. The dewarp is a
-     * no-op in the merged 'both' view (shader only samples it in the merge 1/2
-     * passthrough). No-op-safe when a lane isn't up.
-     */
-    public void setBlindSpotRectifyStrength(int strength) {
-        GpuStreamScaler ss = streamScaler;
-        if (ss != null) ss.setBlindSpotRectifyStrength((float) strength);
-        GpuStreamScaler bs = bsScaler;
-        if (bs != null) bs.setBlindSpotRectifyStrength((float) strength);
-        logger.info("Blind-spot fisheye strength set to " + strength);
->>>>>>> vendor/upstream
     }
 
     /** Map the persisted string merge mode to the scaler's int code. */

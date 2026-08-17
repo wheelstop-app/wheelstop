@@ -400,8 +400,15 @@ class DaemonStartupManager(
         // post-update path; missing from the cold-start launch flow.)
         clearStaleSentinels()
 
-<<<<<<< HEAD
-        // Wait 45 seconds for system to fully stabilize before starting any daemons.
+        // Same Tailscale lead as the boot path. This path matters MORE in practice: BYD's
+        // broadcast suppression means the app is normally started by hand (`am start`) rather
+        // than by BOOT_COMPLETED, so initializeOnAppLaunch — not initializeOnBoot — is what
+        // actually runs. Hardware test 2026-07-31 with only the boot path fixed measured
+        // byd_cam_daemon at +50s and tailscaled at +65s, i.e. MQTT still came up 15s before
+        // its proxy existed.
+        scheduleTailscaleLead("App launch")
+
+        // Wait for the system to stabilize before starting any daemons.
         // Named Runnables (not inline lambdas) so a LATER CONTENDED verdict on
         // this instance can cancel them via cancelPendingDaemonStart() before
         // they fire — see the pendingCoreDaemonStart field doc.
@@ -411,26 +418,11 @@ class DaemonStartupManager(
         pendingCoreDaemonStart = coreStart
         pendingOptionalDaemonStart = optionalStart
         pendingHealthCheckStart = healthCheckStart
-        handler.postDelayed(coreStart, 45000)
-        handler.postDelayed(optionalStart, 60000)
+        handler.postDelayed(coreStart, DaemonBootSchedule.CORE_DELAY_MS)
+        handler.postDelayed(optionalStart, DaemonBootSchedule.OPTIONAL_DELAY_MS)
 
         // Start periodic health check after initial daemons have had time to start
-        handler.postDelayed(healthCheckStart, 90000)
-=======
-        // Same Tailscale lead as the boot path. This path matters MORE in practice: BYD's
-        // broadcast suppression means the app is normally started by hand (`am start`) rather
-        // than by BOOT_COMPLETED, so initializeOnAppLaunch — not initializeOnBoot — is what
-        // actually runs. Hardware test 2026-07-31 with only the boot path fixed measured
-        // byd_cam_daemon at +50s and tailscaled at +65s, i.e. MQTT still came up 15s before
-        // its proxy existed.
-        scheduleTailscaleLead("App launch")
-
-        // Wait 45 seconds for system to fully stabilize before starting any daemons
-        handler.postDelayed({ startCoreDaemons() }, DaemonBootSchedule.CORE_DELAY_MS)
-        handler.postDelayed({ startOptionalDaemonsFromPreferences() }, DaemonBootSchedule.OPTIONAL_DELAY_MS)
-
-        // Start periodic health check after initial daemons have had time to start
-        handler.postDelayed({ startDaemonHealthCheck() }, DaemonBootSchedule.HEALTH_CHECK_DELAY_MS)
+        handler.postDelayed(healthCheckStart, DaemonBootSchedule.HEALTH_CHECK_DELAY_MS)
     }
 
     /**
@@ -478,7 +470,6 @@ class DaemonStartupManager(
                 startTailscaleOnBoot()
             }
         }, DaemonBootSchedule.TAILSCALE_LEAD_DELAY_MS)
->>>>>>> vendor/upstream
     }
 
     /**
@@ -553,31 +544,23 @@ class DaemonStartupManager(
         // immediately. See initializeOnAppLaunch for the full rationale.
         clearStaleSentinels()
 
-<<<<<<< HEAD
-        // Wait 45 seconds for system to fully stabilize before starting any daemons.
-        // Named Runnables — see proceedInitializeOnAppLaunch for why (cancellable
-        // by a later CONTENDED verdict on this instance).
+        scheduleTailscaleLead("Boot")
+
+        // Wait for the system to stabilize before starting any daemons.
+        // Named Runnables (not inline lambdas) so a LATER CONTENDED verdict on
+        // this instance can cancel them via cancelPendingDaemonStart() before
+        // they fire — see the pendingCoreDaemonStart field doc.
         val coreStart = Runnable { pendingCoreDaemonStart = null; startCoreDaemonsViaAdb() }
         val optionalStart = Runnable { pendingOptionalDaemonStart = null; startOptionalDaemonsViaAdb() }
         val healthCheckStart = Runnable { pendingHealthCheckStart = null; startDaemonHealthCheck() }
         pendingCoreDaemonStart = coreStart
         pendingOptionalDaemonStart = optionalStart
         pendingHealthCheckStart = healthCheckStart
-        handler.postDelayed(coreStart, 45000)
-        handler.postDelayed(optionalStart, 60000)
+        handler.postDelayed(coreStart, DaemonBootSchedule.CORE_DELAY_MS)
+        handler.postDelayed(optionalStart, DaemonBootSchedule.OPTIONAL_DELAY_MS)
 
         // Start periodic health check after initial daemons have had time to start
-        handler.postDelayed(healthCheckStart, 90000)
-=======
-        scheduleTailscaleLead("Boot")
-
-        // Wait 45 seconds for system to fully stabilize before starting any daemons
-        handler.postDelayed({ startCoreDaemonsViaAdb() }, DaemonBootSchedule.CORE_DELAY_MS)
-        handler.postDelayed({ startOptionalDaemonsViaAdb() }, DaemonBootSchedule.OPTIONAL_DELAY_MS)
-
-        // Start periodic health check after initial daemons have had time to start
-        handler.postDelayed({ startDaemonHealthCheck() }, DaemonBootSchedule.HEALTH_CHECK_DELAY_MS)
->>>>>>> vendor/upstream
+        handler.postDelayed(healthCheckStart, DaemonBootSchedule.HEALTH_CHECK_DELAY_MS)
     }
 
 

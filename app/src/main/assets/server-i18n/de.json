@@ -118,7 +118,8 @@
     "tyres_order": "Der Höchstdruck muss für jede Achse höher als der Mindestdruck sein",
     "tyres_critical_order": "Der kritische Druck darf den Mindestdruck an keiner Achse überschreiten",
     "tyres_nothing_to_update": "Nichts zu aktualisieren",
-    "tyres_persist_failed": "Reifendruckgrenzwerte konnten nicht gespeichert werden"
+    "tyres_persist_failed": "Reifendruckgrenzwerte konnten nicht gespeichert werden",
+    "vehicle_blocked_in_motion": "Diese Aktion ist nicht verfügbar, während sich das Fahrzeug bewegt"
   },
   "notifications": {
     "charging_started": "Lade beginnt",

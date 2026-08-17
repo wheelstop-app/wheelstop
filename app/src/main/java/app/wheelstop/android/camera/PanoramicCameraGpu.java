@@ -1,6 +1,5 @@
 package app.wheelstop.android.camera;
 import app.wheelstop.android.config.UnifiedConfigManager;
-import app.wheelstop.android.od.Od;
 import app.wheelstop.android.streaming.GpuStreamScaler;
 
 import android.graphics.ImageFormat;
@@ -3878,11 +3877,7 @@ public class PanoramicCameraGpu {
                 if (nowDiagMs - bsDiagLastLogMs >= 5000L
                         && (bsDiagFrames > 0 || bsDiagSkipScaler > 0 || bsDiagSkipHidden > 0)) {
                     boolean odReady = false;
-<<<<<<< HEAD
                     try { odReady = app.wheelstop.android.blindspot.BsCoefficients.INSTANCE.isReady(); } catch (Throwable ignored) {}
-=======
-                    try { odReady = Od.INSTANCE.isReady(); } catch (Throwable ignored) {}
->>>>>>> vendor/upstream
                     logger.info("BS render diag: drawn=" + bsDiagFrames
                             + " skipNoScaler=" + bsDiagSkipScaler
                             + " skipHidden=" + bsDiagSkipHidden

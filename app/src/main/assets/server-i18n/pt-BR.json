@@ -118,7 +118,8 @@
     "tyres_nothing_to_update": "Nada para atualizar",
     "tyres_persist_failed": "Falha ao salvar os limites dos pneus",
     "recordings_index_unavailable": "Índice de gravações indisponível",
-    "surveillance_all_classes_off": "Esta salvamento desativará todas as classes de objetos, desligando a detecção por IA por completo. Confirme para prosseguir."
+    "surveillance_all_classes_off": "Esta salvamento desativará todas as classes de objetos, desligando a detecção por IA por completo. Confirme para prosseguir.",
+    "vehicle_blocked_in_motion": "Esta ação não está disponível enquanto o veículo está em movimento"
   },
   "notifications": {
     "charging_started": "Carregamento iniciado",

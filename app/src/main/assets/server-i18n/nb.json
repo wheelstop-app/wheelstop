@@ -112,7 +112,8 @@
     "tyres_critical_order": "Kritisk dekktrykk må ikke overstige minimumsverdien for noen av akslene",
     "tyres_nothing_to_update": "Ingenting å oppdatere",
     "tyres_persist_failed": "Kunne ikke lagre dekktrykkgrensene",
-    "recordings_index_unavailable": "Opptaksindeks utilgjengelig"
+    "recordings_index_unavailable": "Opptaksindeks utilgjengelig",
+    "vehicle_blocked_in_motion": "Denne handlingen er ikke tilgjengelig mens kjøretøyet er i bevegelse"
   },
   "notifications": {
     "charging_started": "Lading startet.",

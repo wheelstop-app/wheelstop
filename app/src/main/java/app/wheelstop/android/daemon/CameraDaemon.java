@@ -40,7 +40,6 @@ import app.wheelstop.android.notifications.sinks.HistorySink;
 import app.wheelstop.android.notifications.sinks.LogSink;
 import app.wheelstop.android.notifications.sinks.PushSink;
 import app.wheelstop.android.notifications.sinks.TelegramSink;
-import app.wheelstop.android.od.Od;
 import app.wheelstop.android.power.StealthPanel;
 import app.wheelstop.android.receiver.CastPackageWatcher;
 import app.wheelstop.android.recording.RecordingModeManager;
@@ -5798,20 +5797,9 @@ public class CameraDaemon {
             log("Surveillance library already loaded");
         }
 
-<<<<<<< HEAD
         // Blind-spot (view-7/8) stitch coefficients are computed in pure Kotlin now
         // (BsCoefficients.resolve()), not the withheld libod.so blob — so there is no native
         // library to load here. The daemon computes coefficients identically to the app.
-=======
-        // Load libod.so via explicit path too — System.loadLibrary("od") can't
-        // resolve by name in the app_process daemon (same reason as surveillance).
-        // Without this, Od.resolve() returns zeros in the daemon and the view-7/8
-        // stitch shader gets all-zero coefficients → black blind-spot stream.
-        if (nativeLibDir != null) {
-            boolean odLoaded = Od.tryLoadLibrary(nativeLibDir);
-            log("od native lib loaded (daemon): " + odLoaded);
-        }
->>>>>>> vendor/upstream
     }
     
     private static void loadSurveillanceFromPath(String nativeLibDir) {

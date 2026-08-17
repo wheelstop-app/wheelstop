@@ -17,7 +17,9 @@ public class RecordingsReconcileFreshnessTest {
     public void reconcileSnapshotsAndComparesStoredFingerprints() throws IOException {
         String source = readRepositoryFile(
                 "app/src/main/java/app/wheelstop/android/server/RecordingsIndex.java");
-        String reconcile = methodBody(source, "public void reconcile()");
+        // reconcile() is a thin synchronized wrapper upstream added; the fingerprint
+        // logic this test is about lives in reconcileInternal().
+        String reconcile = methodBody(source, "private void reconcileInternal()");
 
         assertTrue(reconcile.contains("Map<String, RecordingFileFingerprint> diskFiles"));
         assertTrue(source.contains(

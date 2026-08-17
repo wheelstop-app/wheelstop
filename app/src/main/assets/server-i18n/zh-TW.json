@@ -118,7 +118,8 @@
     "tyres_nothing_to_update": "沒有需要更新的項目",
     "tyres_persist_failed": "無法儲存胎壓門檻值",
     "recordings_index_unavailable": "錄影索引無法使用",
-    "surveillance_all_classes_off": "此次儲存會停用所有物件類別，導致 AI 偵測完全關閉。請確認後繼續。"
+    "surveillance_all_classes_off": "此次儲存會停用所有物件類別，導致 AI 偵測完全關閉。請確認後繼續。",
+    "vehicle_blocked_in_motion": "車輛行駛中無法使用此操作"
   },
   "notifications": {
     "charging_started": "開始充電",

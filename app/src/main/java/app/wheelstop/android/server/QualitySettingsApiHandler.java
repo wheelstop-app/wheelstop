@@ -512,31 +512,6 @@ public class QualitySettingsApiHandler {
                 response.put("message", Messages.get("messages.quality_storage_settings_updated"));
             }
 
-<<<<<<< HEAD
-            // Re-arm RecordingsIndex FileObservers against the new active dir
-            // set, AND walk the new active dir to populate the index. The
-            // refresh-only call would only catch live writes going forward —
-            // existing files on the new volume would be invisible to the
-            // index until the 1-hour periodic reconcile. Reconcile here fills
-            // them immediately. Run on a background thread so the HTTP
-            // response doesn't block on the FUSE walk.
-            if (storageTypeChanged) {
-                try {
-                    RecordingsIndexFileWatcher.getInstance().refresh();
-                } catch (Throwable t) {
-                    CameraDaemon.log("RecordingsIndexFileWatcher refresh failed: " + t.getMessage());
-                }
-                new Thread(() -> {
-                    try {
-                        RecordingsIndex.getInstance().reconcile();
-                    } catch (Throwable t) {
-                        CameraDaemon.log("Post-storage-switch reconcile failed: " + t.getMessage());
-                    }
-                }, "RecordingsIndexStorageSwitchReconcile").start();
-            }
-            
-=======
->>>>>>> vendor/upstream
             HttpResponse.sendJson(out, response.toString());
             
         } catch (Exception e) {
@@ -729,10 +704,6 @@ public class QualitySettingsApiHandler {
             if ("blindspot".equals(section) && data.has("rectifyStrength")) {
                 try {
                     GpuSurveillancePipeline p = CameraDaemon.getGpuPipeline();
-<<<<<<< HEAD
-=======
-                    if (p != null) p.setBlindSpotRectifyStrength(data.optInt("rectifyStrength", 0));
->>>>>>> vendor/upstream
                 } catch (Exception e) {
                     CameraDaemon.log("blindspot fisheye dispatch failed: " + e.getMessage());
                 }

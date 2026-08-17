@@ -118,7 +118,8 @@
     "tyres_nothing_to_update": "업데이트할 항목이 없습니다",
     "tyres_persist_failed": "타이어 공기압 기준값을 저장하지 못했습니다",
     "recordings_index_unavailable": "녹화 색인을 사용할 수 없음",
-    "surveillance_all_classes_off": "이대로 저장하면 모든 객체 클래스가 사용 중지되어 AI 감지가 완전히 꺼집니다. 계속하려면 확인하세요."
+    "surveillance_all_classes_off": "이대로 저장하면 모든 객체 클래스가 사용 중지되어 AI 감지가 완전히 꺼집니다. 계속하려면 확인하세요.",
+    "vehicle_blocked_in_motion": "차량이 주행 중일 때는 이 작업을 사용할 수 없습니다"
   },
   "notifications": {
     "charging_started": "충전 시작",
