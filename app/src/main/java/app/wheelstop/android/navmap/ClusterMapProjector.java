@@ -1,4 +1,5 @@
 package app.wheelstop.android.navmap;
+import app.wheelstop.android.config.UnifiedConfigManager;
 
 import app.wheelstop.android.logging.DaemonLogger;
 import app.wheelstop.android.surveillance.ClusterProjectionController;
@@ -121,7 +122,7 @@ public final class ClusterMapProjector {
         try {
             java.util.Map<String, Object> m = new java.util.HashMap<>();
             m.put(K_CLUSTER_MAP_ACTIVE, activeFlag);
-            app.wheelstop.android.config.UnifiedConfigManager.updateValues(NAVMAP_SECTION, m);
+            UnifiedConfigManager.updateValues(NAVMAP_SECTION, m);
         } catch (Throwable t) {
             logger.warn("publishActiveFlag(" + activeFlag + ") failed: " + t.getMessage());
         }
@@ -197,7 +198,7 @@ public final class ClusterMapProjector {
                     + "ms — aborting cluster map projection (no clobber of display 0)");
             active = false;
             publishActiveFlag(false);   // dismiss any Activity that did come up
-            try { app.wheelstop.android.surveillance.ClusterProjectionController.getInstance().releaseSustained(); }
+            try { ClusterProjectionController.getInstance().releaseSustained(); }
             catch (Throwable ignored) {}
             return;
         }
@@ -558,7 +559,7 @@ public final class ClusterMapProjector {
      *  over the restored gauges. */
     private static boolean isSustainedProjectionHeld() {
         try {
-            return app.wheelstop.android.surveillance.ClusterProjectionController.isSustainedHeldStatic();
+            return ClusterProjectionController.isSustainedHeldStatic();
         } catch (Throwable t) {
             // On any reflection/link error, FAIL SAFE: assume NOT held so we never relaunch
             // a ghost map over the gauges. Worst case the map doesn't auto-recover on swipe

@@ -118,8 +118,7 @@
     "tyres_nothing_to_update": "Niente da aggiornare",
     "tyres_persist_failed": "Salvataggio dei limiti degli pneumatici non riuscito",
     "recordings_index_unavailable": "Indice delle registrazioni non disponibile",
-    "surveillance_all_classes_off": "Questo salvataggio disattiverebbe tutte le classi di oggetti, spegnendo completamente il rilevamento AI. Conferma per procedere.",
-    "vehicle_blocked_in_motion": "Questa azione non è disponibile mentre il veicolo è in movimento"
+    "surveillance_all_classes_off": "Questo salvataggio disattiverebbe tutte le classi di oggetti, spegnendo completamente il rilevamento AI. Conferma per procedere."
   },
   "notifications": {
     "charging_started": "Ricarica avviata",

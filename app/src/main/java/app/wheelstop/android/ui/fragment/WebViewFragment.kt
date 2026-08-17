@@ -1,5 +1,15 @@
 package app.wheelstop.android.ui.fragment
 
+import app.wheelstop.android.auth.AuthManager
+import app.wheelstop.android.mqtt.ProxyHelper
+import app.wheelstop.android.navmap.RoadSenseMapActivity
+import app.wheelstop.android.roadsense.config.RoadSenseConfig
+import app.wheelstop.android.roadsense.overlay.BlindSpotControl
+import app.wheelstop.android.roadsense.overlay.RoadSenseOverlayService
+import app.wheelstop.android.server.LocaleManager
+import app.wheelstop.android.ui.model.RecordingFile
+import app.wheelstop.android.ui.util.PreferencesManager
+import app.wheelstop.android.ui.util.RecordingScanner
 import android.annotation.SuppressLint
 import android.content.res.Configuration
 import android.net.Uri
@@ -537,7 +547,7 @@ class WebViewFragment : Fragment() {
                     // 504 makes the resource fail instantly so the page can
                     // continue without it.
                     if (isMapTile) {
-                        val proxyAvailable = app.wheelstop.android.mqtt.ProxyHelper.isProxyAvailable()
+                        val proxyAvailable = ProxyHelper.isProxyAvailable()
 
                         val httpProxy: java.net.Proxy by lazy {
                             java.net.Proxy(java.net.Proxy.Type.HTTP,
@@ -1054,7 +1064,7 @@ class WebViewFragment : Fragment() {
         val appCtx = act.applicationContext
         deepLinkInFlight = true
         Thread({
-            var match: app.wheelstop.android.ui.model.RecordingFile? = null
+            var match: RecordingFile? = null
             try {
                 // One bounded re-scan: a freshly-fired notification can arrive
                 // before the daemon has indexed the clip (scan returns empty
@@ -1062,7 +1072,7 @@ class WebViewFragment : Fragment() {
                 // mirroring how events.js polls inflight.
                 var attempts = 0
                 while (attempts < 3) {
-                    val all = app.wheelstop.android.ui.util.RecordingScanner.scanRecordings(appCtx)
+                    val all = RecordingScanner.scanRecordings(appCtx)
                     match = all.firstOrNull { it.file.name == filename }
                     if (match != null || attempts == 2) break
                     attempts++
@@ -1083,11 +1093,11 @@ class WebViewFragment : Fragment() {
                     if (resolved != null) {
                         val bundle = android.os.Bundle().apply {
                             putString(
-                                app.wheelstop.android.ui.fragment.VideoPlayerFragment.ARG_VIDEO_PATH,
+                                VideoPlayerFragment.ARG_VIDEO_PATH,
                                 resolved.file.absolutePath
                             )
                             putString(
-                                app.wheelstop.android.ui.fragment.VideoPlayerFragment.ARG_VIDEO_TITLE,
+                                VideoPlayerFragment.ARG_VIDEO_TITLE,
                                 resolved.file.name
                             )
                         }
@@ -1143,7 +1153,7 @@ class WebViewFragment : Fragment() {
         @android.webkit.JavascriptInterface
         fun getAppLocale(): String {
             return try {
-                app.wheelstop.android.server.LocaleManager.get()
+                LocaleManager.get()
             } catch (e: Exception) {
                 "en"
             }
@@ -1161,7 +1171,7 @@ class WebViewFragment : Fragment() {
         fun syncBlindSpotOverlay(): String {
             try {
                 val ctx = context ?: return "no_context"
-                app.wheelstop.android.roadsense.overlay.BlindSpotControl.sync(ctx)
+                BlindSpotControl.sync(ctx)
                 return "ok"
             } catch (e: Exception) {
                 android.util.Log.w("WebViewFragment", "syncBlindSpotOverlay bridge failed: ${e.message}")
@@ -1185,11 +1195,11 @@ class WebViewFragment : Fragment() {
             return try {
                 val ctx = context ?: return "no_context"
                 // Read here (WebView worker): snapshot(forceReload) hits disk.
-                val shouldShow = app.wheelstop.android.roadsense.config.RoadSenseConfig
+                val shouldShow = RoadSenseConfig
                     .snapshot(forceReload = true).overlayShouldShow()
                 ctx.mainExecutor.execute {
                     try {
-                        app.wheelstop.android.roadsense.overlay.RoadSenseOverlayService
+                        RoadSenseOverlayService
                             .syncWithConfig(ctx, shouldShow)
                     } catch (e: Exception) {
                         android.util.Log.w("WebViewFragment", "syncRoadSenseOverlay apply failed: ${e.message}")
@@ -1217,7 +1227,7 @@ class WebViewFragment : Fragment() {
                 act.runOnUiThread {
                     try {
                         act.startActivity(
-                            android.content.Intent(act, app.wheelstop.android.navmap.RoadSenseMapActivity::class.java)
+                            android.content.Intent(act, RoadSenseMapActivity::class.java)
                         )
                     } catch (e: Exception) {
                         android.util.Log.w("WebViewFragment", "openHazardMap launch failed: ${e.message}")
@@ -1260,7 +1270,7 @@ class WebViewFragment : Fragment() {
             // in the app left this returning "dark" until the OS itself
             // flipped, which is exactly the bug the user reported.
             try {
-                val pref = app.wheelstop.android.ui.util.PreferencesManager.getThemeMode()
+                val pref = PreferencesManager.getThemeMode()
                 when (pref) {
                     androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_NO -> return "light"
                     androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES -> return "dark"
@@ -1358,28 +1368,28 @@ class WebViewFragment : Fragment() {
     private fun getAuthJwt(): String? {
         // Cache JWT for 5 minutes to avoid spamming auth state saves
         val now = System.currentTimeMillis()
-        val curVersion = app.wheelstop.android.auth.AuthManager.getStateVersion()
+        val curVersion = AuthManager.getStateVersion()
         if (cachedJwt != null && now < jwtExpiry && cachedJwtStateVersion == curVersion) return cachedJwt
         
         return try {
             // Try to initialize AuthManager if not already done
-            if (app.wheelstop.android.auth.AuthManager.getState() == null) {
-                app.wheelstop.android.auth.AuthManager.initialize()
+            if (AuthManager.getState() == null) {
+                AuthManager.initialize()
             }
             
-            var jwt = app.wheelstop.android.auth.AuthManager.generateJwt()
+            var jwt = AuthManager.generateJwt()
             
             // If JWT generation failed, try reading auth state directly from daemon's file
             if (jwt == null) {
                 android.util.Log.w("WebView", "JWT generation failed, retrying with fresh init...")
-                app.wheelstop.android.auth.AuthManager.initialize()
-                jwt = app.wheelstop.android.auth.AuthManager.generateJwt()
+                AuthManager.initialize()
+                jwt = AuthManager.generateJwt()
             }
             
             if (jwt != null) {
                 cachedJwt = jwt
                 jwtExpiry = now + 5 * 60 * 1000  // 5 min cache
-                cachedJwtStateVersion = app.wheelstop.android.auth.AuthManager.getStateVersion()
+                cachedJwtStateVersion = AuthManager.getStateVersion()
                 android.util.Log.d("WebView", "JWT generated successfully")
             } else {
                 android.util.Log.e("WebView", "JWT generation failed after retry")
@@ -1522,7 +1532,7 @@ class WebViewFragment : Fragment() {
 
     private fun resolveActiveTheme(): String {
         try {
-            val pref = app.wheelstop.android.ui.util.PreferencesManager.getThemeMode()
+            val pref = PreferencesManager.getThemeMode()
             when (pref) {
                 androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_NO -> return "light"
                 androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES -> return "dark"

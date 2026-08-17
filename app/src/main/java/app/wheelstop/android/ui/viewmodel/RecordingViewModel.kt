@@ -1,5 +1,6 @@
 package app.wheelstop.android.ui.viewmodel
 
+import app.wheelstop.android.storage.StorageManager
 import android.app.Application
 import android.os.Handler
 import android.os.Looper
@@ -160,7 +161,7 @@ class RecordingViewModel(app: Application) : AndroidViewModel(app) {
     fun updateStorageInfo() {
         try {
             // SOTA: Use StorageManager to get actual recordings storage info
-            val storageManager = app.wheelstop.android.storage.StorageManager.getInstance()
+            val storageManager = StorageManager.getInstance()
             val used = storageManager.recordingsSize
             
             // Get available space from the actual storage location

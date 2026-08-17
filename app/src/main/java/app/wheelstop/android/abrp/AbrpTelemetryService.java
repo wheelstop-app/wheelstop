@@ -1,4 +1,7 @@
 package app.wheelstop.android.abrp;
+import app.wheelstop.android.byd.BydDataCollector;
+import app.wheelstop.android.byd.BydVehicleData;
+import app.wheelstop.android.weather.WeatherTemperature;
 
 import android.content.Context;
 
@@ -184,8 +187,8 @@ public class AbrpTelemetryService {
 
         try {
             // Read BYD data from cached snapshot (refreshed by BydDataCollector's 5s polling timer)
-            app.wheelstop.android.byd.BydDataCollector collector = app.wheelstop.android.byd.BydDataCollector.getInstance();
-            app.wheelstop.android.byd.BydVehicleData vd = collector.isInitialized() ? collector.getData() : null;
+            BydDataCollector collector = BydDataCollector.getInstance();
+            BydVehicleData vd = collector.isInitialized() ? collector.getData() : null;
 
             // utc
             payload.put("utc", System.currentTimeMillis() / 1000);
@@ -329,7 +332,7 @@ public class AbrpTelemetryService {
             payload.put("is_charging", isCharging ? 1 : 0);
 
             // is_dcfc — gun state from collector
-            if (vd != null && vd.chargingGunState != app.wheelstop.android.byd.BydVehicleData.UNAVAILABLE) {
+            if (vd != null && vd.chargingGunState != BydVehicleData.UNAVAILABLE) {
                 payload.put("is_dcfc", vd.chargingGunState == 3 ? 1 : 0);
                 // V2L is gun state 5 (VTOL), not 4 (=AC_DC, a real charging gun). The
                 // old `== 4` zeroed is_charging during genuine AC_DC charging. Matches
@@ -339,7 +342,7 @@ public class AbrpTelemetryService {
 
             // is_parked — gear from collector
             boolean isParked = false;
-            if (vd != null && vd.gearMode != app.wheelstop.android.byd.BydVehicleData.UNAVAILABLE) {
+            if (vd != null && vd.gearMode != BydVehicleData.UNAVAILABLE) {
                 isParked = vd.gearMode == GearMonitor.GEAR_P;
             } else {
                 isParked = gearMonitor.getCurrentGear() == GearMonitor.GEAR_P;
@@ -365,7 +368,7 @@ public class AbrpTelemetryService {
             }
 
             // odometer — from collector
-            if (vd != null && vd.totalMileageKm != app.wheelstop.android.byd.BydVehicleData.UNAVAILABLE) {
+            if (vd != null && vd.totalMileageKm != BydVehicleData.UNAVAILABLE) {
                 int raw = vd.totalMileageKm;
                 payload.put("odometer", raw > 1_000_000 ? raw / 10.0 : (double) raw);
             }
@@ -413,7 +416,7 @@ public class AbrpTelemetryService {
             }
 
             // est_battery_range — EV range in km (ABRP standard field)
-            if (vd != null && vd.elecRangeKm != app.wheelstop.android.byd.BydVehicleData.UNAVAILABLE && vd.elecRangeKm > 0) {
+            if (vd != null && vd.elecRangeKm != BydVehicleData.UNAVAILABLE && vd.elecRangeKm > 0) {
                 payload.put("est_battery_range", vd.elecRangeKm);
             }
 
@@ -715,7 +718,7 @@ public class AbrpTelemetryService {
         // temperature fallback and ABRP ext_temp share ONE cache + network path.
         // This runs on ABRP's own upload thread (off the telemetry hot path), so a
         // synchronous fetch is fine here.
-        return app.wheelstop.android.weather.WeatherTemperature.fetchNow(lat, lon);
+        return WeatherTemperature.fetchNow(lat, lon);
     }
 
     /**

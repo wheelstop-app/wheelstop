@@ -1,5 +1,29 @@
 package app.wheelstop.android.ui
 
+import app.wheelstop.android.auth.PinManager
+import app.wheelstop.android.auth.PinSession
+import app.wheelstop.android.camera.ConcurrentAvmProbe
+import app.wheelstop.android.config.UnifiedConfigManager
+import app.wheelstop.android.launcher.AdbShellExecutor
+import app.wheelstop.android.navmap.RoadSenseMapActivity
+import app.wheelstop.android.onboarding.CameraWizardCoach
+import app.wheelstop.android.onboarding.OnboardingHost
+import app.wheelstop.android.onboarding.OnboardingState
+import app.wheelstop.android.overlay.SetupGuideDialog
+import app.wheelstop.android.overlay.StatusOverlayService
+import app.wheelstop.android.receiver.ProcessRevivalReceiver
+import app.wheelstop.android.roadsense.overlay.BlindSpotControl
+import app.wheelstop.android.roadsense.overlay.RoadSenseOverlayService
+import app.wheelstop.android.server.DaemonIpcClient
+import app.wheelstop.android.services.LocationSidecarService
+import app.wheelstop.android.ui.dialog.LanguagePickerDialog
+import app.wheelstop.android.ui.fragment.DashboardFragment
+import app.wheelstop.android.ui.fragment.SettingsFragment
+import app.wheelstop.android.updater.AppUpdater
+import app.wheelstop.android.updater.UpdateDialog
+import app.wheelstop.android.updater.UpdateLifecycle
+import app.wheelstop.android.util.DaemonHttpClient
+import app.wheelstop.android.util.DeviceIdGenerator
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
@@ -60,11 +84,11 @@ class MainActivity : AppCompatActivity() {
     private val mainViewModel: MainViewModel by viewModels()
     private val daemonsViewModel: DaemonsViewModel by viewModels()
     private val logsViewModel: LogsViewModel by viewModels()
-    private var appUpdater: app.wheelstop.android.updater.AppUpdater? = null
+    private var appUpdater: AppUpdater? = null
 
     // Daemon startup manager
     private lateinit var daemonStartupManager: DaemonStartupManager
-    private var onboardingHost: app.wheelstop.android.onboarding.OnboardingHost? = null
+    private var onboardingHost: OnboardingHost? = null
     // Bounded poll while waiting for an onboarding navigation to commit (~2s total).
     private val NAV_POLL_INTERVAL_MS = 100L
     private val NAV_POLL_MAX_ATTEMPTS = 20
@@ -147,12 +171,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Initialize DeviceIdGenerator with ADB executor for file sync
-        val adbExecutor = app.wheelstop.android.launcher.AdbShellExecutor(this)
-        app.wheelstop.android.util.DeviceIdGenerator.init(adbExecutor)
+        val adbExecutor = AdbShellExecutor(this)
+        DeviceIdGenerator.init(adbExecutor)
         
         // Generate device ID early - this syncs to file for daemon compatibility
         // Must happen BEFORE any daemon starts
-        val deviceId = app.wheelstop.android.util.DeviceIdGenerator.generateDeviceId(this)
+        val deviceId = DeviceIdGenerator.generateDeviceId(this)
         android.util.Log.i("MainActivity", "Device ID initialized: $deviceId")
         
         // Apply BYD whitelist (ACC + data cache) to prevent background killing
@@ -170,7 +194,7 @@ class MainActivity : AppCompatActivity() {
         // soon as the panel sleeps. Idempotent — safe to call again on
         // config-change recreate. The receiver is held by the application
         // process so it survives Activity destruction.
-        app.wheelstop.android.auth.PinSession.ensureScreenOffReceiverRegistered(applicationContext)
+        PinSession.ensureScreenOffReceiverRegistered(applicationContext)
 
         // Latch the headless-boot silence flag exactly once from the
         // initial launch intent and STRIP the extra so the OS task-restore
@@ -213,7 +237,7 @@ class MainActivity : AppCompatActivity() {
         // Seed out-of-process revival watchdog so the process gets resurrected
         // if it ever gets force-stopped or OOM-killed without an external event.
         try {
-            app.wheelstop.android.receiver.ProcessRevivalReceiver.schedule(applicationContext)
+            ProcessRevivalReceiver.schedule(applicationContext)
         } catch (e: Exception) {
             android.util.Log.w("MainActivity", "ProcessRevivalReceiver.schedule failed: ${e.message}")
         }
@@ -247,7 +271,7 @@ class MainActivity : AppCompatActivity() {
             // shared daemonStartupManager.adbLauncher — allocating a fresh
             // AdbDaemonLauncher here would leak its non-daemon executor + a
             // tunnel-poll scheduler thread on every postDelayed firing.
-            daemonStartupManager.adbLauncher.executeShellCommand("rm -f /data/local/tmp/wheelstop_update.apk", object : app.wheelstop.android.launcher.AdbDaemonLauncher.LaunchCallback {
+            daemonStartupManager.adbLauncher.executeShellCommand("rm -f /data/local/tmp/wheelstop_update.apk", object : AdbDaemonLauncher.LaunchCallback {
                 override fun onLog(message: String) {}
                 override fun onLaunched() {}
                 override fun onError(error: String) {}
@@ -260,11 +284,11 @@ class MainActivity : AppCompatActivity() {
             // apply()). So only consume here on a NORMAL launch (where the
             // post-update path won't run). The markers survive to the next
             // launch if neither path ran.
-            if (!app.wheelstop.android.updater.UpdateLifecycle.isPostUpdateLaunch(this, intent)) {
+            if (!UpdateLifecycle.isPostUpdateLaunch(this, intent)) {
                 // Surface failed-install errors first (consumeJustUpdatedVersion
                 // returns null when a failure marker is present, so the success
                 // toast never fires on a failed install).
-                val installError = app.wheelstop.android.updater.AppUpdater.consumeFailedUpdateError(this)
+                val installError = AppUpdater.consumeFailedUpdateError(this)
                 if (installError != null) {
                     Toast.makeText(this, getString(R.string.toast_update_install_failed, installError), Toast.LENGTH_LONG).show()
                     logsViewModel.warn("Update", "Install failed: $installError")
@@ -281,10 +305,10 @@ class MainActivity : AppCompatActivity() {
                 // braveheart in-place re-upload. Empty marker (remoteVersion was
                 // "unknown") → fall through getDisplayVersion (still VERSION_FILE-
                 // first, only drops to BuildConfig on a fresh sideload).
-                val justUpdated = app.wheelstop.android.updater.AppUpdater.consumeJustUpdatedVersion(this)
+                val justUpdated = AppUpdater.consumeJustUpdatedVersion(this)
                 if (justUpdated != null) {
                     val shown = if (justUpdated.isNotEmpty()) justUpdated
-                                else app.wheelstop.android.updater.AppUpdater.getDisplayVersion(this)
+                                else AppUpdater.getDisplayVersion(this)
                     Toast.makeText(this, getString(R.string.toast_updated_to, shown), Toast.LENGTH_LONG).show()
                     logsViewModel.info("Update", "App updated to $shown")
                 }
@@ -327,12 +351,12 @@ class MainActivity : AppCompatActivity() {
      * autostart whitelist on each install.
      */
     private fun startStatusOverlay() {
-        val hasPermission = app.wheelstop.android.overlay.StatusOverlayService.hasOverlayPermission(this)
+        val hasPermission = StatusOverlayService.hasOverlayPermission(this)
         android.util.Log.i("MainActivity", "Overlay permission: $hasPermission")
         logsViewModel.info("Overlay", "Overlay permission: $hasPermission")
 
         if (hasPermission) {
-            app.wheelstop.android.overlay.StatusOverlayService.startIfPermitted(this)
+            StatusOverlayService.startIfPermitted(this)
             logsViewModel.info("Overlay", "Status overlay service started")
         }
 
@@ -347,7 +371,7 @@ class MainActivity : AppCompatActivity() {
         // showIfNeeded is no-op when the seen install-time matches the current
         // PackageInfo.lastUpdateTime, so it's safe to call on every launch.
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-            val guideShown = app.wheelstop.android.overlay.SetupGuideDialog.showIfNeeded(this)
+            val guideShown = SetupGuideDialog.showIfNeeded(this)
             // Sequence the onboarding guide AFTER the setup-guide perms dialog. If the
             // setup guide was shown this launch, wait for the user to clear it before
             // starting onboarding (SetupGuideDialog has no completion callback, so we
@@ -362,7 +386,7 @@ class MainActivity : AppCompatActivity() {
     private fun maybeStartOnboarding(delayMs: Long) {
         val runner = Runnable {
             if (isFinishing || isDestroyed) return@Runnable
-            val host = onboardingHost ?: app.wheelstop.android.onboarding.OnboardingHost(
+            val host = onboardingHost ?: OnboardingHost(
                 this, daemonStartupManager.adbLauncher,
             ).also { onboardingHost = it }
             host.startIfNeeded()
@@ -440,7 +464,7 @@ class MainActivity : AppCompatActivity() {
      * The 1-second postDelayed gives ADB / device-id sync time to settle.
      */
     private fun runDaemonStartup(intent: android.content.Intent?, fromOnCreate: Boolean) {
-        val isPostUpdate = app.wheelstop.android.updater.UpdateLifecycle
+        val isPostUpdate = UpdateLifecycle
             .isPostUpdateLaunch(this, intent)
         // Skip the postDelayed boilerplate when called from onNewIntent for
         // a non-post-update intent — daemons are already up from onCreate
@@ -471,7 +495,7 @@ class MainActivity : AppCompatActivity() {
             Thread {
                 try {
                     try {
-                        val synced = app.wheelstop.android.util.DeviceIdGenerator
+                        val synced = DeviceIdGenerator
                             .syncDeviceIdToFileSync(this)
                         android.util.Log.i("MainActivity", "Device ID sync result: $synced")
                     } catch (e: Exception) {
@@ -534,7 +558,7 @@ class MainActivity : AppCompatActivity() {
                             daemonStartupCoordinator.watchdogHandler = mainHandler
                         }
                         mainHandler.postDelayed(watchdog, 30_000)
-                        app.wheelstop.android.updater.UpdateLifecycle.hardResetDaemons(this) {
+                        UpdateLifecycle.hardResetDaemons(this) {
                             if (callbackFired.compareAndSet(false, true)) {
                                 synchronized (daemonStartupCoordinator) {
                                     daemonStartupCoordinator.pendingWatchdog?.let {
@@ -585,7 +609,7 @@ class MainActivity : AppCompatActivity() {
      * twice in one process lifetime fires toasts only once.
      */
     private fun showPostUpdateToasts() {
-        val installError = app.wheelstop.android.updater.AppUpdater
+        val installError = AppUpdater
             .consumeFailedUpdateError(this)
         if (installError != null) {
             runOnUiThread {
@@ -595,7 +619,7 @@ class MainActivity : AppCompatActivity() {
                 logsViewModel.warn("Update", "Install failed: $installError")
             }
         }
-        val justUpdated = app.wheelstop.android.updater.AppUpdater
+        val justUpdated = AppUpdater
             .consumeJustUpdatedVersion(this)
         if (justUpdated != null) {
             // Marker non-null = update succeeded; DISPLAY the installed GitHub
@@ -607,7 +631,7 @@ class MainActivity : AppCompatActivity() {
             // (braveheart-v26.0), which is stale on a braveheart in-place
             // re-upload. Empty marker → getDisplayVersion (VERSION_FILE-first).
             val shown = if (justUpdated.isNotEmpty()) justUpdated
-                        else app.wheelstop.android.updater.AppUpdater.getDisplayVersion(this)
+                        else AppUpdater.getDisplayVersion(this)
             runOnUiThread {
                 Toast.makeText(this,
                     getString(R.string.toast_updated_to, shown),
@@ -660,7 +684,7 @@ class MainActivity : AppCompatActivity() {
         maybeShowPinLock()
 
         // Try to start overlay if permission was just granted (user returned from settings)
-        app.wheelstop.android.overlay.StatusOverlayService.startIfPermitted(this)
+        StatusOverlayService.startIfPermitted(this)
 
         // Re-sync the RoadSense overlay on resume: the user may have just toggled
         // RoadSense on/off in the web UI and returned to the app, or granted the
@@ -674,7 +698,7 @@ class MainActivity : AppCompatActivity() {
         // any non-first launch. Idempotent + no-op when nothing is pending, and it
         // reconciles against the live config so it never clobbers a later Settings
         // change (see flushPendingOperatingMode).
-        app.wheelstop.android.onboarding.OnboardingHost.flushPendingOperatingMode(applicationContext)
+        OnboardingHost.flushPendingOperatingMode(applicationContext)
 
         // Re-drive a rail tap that was deferred because it raced Activity state saving. Now
         // resumed, FragmentManager can commit. navigateToRailDestination re-checks isStateSaved
@@ -697,7 +721,7 @@ class MainActivity : AppCompatActivity() {
         try {
             // One policy owns both the RoadSense master gate and the user's
             // display-only overlay preference.
-            app.wheelstop.android.roadsense.overlay.RoadSenseOverlayService
+            RoadSenseOverlayService
                 .syncWithConfig(this)
         } catch (t: Throwable) {
             android.util.Log.w("MainActivity", "syncRoadSenseOverlay failed: ${t.message}")
@@ -711,7 +735,7 @@ class MainActivity : AppCompatActivity() {
      * show/hide (turn-trigger) and positioning.
      */
     private fun syncBlindSpotOverlay() {
-        app.wheelstop.android.roadsense.overlay.BlindSpotControl.sync(this)
+        BlindSpotControl.sync(this)
     }
 
     override fun onPause() {
@@ -729,7 +753,7 @@ class MainActivity : AppCompatActivity() {
             headlessBootSilenceGate = false
             android.util.Log.i("MainActivity", "Boot-silence latch consumed on first onPause")
         }
-        app.wheelstop.android.auth.PinSession.notePaused()
+        PinSession.notePaused()
     }
 
     /**
@@ -754,10 +778,10 @@ class MainActivity : AppCompatActivity() {
      */
     private fun maybeShowPinLock() {
         try {
-            val pinEnabled = app.wheelstop.android.auth.PinManager.isEnabled()
+            val pinEnabled = PinManager.isEnabled()
             // Apply / clear FLAG_SECURE based on current lock state, regardless
             // of whether we're about to gate (covers the unlock-now path too).
-            if (pinEnabled && !app.wheelstop.android.auth.PinSession.isUnlocked()) {
+            if (pinEnabled && !PinSession.isUnlocked()) {
                 window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
             } else {
                 window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
@@ -773,9 +797,9 @@ class MainActivity : AppCompatActivity() {
             // any subsequent user-driven foreground entry below.
             if (headlessBootSilenceGate) return
 
-            val autoLock = app.wheelstop.android.auth.PinManager.getAutoLockMs()
-            if (app.wheelstop.android.auth.PinSession.shouldGate(autoLock)) {
-                val pinIntent = android.content.Intent(this, app.wheelstop.android.ui.PinLockActivity::class.java)
+            val autoLock = PinManager.getAutoLockMs()
+            if (PinSession.shouldGate(autoLock)) {
+                val pinIntent = android.content.Intent(this, PinLockActivity::class.java)
                 pinIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                 startActivity(pinIntent)
             }
@@ -789,7 +813,7 @@ class MainActivity : AppCompatActivity() {
      * This handles the case where user grants ADB auth after the initial connection attempt failed.
      */
     private fun setupAdbAuthCallback() {
-        app.wheelstop.android.launcher.AdbShellExecutor.setAuthCallback(object : app.wheelstop.android.launcher.AdbShellExecutor.AdbAuthCallback {
+        AdbShellExecutor.setAuthCallback(object : AdbShellExecutor.AdbAuthCallback {
             override fun onAuthPending() {
                 runOnUiThread {
                     logsViewModel.info("ADB", "⏳ Waiting for ADB authorization...")
@@ -806,7 +830,7 @@ class MainActivity : AppCompatActivity() {
                     // is the SINGLE process-wide auth callback slot, so we notify the
                     // host here rather than registering a second callback.
                     onboardingHost?.onDaemonAuthGranted()
-                        ?: run { app.wheelstop.android.onboarding.OnboardingState.get(this@MainActivity).daemonAuthorized = true }
+                        ?: run { OnboardingState.get(this@MainActivity).daemonAuthorized = true }
                     
                     // Re-run daemon initialization now that ADB is authorized
                     android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
@@ -817,7 +841,7 @@ class MainActivity : AppCompatActivity() {
                         // the onboarding step lifecycle (survives onboardingComplete), so
                         // an "On only" pick is never silently lost. No-op when nothing is
                         // pending; has its own retry+backoff to tolerate daemon bring-up.
-                        app.wheelstop.android.onboarding.OnboardingHost
+                        OnboardingHost
                             .flushPendingOperatingMode(applicationContext)
 
                         // Check daemon statuses after startup
@@ -844,12 +868,12 @@ class MainActivity : AppCompatActivity() {
      */
     private fun checkForAppUpdate() {
         logsViewModel.info("Update", "Checking for updates (channel: ${app.wheelstop.android.config.UnifiedConfigManager.getUpdateChannel()})...")
-        val updater = app.wheelstop.android.updater.AppUpdater(this)
+        val updater = AppUpdater(this)
         appUpdater = updater
-        updater.checkForUpdate(object : app.wheelstop.android.updater.AppUpdater.UpdateCallback {
+        updater.checkForUpdate(object : AppUpdater.UpdateCallback {
             override fun onUpdateAvailable(currentVersion: String, newVersion: String, releaseNotes: String) {
                 // Don't close updater here — performAppUpdate will use it.
-                app.wheelstop.android.updater.UpdateDialog.showUpdateAvailable(
+                UpdateDialog.showUpdateAvailable(
                     this@MainActivity, currentVersion, newVersion, releaseNotes,
                     { performAppUpdate(updater) },
                     { updater.close() }  // Dismiss path: release executor + scheduler.
@@ -878,20 +902,20 @@ class MainActivity : AppCompatActivity() {
      */
     fun checkForAppUpdateManual() {
         Toast.makeText(this, getString(R.string.toast_checking_for_updates), Toast.LENGTH_SHORT).show()
-        val updater = app.wheelstop.android.updater.AppUpdater(this)
+        val updater = AppUpdater(this)
         appUpdater = updater
 
-        val channel = app.wheelstop.android.config.UnifiedConfigManager.let {
+        val channel = UnifiedConfigManager.let {
             it.forceReload(); it.getUpdateChannel()
         }
-        if (channel == app.wheelstop.android.updater.AppUpdater.CHANNEL_ALPHA) {
+        if (channel == AppUpdater.CHANNEL_ALPHA) {
             checkAlphaVersions(updater)
             return
         }
 
-        updater.checkForUpdate(object : app.wheelstop.android.updater.AppUpdater.UpdateCallback {
+        updater.checkForUpdate(object : AppUpdater.UpdateCallback {
             override fun onUpdateAvailable(currentVersion: String, newVersion: String, releaseNotes: String) {
-                app.wheelstop.android.updater.UpdateDialog.showUpdateAvailable(
+                UpdateDialog.showUpdateAvailable(
                     this@MainActivity, currentVersion, newVersion, releaseNotes,
                     { performAppUpdate(updater) },
                     { updater.close() }  // Dismiss path: release executor + scheduler.
@@ -915,16 +939,16 @@ class MainActivity : AppCompatActivity() {
      * resolve the chosen tag SERVER-SIDE (prepareInstall, off the UI thread —
      * it does network I/O) before handing off to the shared install flow.
      */
-    private fun checkAlphaVersions(updater: app.wheelstop.android.updater.AppUpdater) {
-        updater.listVersions(object : app.wheelstop.android.updater.AppUpdater.VersionListCallback {
+    private fun checkAlphaVersions(updater: AppUpdater) {
+        updater.listVersions(object : AppUpdater.VersionListCallback {
             override fun onResult(
-                versions: MutableList<app.wheelstop.android.updater.AppUpdater.VersionEntry>,
+                versions: MutableList<AppUpdater.VersionEntry>,
                 currentVersion: String
             ) {
-                app.wheelstop.android.updater.UpdateDialog.showVersionPicker(
+                UpdateDialog.showVersionPicker(
                     this@MainActivity, versions,
-                    object : app.wheelstop.android.updater.UpdateDialog.VersionPickListener {
-                        override fun onPick(entry: app.wheelstop.android.updater.AppUpdater.VersionEntry) {
+                    object : UpdateDialog.VersionPickListener {
+                        override fun onPick(entry: AppUpdater.VersionEntry) {
                             // Pass the chosen tag straight to performAppUpdate —
                             // the daemon's INSTALL_UPDATE resolves it server-side
                             // (prepareInstall) before downloading, so no app-side
@@ -971,12 +995,12 @@ class MainActivity : AppCompatActivity() {
      * @param versionTag alpha-pick tag (e.g. "alpha-v26.1"), or null for the
      *                   braveheart available-check install.
      */
-    private fun performAppUpdate(updater: app.wheelstop.android.updater.AppUpdater,
+    private fun performAppUpdate(updater: AppUpdater,
                                  versionTag: String? = null) {
         // The whole flow runs in the daemon now, so this app-side AppUpdater is
         // only here for its lifecycle (close releases the lazily-allocated ADB
         // executor + tunnel scheduler). Release it once the IPC handoff is done.
-        val progress = app.wheelstop.android.updater.UpdateDialog.showProgress(this) {
+        val progress = UpdateDialog.showProgress(this) {
             // "Hide" — the daemon download/install can't be cancelled from here
             // (it runs in another process, mirroring the webapp which also has
             // no mid-install cancel once scheduled). Just stop polling + dismiss;
@@ -995,7 +1019,7 @@ class MainActivity : AppCompatActivity() {
             }
             // 25s > daemon's 20s pre-install checkForUpdate wait, so the IPC read
             // doesn't time out before INSTALL_UPDATE replies {status:"scheduled"}.
-            val resp = app.wheelstop.android.server.DaemonIpcClient.send(req, 25_000)
+            val resp = DaemonIpcClient.send(req, 25_000)
             runOnUiThread {
                 // Activity tore down during the ~25s IPC window (rotation,
                 // back-out, recreate) — runOnUiThread does NOT auto-cancel, so
@@ -1040,7 +1064,7 @@ class MainActivity : AppCompatActivity() {
      * terminal phase (stopping_daemons / installing) as success — the install
      * is underway and pm install is tearing the daemon (and soon us) down.
      */
-    private fun startUpdateProgressPolling(progress: app.wheelstop.android.updater.UpdateDialog.ProgressHandle) {
+    private fun startUpdateProgressPolling(progress: UpdateDialog.ProgressHandle) {
         updatePollRunnable?.let { mainHandler.removeCallbacks(it) }
         var consecutiveFailures = 0
         var sawTerminalPhase = false
@@ -1049,7 +1073,7 @@ class MainActivity : AppCompatActivity() {
         val poll = object : Runnable {
             override fun run() {
                 Thread {
-                    val resp = app.wheelstop.android.server.DaemonIpcClient.send(
+                    val resp = DaemonIpcClient.send(
                         org.json.JSONObject().put("command", "GET_UPDATE_PROGRESS"), 5_000)
                     runOnUiThread {
                         // Activity gone (rotation/finish) — stop, don't touch the
@@ -1177,7 +1201,7 @@ class MainActivity : AppCompatActivity() {
         // opened if the app-ops grant fails to land.
         android.util.Log.i("MainActivity", "MES missing - attempting silent app-ops grant via ADB")
         try {
-            val adb = app.wheelstop.android.launcher.AdbShellExecutor(this)
+            val adb = AdbShellExecutor(this)
             StorageSetup.tryGrantViaAppOps(this, adb) { granted ->
                 runOnUiThread { onAppOpsGrantResult(granted) }
             }
@@ -1297,7 +1321,7 @@ class MainActivity : AppCompatActivity() {
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                 logsViewModel.info("Location", "Auto-starting Location service...")
                 try {
-                    val serviceIntent = android.content.Intent(this, app.wheelstop.android.services.LocationSidecarService::class.java)
+                    val serviceIntent = android.content.Intent(this, LocationSidecarService::class.java)
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                         startForegroundService(serviceIntent)
                     } else {
@@ -1431,7 +1455,7 @@ class MainActivity : AppCompatActivity() {
             // so it launches via startActivity (destinationId = 0).
             RailItem(R.id.railDestMap, 0,
                 R.drawable.ic_roadsense_map, R.string.rail_hazard_map,
-                launchActivity = app.wheelstop.android.navmap.RoadSenseMapActivity::class.java),
+                launchActivity = RoadSenseMapActivity::class.java),
             RailItem(R.id.railDestDiagnostics, R.id.diagnosticsFragment,
                 R.drawable.ic_diagnostics, R.string.rail_diagnostics),
             RailItem(R.id.railDestSettings, R.id.settingsFragment,
@@ -1442,7 +1466,7 @@ class MainActivity : AppCompatActivity() {
         railItems = items
 
         val languageClick = View.OnClickListener {
-            app.wheelstop.android.ui.dialog.LanguagePickerDialog.show(this) {
+            LanguagePickerDialog.show(this) {
                 recreate()
             }
         }
@@ -1938,7 +1962,7 @@ class MainActivity : AppCompatActivity() {
     private fun fetchCameraMappingState(): CameraMappingState? {
         var conn: java.net.HttpURLConnection? = null
         return try {
-            conn = app.wheelstop.android.util.DaemonHttpClient.open(
+            conn = DaemonHttpClient.open(
                 "/api/surveillance/config", "GET", 3000, 4000)
             val body = conn.inputStream.bufferedReader().use { it.readText() }
             val config = org.json.JSONObject(body).optJSONObject("config") ?: return null
@@ -2007,8 +2031,8 @@ class MainActivity : AppCompatActivity() {
             // from UnifiedConfigManager — the daemon writes these from shell
             // UID, so app-side reads need a forceReload to dodge the stale
             // per-UID cache (see feedback_unified_config_force_reload.md).
-            app.wheelstop.android.config.UnifiedConfigManager.forceReload()
-            val cameraSection = app.wheelstop.android.config.UnifiedConfigManager
+            UnifiedConfigManager.forceReload()
+            val cameraSection = UnifiedConfigManager
                 .loadConfig().optJSONObject("camera") ?: org.json.JSONObject()
             val oemDashcamCameraId = cameraSection.optInt("oemDashcamCameraId", -1)
             val oemDashcamManualOverride = cameraSection.optBoolean(
@@ -2146,7 +2170,7 @@ class MainActivity : AppCompatActivity() {
                     // frame-wait + teardown for direct kind, ~50 ms volatile
                     // read + JPEG decode/crop for slice/virtual kinds. Both
                     // are well inside this window.
-                    val conn = app.wheelstop.android.util.DaemonHttpClient.open(
+                    val conn = DaemonHttpClient.open(
                         previewPath,
                         "GET",
                         2500,
@@ -2550,7 +2574,7 @@ class MainActivity : AppCompatActivity() {
                 isManual ->
                     getString(R.string.camera_current_auto)
                 else -> {
-                    val resolved = app.wheelstop.android.config.UnifiedConfigManager
+                    val resolved = UnifiedConfigManager
                         .resolveOemDashcamId()
                     if (resolved >= 0) {
                         getString(
@@ -2600,7 +2624,7 @@ class MainActivity : AppCompatActivity() {
             // performCameraReconfigure pattern.
             Thread {
                 val ok = try {
-                    app.wheelstop.android.config.UnifiedConfigManager
+                    UnifiedConfigManager
                         .updateSection("camera", patch)
                 } catch (e: Exception) {
                     logsViewModel.error(
@@ -2613,7 +2637,7 @@ class MainActivity : AppCompatActivity() {
                 // boot re-probes against the new (pano, dashcam) pair.
                 if (ok) {
                     try {
-                        app.wheelstop.android.camera.ConcurrentAvmProbe.invalidate()
+                        ConcurrentAvmProbe.invalidate()
                     } catch (e: Exception) {
                         logsViewModel.warn(
                             "Camera",
@@ -2739,7 +2763,7 @@ class MainActivity : AppCompatActivity() {
             var message: String? = null
             var conn: java.net.HttpURLConnection? = null
             try {
-                conn = app.wheelstop.android.util.DaemonHttpClient.open(
+                conn = DaemonHttpClient.open(
                     "/api/surveillance/config", "POST", 3000, 4000)
                 conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
                 conn.doOutput = true
@@ -2814,7 +2838,7 @@ class MainActivity : AppCompatActivity() {
             // logged but don't block the restart, since the dialog already
             // toasted "saved" and the user expects the restart to happen.
             try {
-                val conn = app.wheelstop.android.util.DaemonHttpClient.open(
+                val conn = DaemonHttpClient.open(
                     "/api/surveillance/prepare-restart", "POST", 3000, 5000)
                 conn.doOutput = true
                 conn.outputStream.use { it.write(byteArrayOf()) }
@@ -2831,7 +2855,7 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 if (!activityAlive()) return@runOnUiThread
                 // Reuse shared adbLauncher (avoids per-call leak).
-                daemonStartupManager.adbLauncher.killDaemon(object : app.wheelstop.android.launcher.AdbDaemonLauncher.LaunchCallback {
+                daemonStartupManager.adbLauncher.killDaemon(object : AdbDaemonLauncher.LaunchCallback {
                     override fun onLog(message: String) {
                         logsViewModel.debug("Camera", message)
                     }
@@ -2863,7 +2887,7 @@ class MainActivity : AppCompatActivity() {
                         // Fire-and-forget POST to clear the latch.
                         Thread {
                             try {
-                                val conn = app.wheelstop.android.util.DaemonHttpClient.open(
+                                val conn = DaemonHttpClient.open(
                                     "/api/surveillance/abort-restart", "POST", 2000, 2000)
                                 conn.doOutput = true
                                 conn.outputStream.use { it.write(byteArrayOf()) }
@@ -2933,7 +2957,7 @@ class MainActivity : AppCompatActivity() {
                 val emptyCameraConfig = org.json.JSONObject()
                 emptyCameraConfig.put("probedCameraId", -1)
                 emptyCameraConfig.put("probedSurfaceMode", -1)
-                app.wheelstop.android.config.UnifiedConfigManager.updateSection("camera", emptyCameraConfig)
+                UnifiedConfigManager.updateSection("camera", emptyCameraConfig)
                 
                 runOnUiThread {
                     logsViewModel.info("Camera", "Camera config cleared — restarting daemon")
@@ -2942,7 +2966,7 @@ class MainActivity : AppCompatActivity() {
                 
                 // Kill the camera daemon — DaemonLauncher's watchdog will auto-restart it.
                 // Reuse shared adbLauncher (avoids per-call leak).
-                daemonStartupManager.adbLauncher.killDaemon(object : app.wheelstop.android.launcher.AdbDaemonLauncher.LaunchCallback {
+                daemonStartupManager.adbLauncher.killDaemon(object : AdbDaemonLauncher.LaunchCallback {
                     override fun onLog(message: String) {
                         logsViewModel.debug("Camera", message)
                     }
@@ -3052,7 +3076,7 @@ class MainActivity : AppCompatActivity() {
             // Fetch full SOH status (modelId, calibration anchor, estimated capacity) —
             // properties file alone doesn't carry modelId or live calibration shape.
             try {
-                val conn = app.wheelstop.android.util.DaemonHttpClient.open(
+                val conn = DaemonHttpClient.open(
                     "/api/performance/soh", "GET", 2000, 3000)
                 if (conn.responseCode == 200) {
                     val body = conn.inputStream.bufferedReader().use { it.readText() }
@@ -3246,7 +3270,7 @@ class MainActivity : AppCompatActivity() {
             var ok = false
             var errMsg: String? = null
             try {
-                val conn = app.wheelstop.android.util.DaemonHttpClient.open(
+                val conn = DaemonHttpClient.open(
                     "/api/performance/soh/nominal", "POST", 3000, 5000)
                 conn.doOutput = true
                 conn.setRequestProperty("Content-Type", "application/json")
@@ -3329,7 +3353,7 @@ class MainActivity : AppCompatActivity() {
         executor.execute {
             try {
                 // Use daemon API (daemon owns the file, has write permissions)
-                val conn = app.wheelstop.android.util.DaemonHttpClient.open(
+                val conn = DaemonHttpClient.open(
                     "/api/performance/soh/reset", "POST", 3000, 3000)
                 conn.doOutput = true
                 conn.outputStream.use { it.write("{}".toByteArray()) }
@@ -3449,7 +3473,7 @@ class MainActivity : AppCompatActivity() {
                 val payload = org.json.JSONObject().apply {
                     put("categories", org.json.JSONArray(categories))
                 }
-                val conn = app.wheelstop.android.util.DaemonHttpClient.open(
+                val conn = DaemonHttpClient.open(
                     "/api/performance/reset", "POST", 5000, 15000)
                 conn.doOutput = true
                 conn.setRequestProperty("Content-Type", "application/json")
@@ -3694,7 +3718,7 @@ class MainActivity : AppCompatActivity() {
         navPollRunnable?.let { mainHandler.removeCallbacks(it) }
         navPollRunnable = null
         // Remove ADB auth callback
-        app.wheelstop.android.launcher.AdbShellExecutor.setAuthCallback(null)
+        AdbShellExecutor.setAuthCallback(null)
         // Cancel the periodic update check so the Runnable doesn't leak the
         // activity reference after recreate.
         updateCheckRunnable?.let { mainHandler.removeCallbacks(it) }
@@ -3764,10 +3788,10 @@ class MainActivity : AppCompatActivity() {
     // dialogs/handlers — onboarding never reimplements vehicle/camera logic.
 
     /** Set by CameraWizardCoach before it opens the camera dialog; consumed on show(). */
-    private var pendingCameraOnboardingCoach: app.wheelstop.android.onboarding.CameraWizardCoach? = null
+    private var pendingCameraOnboardingCoach: CameraWizardCoach? = null
 
     /** Open the real camera-mapping dialog for the onboarding wizard to coach over. */
-    fun openCameraMappingForOnboarding(coach: app.wheelstop.android.onboarding.CameraWizardCoach) {
+    fun openCameraMappingForOnboarding(coach: CameraWizardCoach) {
         pendingCameraOnboardingCoach = coach
         onReconfigureCameraClicked()
     }
@@ -3793,7 +3817,7 @@ class MainActivity : AppCompatActivity() {
         val nav = supportFragmentManager.findFragmentById(R.id.navHostFragment)
                 as? androidx.navigation.fragment.NavHostFragment
         val dash = nav?.childFragmentManager?.primaryNavigationFragment
-                as? app.wheelstop.android.ui.fragment.DashboardFragment
+                as? DashboardFragment
                 ?: return false
         return dash.showVehicleCapacityDialog(onFinished)
     }
@@ -3803,7 +3827,7 @@ class MainActivity : AppCompatActivity() {
         val nav = supportFragmentManager.findFragmentById(R.id.navHostFragment)
                 as? androidx.navigation.fragment.NavHostFragment
         val dash = nav?.childFragmentManager?.primaryNavigationFragment
-                as? app.wheelstop.android.ui.fragment.DashboardFragment
+                as? DashboardFragment
         return dash?.view
     }
 
@@ -3906,17 +3930,17 @@ class MainActivity : AppCompatActivity() {
      * section so its pane is shown. Null if Settings isn't current → caller centers.
      */
     fun settingsTourAnchor(
-        target: app.wheelstop.android.ui.fragment.SettingsFragment.TourTarget,
+        target: SettingsFragment.TourTarget,
     ): android.view.View? {
         val nav = supportFragmentManager.findFragmentById(R.id.navHostFragment)
                 as? androidx.navigation.fragment.NavHostFragment
         val settings = nav?.childFragmentManager?.primaryNavigationFragment
-                as? app.wheelstop.android.ui.fragment.SettingsFragment
+                as? SettingsFragment
         return settings?.tourAnchorFor(target)
     }
 
-    private fun ensureOnboardingHost(): app.wheelstop.android.onboarding.OnboardingHost =
-        onboardingHost ?: app.wheelstop.android.onboarding.OnboardingHost(
+    private fun ensureOnboardingHost(): OnboardingHost =
+        onboardingHost ?: OnboardingHost(
             this, daemonStartupManager.adbLauncher,
         ).also { onboardingHost = it }
 
@@ -3925,14 +3949,14 @@ class MainActivity : AppCompatActivity() {
 
     /** Hidden Diagnostics long-press — wipe onboarding state and re-run the full novice track. */
     fun resetAndReplayOnboarding() {
-        app.wheelstop.android.onboarding.OnboardingState.get(this).reset()
+        OnboardingState.get(this).reset()
         // Also clear the daemon-side operatingModeSetByUser marker so the replayed
         // session doesn't inherit the prior session's "user chose a mode" flag —
         // otherwise flushPendingOperatingMode would GET a stale true and wrongly drop a
         // legitimate new replay pick. reset() already wiped the app-private prefs
         // (modeChosen, pendingOperatingMode); this keeps the daemon flag on the same
         // reset boundary. Best-effort + retrying; the replay pick's own POST is ungated.
-        app.wheelstop.android.onboarding.OnboardingHost.clearOperatingModeUserFlag()
+        OnboardingHost.clearOperatingModeUserFlag()
         ensureOnboardingHost().startReplay()
     }
 

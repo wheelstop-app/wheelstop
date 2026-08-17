@@ -1,4 +1,27 @@
 package app.wheelstop.android.surveillance;
+import app.wheelstop.android.byd.BydDataCollector;
+import app.wheelstop.android.camera.AvmCameraHelper;
+import app.wheelstop.android.camera.CameraConfigResolver;
+import app.wheelstop.android.camera.CameraProfile;
+import app.wheelstop.android.camera.CameraRole;
+import app.wheelstop.android.camera.Dilink4Constants;
+import app.wheelstop.android.camera.EGLCore;
+import app.wheelstop.android.camera.OemDashcamPipeline;
+import app.wheelstop.android.camera.ResolvedCameraConfig;
+import app.wheelstop.android.config.UnifiedConfigManager;
+import app.wheelstop.android.daemon.CameraDaemon;
+import app.wheelstop.android.monitor.AccMonitor;
+import app.wheelstop.android.monitor.GearMonitor;
+import app.wheelstop.android.od.Od;
+import app.wheelstop.android.overlay.StatusOverlayService;
+import app.wheelstop.android.recording.ManualClipService;
+import app.wheelstop.android.recording.RecordingModeManager;
+import app.wheelstop.android.server.OemDashcamApiHandler;
+import app.wheelstop.android.server.StreamingApiHandler;
+import app.wheelstop.android.streaming.GpuStreamScaler;
+import app.wheelstop.android.streaming.WebSocketStreamServer;
+import app.wheelstop.android.telemetry.TelemetryFields;
+import app.wheelstop.android.util.Constants;
 import app.wheelstop.android.logging.DaemonLogger;
 import app.wheelstop.android.storage.StorageManager;
 import app.wheelstop.android.telemetry.TelemetryDataCollector;
@@ -46,9 +69,9 @@ public class GpuSurveillancePipeline {
     private volatile AdaptiveBitrateController bitrateController;
     
     // Streaming components (separate encoder - always available)
-    private app.wheelstop.android.streaming.GpuStreamScaler streamScaler;
+    private GpuStreamScaler streamScaler;
     private HardwareEventRecorderGpu streamEncoder;
-    private app.wheelstop.android.streaming.WebSocketStreamServer wsStreamServer;
+    private WebSocketStreamServer wsStreamServer;
     // volatile so the camera GL render loop's read sees the latest
     // disable-write atomically; otherwise the loop can keep snapshot
     // streamScaler/streamEncoder past the disable cycle.
@@ -76,8 +99,8 @@ public class GpuSurveillancePipeline {
     // (non-fullscreen + GL-fed + setGeometry-positioned SC layer composites).
     // Buffer is BS_WIDTH×BS_HEIGHT; on-screen rect comes from config (setGeometry),
     // since SurfaceControl layers have no InputChannel (not finger-draggable).
-    private app.wheelstop.android.streaming.GpuStreamScaler bsScaler;
-    private app.wheelstop.android.surveillance.BsNativeLayer bsLayer;
+    private GpuStreamScaler bsScaler;
+    private BsNativeLayer bsLayer;
     private volatile boolean blindSpotEnabled = false;
     // True while an enableBlindSpot() is in flight (set under bsLifecycleLock
     // before entering enableBlindSpotInternal, cleared when it returns). The
@@ -187,7 +210,7 @@ public class GpuSurveillancePipeline {
     // change and pushes to the active recorder so the next frame uses the
     // new value — no daemon restart, no segment rotation. Held as a field so
     // release() can deregister it cleanly.
-    private app.wheelstop.android.config.UnifiedConfigManager.ConfigChangeListener
+    private UnifiedConfigManager.ConfigChangeListener
         rectifyConfigListener;
 
     // Recording composition layout (0 = standard 360 mosaic, 1 = dashcam:
@@ -376,7 +399,7 @@ public class GpuSurveillancePipeline {
         try {
             HardwareEventRecorderGpu enc = encoder;
             if (enc == null) return;
-            int minutes = app.wheelstop.android.config.UnifiedConfigManager
+            int minutes = UnifiedConfigManager
                 .getSegmentDurationMinutes();
             enc.setSegmentDurationMs(minutes * 60_000L);
         } catch (Throwable t) {
@@ -392,8 +415,8 @@ public class GpuSurveillancePipeline {
     public void updateSegmentDuration(int minutes) {
         try {
             int clamped = Math.max(
-                app.wheelstop.android.util.Constants.MIN_SEGMENT_DURATION_MINUTES,
-                Math.min(app.wheelstop.android.util.Constants.MAX_SEGMENT_DURATION_MINUTES, minutes));
+                Constants.MIN_SEGMENT_DURATION_MINUTES,
+                Math.min(Constants.MAX_SEGMENT_DURATION_MINUTES, minutes));
             HardwareEventRecorderGpu enc = encoder;
             if (enc != null) {
                 enc.setSegmentDurationMs(clamped * 60_000L);
@@ -912,11 +935,11 @@ public class GpuSurveillancePipeline {
 
         // Persist to config first so reinitializeEncoder picks it up via loadTargetFps().
         try {
-            org.json.JSONObject cameraCfg = app.wheelstop.android.config.UnifiedConfigManager
+            org.json.JSONObject cameraCfg = UnifiedConfigManager
                 .loadConfig().optJSONObject("camera");
             if (cameraCfg == null) cameraCfg = new org.json.JSONObject();
             cameraCfg.put("targetFps", clamped);
-            app.wheelstop.android.config.UnifiedConfigManager.updateSection("camera", cameraCfg);
+            UnifiedConfigManager.updateSection("camera", cameraCfg);
         } catch (Exception e) {
             logger.warn("Failed to persist targetFps: " + e.getMessage());
         }
@@ -1211,11 +1234,11 @@ public class GpuSurveillancePipeline {
             if (fps != null) {
                 clampedFps = Math.max(10, Math.min(30, fps));
                 try {
-                    org.json.JSONObject cameraCfg = app.wheelstop.android.config.UnifiedConfigManager
+                    org.json.JSONObject cameraCfg = UnifiedConfigManager
                         .loadConfig().optJSONObject("camera");
                     if (cameraCfg == null) cameraCfg = new org.json.JSONObject();
                     cameraCfg.put("targetFps", clampedFps);
-                    app.wheelstop.android.config.UnifiedConfigManager.updateSection("camera", cameraCfg);
+                    UnifiedConfigManager.updateSection("camera", cameraCfg);
                 } catch (Exception e) {
                     logger.warn("Batched apply: failed to persist targetFps: " + e.getMessage());
                 }
@@ -1389,7 +1412,7 @@ public class GpuSurveillancePipeline {
      */
     private static int loadTargetFps() {
         try {
-            org.json.JSONObject cameraConfig = app.wheelstop.android.config.UnifiedConfigManager
+            org.json.JSONObject cameraConfig = UnifiedConfigManager
                 .loadConfig().optJSONObject("camera");
             if (cameraConfig != null) {
                 return cameraConfig.optInt("targetFps", 15);
@@ -1408,7 +1431,7 @@ public class GpuSurveillancePipeline {
      */
     private static int loadSurveillanceTargetFps() {
         try {
-            org.json.JSONObject cameraConfig = app.wheelstop.android.config.UnifiedConfigManager
+            org.json.JSONObject cameraConfig = UnifiedConfigManager
                 .loadConfig().optJSONObject("camera");
             if (cameraConfig != null) {
                 int accOnFallback = cameraConfig.optInt("targetFps", 15);
@@ -1429,7 +1452,7 @@ public class GpuSurveillancePipeline {
      */
     private static GpuPipelineConfig.RecordingQuality loadSurveillanceQuality() {
         try {
-            org.json.JSONObject rec = app.wheelstop.android.config.UnifiedConfigManager
+            org.json.JSONObject rec = UnifiedConfigManager
                 .loadConfig().optJSONObject("recording");
             if (rec != null) {
                 String q = rec.optString("surveillanceQuality", null);
@@ -1471,14 +1494,14 @@ public class GpuSurveillancePipeline {
         int layoutMode = camera != null ? camera.getCameraLayoutMode() : 0;
         rec.setCameraLayout(layoutMode);
         rec.setProducerLayout(
-            app.wheelstop.android.camera.Dilink4Constants.CORNER_FRONT,
-            app.wheelstop.android.camera.Dilink4Constants.CORNER_RIGHT,
-            app.wheelstop.android.camera.Dilink4Constants.CORNER_REAR,
-            app.wheelstop.android.camera.Dilink4Constants.CORNER_LEFT,
-            app.wheelstop.android.camera.Dilink4Constants.FLIP_FRONT,
-            app.wheelstop.android.camera.Dilink4Constants.FLIP_RIGHT,
-            app.wheelstop.android.camera.Dilink4Constants.FLIP_REAR,
-            app.wheelstop.android.camera.Dilink4Constants.FLIP_LEFT);
+            Dilink4Constants.CORNER_FRONT,
+            Dilink4Constants.CORNER_RIGHT,
+            Dilink4Constants.CORNER_REAR,
+            Dilink4Constants.CORNER_LEFT,
+            Dilink4Constants.FLIP_FRONT,
+            Dilink4Constants.FLIP_RIGHT,
+            Dilink4Constants.FLIP_REAR,
+            Dilink4Constants.FLIP_LEFT);
         try {
             org.json.JSONObject camCfg = app.wheelstop.android.config
                 .UnifiedConfigManager.loadConfig().optJSONObject("camera");
@@ -1570,7 +1593,7 @@ public class GpuSurveillancePipeline {
         try {
             encoder = new HardwareEventRecorderGpu(encoderWidth, encoderHeight, fps, bitrate, codecMimeType);
             encoder.setManualClipRetentionDuration(
-                app.wheelstop.android.recording.ManualClipService.getConfiguredRetentionSeconds());
+                ManualClipService.getConfiguredRetentionSeconds());
         } catch (Throwable t) {
             logger.warn("New encoder allocation failed — clearing recorder's stale "
                 + "encoder ref so caller can stop() cleanly: " + t.getMessage());
@@ -1605,12 +1628,12 @@ public class GpuSurveillancePipeline {
             int preRecordSec = -1;
             // Prefer proximity's value when the active mode is proximity guard.
             try {
-                app.wheelstop.android.recording.RecordingModeManager rmm =
-                    app.wheelstop.android.daemon.CameraDaemon.getRecordingModeManager();
+                RecordingModeManager rmm =
+                    CameraDaemon.getRecordingModeManager();
                 if (rmm != null
-                        && rmm.getCurrentMode() == app.wheelstop.android.recording.RecordingModeManager.Mode.PROXIMITY_GUARD) {
+                        && rmm.getCurrentMode() == RecordingModeManager.Mode.PROXIMITY_GUARD) {
                     org.json.JSONObject pgCfg =
-                        app.wheelstop.android.config.UnifiedConfigManager.getProximityGuard();
+                        UnifiedConfigManager.getProximityGuard();
                     int v = pgCfg.optInt("preRecordSeconds", -1);
                     if (v > 0) preRecordSec = v;
                 }
@@ -1648,7 +1671,7 @@ public class GpuSurveillancePipeline {
         // writing, so wiring it before init() preserves the anti-fail-open
         // intent while flipping probeWired=true on the first init attempt.
         try {
-            app.wheelstop.android.storage.StorageManager.getInstance()
+            StorageManager.getInstance()
                 .setEncoderWritingProbe(() -> {
                     HardwareEventRecorderGpu e = this.encoder;
                     return e != null && e.isWritingToFile();
@@ -1846,7 +1869,7 @@ public class GpuSurveillancePipeline {
             " @ " + fps + "fps, " + (bitrate / 1_000_000) + " Mbps");
         encoder = new HardwareEventRecorderGpu(encoderWidth, encoderHeight, fps, bitrate, codecMimeType);
         encoder.setManualClipRetentionDuration(
-            app.wheelstop.android.recording.ManualClipService.getConfiguredRetentionSeconds());
+            ManualClipService.getConfiguredRetentionSeconds());
 
         // Pre-load saved pre-record duration BEFORE encoder.init() so the
         // byte ring is sized correctly on first allocation. Mode-aware:
@@ -1864,11 +1887,11 @@ public class GpuSurveillancePipeline {
             // exposes the persisted mode under recording.mode.
             try {
                 org.json.JSONObject recCfg =
-                    app.wheelstop.android.config.UnifiedConfigManager.getRecording();
+                    UnifiedConfigManager.getRecording();
                 String persistedMode = recCfg.optString("mode", "");
                 if ("PROXIMITY_GUARD".equals(persistedMode)) {
                     org.json.JSONObject pgCfg =
-                        app.wheelstop.android.config.UnifiedConfigManager.getProximityGuard();
+                        UnifiedConfigManager.getProximityGuard();
                     int v = pgCfg.optInt("preRecordSeconds", -1);
                     if (v > 0) preRecordSec = v;
                 }
@@ -1902,7 +1925,7 @@ public class GpuSurveillancePipeline {
         // the anti-fail-open intent while flipping probeWired=true on the first
         // init attempt regardless of whether init() later throws.
         try {
-            app.wheelstop.android.storage.StorageManager.getInstance()
+            StorageManager.getInstance()
                 .setEncoderWritingProbe(() -> {
                     HardwareEventRecorderGpu e = this.encoder;
                     return e != null && e.isWritingToFile();
@@ -1922,8 +1945,8 @@ public class GpuSurveillancePipeline {
         // cropper, and PanoramicCameraGpu all share consistent per-quadrant
         // strip-X offsets. Profile inference uses the vehicle model + any
         // user-saved override in UnifiedConfigManager.camera.cameraProfile.
-        app.wheelstop.android.camera.ResolvedCameraConfig resolvedCamera =
-            app.wheelstop.android.camera.CameraConfigResolver.resolve(getVehicleModel());
+        ResolvedCameraConfig resolvedCamera =
+            CameraConfigResolver.resolve(getVehicleModel());
         float[] quadrantStripOffsetX = resolvedCamera.getQuadrantStripOffsetX();
         float[] quadrantCornerOffsetsXY = resolvedCamera.getQuadrantCornerOffsetsXY();
         // FIX (audit R6): cache for reinitializeEncoder()'s recorder=null branch.
@@ -1989,7 +2012,7 @@ public class GpuSurveillancePipeline {
         // quadrants — which inflates side-camera distances by ~70%
         // because side mirrors carry tighter optics than the
         // front/rear ultra-wide fisheyes.
-        app.wheelstop.android.camera.CameraProfile profile = resolvedCamera.getProfile();
+        CameraProfile profile = resolvedCamera.getProfile();
         if (profile != null) {
             sentry.setCameraVerticalFovDeg(new float[]{
                     profile.getVerticalFovDeg(0),
@@ -2058,7 +2081,7 @@ public class GpuSurveillancePipeline {
             // false negatives in low-light/uniform scenes.
             camera.setSkipFrameValidation(true);
         } else {
-            int discoveredId = app.wheelstop.android.camera.AvmCameraHelper.discoverPanoCameraId();
+            int discoveredId = AvmCameraHelper.discoverPanoCameraId();
             if (discoveredId >= 0) {
                 logger.info("Using BmmCameraInfo panoramic hint: camera ID " + discoveredId);
                 camera.setCameraId(discoveredId);
@@ -2078,7 +2101,7 @@ public class GpuSurveillancePipeline {
             // everywhere else. Skip frame validation on dilink4.
             boolean dilink4Cam = false;
             try {
-                dilink4Cam = app.wheelstop.android.daemon.CameraDaemon.isDilink4ModeActiveStatic();
+                dilink4Cam = CameraDaemon.isDilink4ModeActiveStatic();
             } catch (Throwable ignored) {}
             camera.setSkipFrameValidation(dilink4Cam);
             if (dilink4Cam) {
@@ -2094,7 +2117,7 @@ public class GpuSurveillancePipeline {
                 // passing the configured pair made probedWidth/Height a
                 // self-confirming copy of the profile default, so a car whose
                 // HAL emits a different size could never be detected.
-                app.wheelstop.android.camera.CameraConfigResolver.persistPanoramicProbe(
+                CameraConfigResolver.persistPanoramicProbe(
                     cameraId,
                     surfaceMode,
                     camera.getObservedProducerWidth(),
@@ -2130,7 +2153,7 @@ public class GpuSurveillancePipeline {
                 // height; tile width is panoWidth/4 (4 cams across the
                 // strip). Seal 5120×960 → 960 / (5120/4) = 0.75. Tang
                 // 5120×720 → 0.5625. Identity-equivalent at slider 0.
-                app.wheelstop.android.camera.CameraProfile prof = profile;
+                CameraProfile prof = profile;
                 if (prof != null) {
                     float tileWidth = Math.max(1, prof.getPanoWidth() / 4f);
                     float tileHeight = Math.max(1, prof.getPanoHeight());
@@ -2164,7 +2187,7 @@ public class GpuSurveillancePipeline {
         // re-init paths (encoder reinit, profile change) don't stack listeners.
         try {
             if (rectifyConfigListener != null) {
-                app.wheelstop.android.config.UnifiedConfigManager
+                UnifiedConfigManager
                     .removeListener(rectifyConfigListener);
             }
             rectifyConfigListener = (section, sectionConfig) -> {
@@ -2176,7 +2199,7 @@ public class GpuSurveillancePipeline {
                 if (strength > 100) strength = 100;
                 activeRecorder.setRectifyStrength((float) strength);
             };
-            app.wheelstop.android.config.UnifiedConfigManager
+            UnifiedConfigManager
                 .addListener(rectifyConfigListener);
         } catch (Throwable t) {
             logger.warn("Failed to register rectify config listener: " + t.getMessage());
@@ -2243,8 +2266,8 @@ public class GpuSurveillancePipeline {
             // Resolver picks profile-default if no probed/manual config exists,
             // so this also covers "user cleared manual override → revert".
             try {
-                app.wheelstop.android.camera.ResolvedCameraConfig refreshedCamera =
-                    app.wheelstop.android.camera.CameraConfigResolver.resolve(getVehicleModel());
+                ResolvedCameraConfig refreshedCamera =
+                    CameraConfigResolver.resolve(getVehicleModel());
                 int targetCameraId = refreshedCamera.getPanoCameraId();
                 int targetSurfaceMode = refreshedCamera.getPanoSurfaceMode();
                 int currentId = camera.getCameraId();
@@ -2297,7 +2320,7 @@ public class GpuSurveillancePipeline {
                         camera.updateStreamFrameStride();
                         // Re-arm the client-presence gate — a yield may have run
                         // clearStreamingComponents() which reset it to fail-open.
-                        app.wheelstop.android.streaming.WebSocketStreamServer wsRe = wsStreamServer;
+                        WebSocketStreamServer wsRe = wsStreamServer;
                         if (wsRe != null) {
                             camera.setStreamClientProbe(wsRe::hasActiveClients);
                         }
@@ -2369,8 +2392,8 @@ public class GpuSurveillancePipeline {
                     final PanoramicCameraGpu cam = camera;
                     new Thread(() -> {
                         try {
-                            app.wheelstop.android.recording.RecordingModeManager rmm =
-                                app.wheelstop.android.daemon.CameraDaemon.getRecordingModeManager();
+                            RecordingModeManager rmm =
+                                CameraDaemon.getRecordingModeManager();
                             if (rmm != null) {
                                 rmm.forceWarmupRestart("hal-zero-frame-escalation");
                             } else {
@@ -2513,11 +2536,11 @@ public class GpuSurveillancePipeline {
             // OEM_DASHCAM_PROGRESS.md. Scheduled (not inline) so the OEM
             // warmup+open doesn't block pano's start() return.
             try {
-                if (app.wheelstop.android.config.UnifiedConfigManager
+                if (UnifiedConfigManager
                         .isAnyOemDashcamTriggerEnabled()) {
                     logger.info("Pano start complete — scheduling OEM Dashcam lifecycle recalc "
                         + "(DashCam+Pano re-sync)");
-                    app.wheelstop.android.server.OemDashcamApiHandler.scheduleLifecycleRecalc();
+                    OemDashcamApiHandler.scheduleLifecycleRecalc();
                 }
             } catch (Throwable t) {
                 logger.warn("OEM Dashcam pano-ready recalc dispatch failed: " + t.getMessage());
@@ -2531,7 +2554,7 @@ public class GpuSurveillancePipeline {
             // waiting for the 30s self-heal ticker. No-op when blindspot.enabled
             // is false or the lane is already armed.
             try {
-                app.wheelstop.android.server.StreamingApiHandler.resolveBlindSpotLifecycle();
+                StreamingApiHandler.resolveBlindSpotLifecycle();
             } catch (Throwable t) {
                 logger.warn("Blind-spot pano-ready self-arm dispatch failed: " + t.getMessage());
             }
@@ -2757,14 +2780,14 @@ public class GpuSurveillancePipeline {
             // frames. Tear OEM down here so its EGL release runs against a still-
             // valid parent display.
             try {
-                app.wheelstop.android.camera.OemDashcamPipeline oem =
-                    app.wheelstop.android.daemon.CameraDaemon.getOemDashcamPipeline();
+                OemDashcamPipeline oem =
+                    CameraDaemon.getOemDashcamPipeline();
                 if (oem != null && oem.isRunning()) {
                     logger.info("Stopping OEM Dashcam pipeline before pano camera tear-down "
                         + "(shared eglDisplay)");
                     try { oem.stopRecording(); } catch (Throwable ignored) {}
                     try { oem.stop(); } catch (Throwable ignored) {}
-                    app.wheelstop.android.daemon.CameraDaemon.setOemDashcamPipeline(null);
+                    CameraDaemon.setOemDashcamPipeline(null);
                 }
             } catch (Throwable t) {
                 logger.warn("OEM pre-pano-stop teardown failed: " + t.getMessage());
@@ -2824,7 +2847,7 @@ public class GpuSurveillancePipeline {
         // racing UCM update can't fire into a half-released recorder.
         if (rectifyConfigListener != null) {
             try {
-                app.wheelstop.android.config.UnifiedConfigManager
+                UnifiedConfigManager
                     .removeListener(rectifyConfigListener);
             } catch (Throwable ignored) {}
             rectifyConfigListener = null;
@@ -2892,7 +2915,7 @@ public class GpuSurveillancePipeline {
         // recording-grade fps unless BS-only-warmed, which onPipelineStartedExternally
         // / the caller handles — but the LANE is the silent-failure lever, so it
         // is the one we harden universally here.
-        app.wheelstop.android.camera.PanoramicCameraGpu camLane = camera;
+        PanoramicCameraGpu camLane = camera;
         if (camLane != null && !camLane.isRecorderLaneEnabled()) {
             logger.info("startRecording: recorder lane was OFF (BS-only keep-warm) — re-enabling for recording");
             camLane.setRecorderLaneEnabled(true);
@@ -3320,8 +3343,8 @@ public class GpuSurveillancePipeline {
                             // activateModeWithWarmup → pipeline.stopRecording
                             // → kills the recording we just started.
                             try {
-                                app.wheelstop.android.recording.RecordingModeManager rmm =
-                                    app.wheelstop.android.daemon.CameraDaemon.getRecordingModeManager();
+                                RecordingModeManager rmm =
+                                    CameraDaemon.getRecordingModeManager();
                                 if (rmm != null) {
                                     rmm.resyncFromHardware("storage-retry-success");
                                     logger.info("RMM resynced after storage-retry success");
@@ -3457,8 +3480,8 @@ public class GpuSurveillancePipeline {
                             // so modeActive gets re-evaluated and the resync
                             // ticker doesn't tear down the just-started recording.
                             try {
-                                app.wheelstop.android.recording.RecordingModeManager rmm =
-                                    app.wheelstop.android.daemon.CameraDaemon.getRecordingModeManager();
+                                RecordingModeManager rmm =
+                                    CameraDaemon.getRecordingModeManager();
                                 if (rmm != null) {
                                     rmm.resyncFromHardware("storage-slow-retry-success");
                                     logger.info("RMM resynced after slow-retry success");
@@ -3916,7 +3939,7 @@ public class GpuSurveillancePipeline {
             // consumer" behaviour because that's how non-byd_apa HALs share.
             boolean dilink4 = false;
             try {
-                dilink4 = app.wheelstop.android.daemon.CameraDaemon.isDilink4ModeActiveStatic();
+                dilink4 = CameraDaemon.isDilink4ModeActiveStatic();
             } catch (Throwable ignored) {}
             if (camera != null && running && !dilink4) {
                 camera.reopenCamera();
@@ -3991,8 +4014,8 @@ public class GpuSurveillancePipeline {
                 if (camera != null) camera.clearStreamingComponents();
             } catch (Throwable ignored) {}
             final HardwareEventRecorderGpu encLocal = streamEncoder;
-            final app.wheelstop.android.streaming.GpuStreamScaler scLocal = streamScaler;
-            final app.wheelstop.android.streaming.WebSocketStreamServer wsLocal = wsStreamServer;
+            final GpuStreamScaler scLocal = streamScaler;
+            final WebSocketStreamServer wsLocal = wsStreamServer;
             streamEncoder = null;
             streamScaler = null;
             wsStreamServer = null;
@@ -4096,17 +4119,21 @@ public class GpuSurveillancePipeline {
         // recorder so user-mapped role-to-slice mappings affect
         // single-direction streaming too. We pass BOTH 4-strip offsets and
         // 2x2 corners; the shader picks based on uApaMode (cameraLayout).
-        app.wheelstop.android.camera.ResolvedCameraConfig streamCfg =
-            app.wheelstop.android.camera.CameraConfigResolver.resolve(getVehicleModel());
+        ResolvedCameraConfig streamCfg =
+            CameraConfigResolver.resolve(getVehicleModel());
         float[] streamQuadrantStripOffsetX = streamCfg.getQuadrantStripOffsetX();
-        streamScaler = new app.wheelstop.android.streaming.GpuStreamScaler(
+        streamScaler = new GpuStreamScaler(
             streamWidth, streamHeight, streamQuadrantStripOffsetX);
 
         try {
             android.content.Context odCtx = savedContext;
-            if (odCtx == null) odCtx = app.wheelstop.android.daemon.CameraDaemon.getAppContext();
+            if (odCtx == null) odCtx = CameraDaemon.getAppContext();
             if (odCtx != null) {
+<<<<<<< HEAD
                 app.wheelstop.android.blindspot.BsCoefficients.authorize(odCtx);
+=======
+                Od.authorize(odCtx);
+>>>>>>> vendor/upstream
             } else {
                 logger.error("od authorize skipped: no context available");
             }
@@ -4129,14 +4156,14 @@ public class GpuSurveillancePipeline {
             // so the stream scaler can never silently diverge from the
             // recorder's mosaic arrangement.
             streamScaler.setProducerLayout(
-                app.wheelstop.android.camera.Dilink4Constants.CORNER_FRONT,
-                app.wheelstop.android.camera.Dilink4Constants.CORNER_RIGHT,
-                app.wheelstop.android.camera.Dilink4Constants.CORNER_REAR,
-                app.wheelstop.android.camera.Dilink4Constants.CORNER_LEFT,
-                app.wheelstop.android.camera.Dilink4Constants.FLIP_FRONT,
-                app.wheelstop.android.camera.Dilink4Constants.FLIP_RIGHT,
-                app.wheelstop.android.camera.Dilink4Constants.FLIP_REAR,
-                app.wheelstop.android.camera.Dilink4Constants.FLIP_LEFT);
+                Dilink4Constants.CORNER_FRONT,
+                Dilink4Constants.CORNER_RIGHT,
+                Dilink4Constants.CORNER_REAR,
+                Dilink4Constants.CORNER_LEFT,
+                Dilink4Constants.FLIP_FRONT,
+                Dilink4Constants.FLIP_RIGHT,
+                Dilink4Constants.FLIP_REAR,
+                Dilink4Constants.FLIP_LEFT);
             // Red-overlay suppression follows the recorder. Read the same
             // unified-config flag so the live preview matches the MP4.
             try {
@@ -4162,9 +4189,9 @@ public class GpuSurveillancePipeline {
         // would null the fields, then the eventually-running lambda
         // would NPE on `streamScaler.init` and the partially-built
         // GL program would leak (caught lambda swallowed the NPE).
-        final app.wheelstop.android.streaming.GpuStreamScaler scalerLocal = streamScaler;
+        final GpuStreamScaler scalerLocal = streamScaler;
         final HardwareEventRecorderGpu encoderLocal = streamEncoder;
-        final app.wheelstop.android.camera.EGLCore eglCoreLocal = camera.getEglCore();
+        final EGLCore eglCoreLocal = camera.getEglCore();
         final Object initLock = new Object();
         final boolean[] initDone = {false};
         final Exception[] initError = {null};
@@ -4235,7 +4262,7 @@ public class GpuSurveillancePipeline {
         // Create WebSocket stream server (port 8887)
         // WebSocket has zero buffering delay vs HTTP Chunked (64KB+ buffer)
         logger.info("Starting WebSocket stream server...");
-        wsStreamServer = new app.wheelstop.android.streaming.WebSocketStreamServer();
+        wsStreamServer = new WebSocketStreamServer();
 
         // Gate PASS 1B on live client presence: with no viewer on either the
         // port-8887 or the /ws relay path, skip the stream raster + encode
@@ -4243,7 +4270,7 @@ public class GpuSurveillancePipeline {
         // counts both consumer paths; the camera re-requests an IDR on the
         // rising edge so a reconnect within the 30s idle window is instantly
         // decodable. Cleared to fail-open in clearStreamingComponents().
-        final app.wheelstop.android.streaming.WebSocketStreamServer wsForProbe = wsStreamServer;
+        final WebSocketStreamServer wsForProbe = wsStreamServer;
         camera.setStreamClientProbe(wsForProbe::hasActiveClients);
 
 
@@ -4264,7 +4291,7 @@ public class GpuSurveillancePipeline {
                             // a "keep warm" reason for OEM. Re-evaluate so OEM
                             // tears down if no recording mode is asking for it.
                             try {
-                                app.wheelstop.android.server.OemDashcamApiHandler
+                                OemDashcamApiHandler
                                     .scheduleLifecycleRecalc();
                             } catch (Throwable ignored) {}
                             // Snapshot every cross-thread field once. Without this, a
@@ -4324,7 +4351,7 @@ public class GpuSurveillancePipeline {
                             // "always-on camera for parked preview" model.
                             boolean dilink4Persistent = false;
                             try {
-                                dilink4Persistent = app.wheelstop.android.daemon.CameraDaemon
+                                dilink4Persistent = CameraDaemon
                                     .isDilink4ModeActiveStatic();
                             } catch (Throwable ignored) {}
                             if (dilink4Persistent) {
@@ -4425,7 +4452,7 @@ public class GpuSurveillancePipeline {
         // re-install the publish ref into the about-to-be-released
         // scaler. Field-null first, publish-clear second, then the GL
         // Runnable does belt-and-braces re-clear inside the GL thread.
-        final app.wheelstop.android.streaming.GpuStreamScaler scalerRef = streamScaler;
+        final GpuStreamScaler scalerRef = streamScaler;
         final HardwareEventRecorderGpu encoderRef = streamEncoder;
         streamScaler = null;        // field-null visible to render loop + attach NOW
         streamEncoder = null;
@@ -4437,8 +4464,8 @@ public class GpuSurveillancePipeline {
         // reference; once it sees null, no more publishOemTexMatrix calls
         // touch our scaler.
         try {
-            app.wheelstop.android.camera.OemDashcamPipeline oem =
-                app.wheelstop.android.daemon.CameraDaemon.getOemDashcamPipeline();
+            OemDashcamPipeline oem =
+                CameraDaemon.getOemDashcamPipeline();
             if (oem != null) oem.setStreamScalerForOemPublish(null);
         } catch (Throwable ignored) {}
 
@@ -4468,8 +4495,8 @@ public class GpuSurveillancePipeline {
                     // the OEM render loop can't keep writing into the
                     // about-to-be-released scaler.
                     try {
-                        app.wheelstop.android.camera.OemDashcamPipeline oem2 =
-                            app.wheelstop.android.daemon.CameraDaemon.getOemDashcamPipeline();
+                        OemDashcamPipeline oem2 =
+                            CameraDaemon.getOemDashcamPipeline();
                         if (oem2 != null) oem2.setStreamScalerForOemPublish(null);
                     } catch (Throwable ignored) {}
                     try { scalerRef.unbindOemSource(); } catch (Throwable ignored) {}
@@ -4573,7 +4600,7 @@ public class GpuSurveillancePipeline {
      * lane genuinely arms. Convergent: no false success, no dead-port loop.
      */
     public boolean isBlindSpotEnabled() {
-        app.wheelstop.android.surveillance.BsNativeLayer layer = bsLayer;
+        BsNativeLayer layer = bsLayer;
         return blindSpotEnabled && layer != null && layer.isCreated();
     }
     public int getBlindSpotViewMode() { return bsViewMode; }
@@ -4626,7 +4653,7 @@ public class GpuSurveillancePipeline {
         // so holding the lock briefly here can't deadlock against the GL thread.
         bsLifecycleLock.lock();
         try {
-            app.wheelstop.android.streaming.GpuStreamScaler s = bsScaler;
+            GpuStreamScaler s = bsScaler;
             if (s != null) {
                 s.setViewMode(mode);          // sets side sign internally (7→-1, 8→+1)
                 applyBlindSpotCalibration(s);
@@ -4661,7 +4688,7 @@ public class GpuSurveillancePipeline {
                     bsGeomRect = new int[]{pr[0], pr[1], pr[2], pr[3]};   // atomic publish
                 }
             }
-            app.wheelstop.android.surveillance.BsNativeLayer layer = bsLayer;
+            BsNativeLayer layer = bsLayer;
             if (layer != null && layer.isCreated() && bsLayerVisible) {
                 int[] gr = bsGeomRect;
                 if (gr[0] >= 0) layer.setGeometry(gr[0], gr[1], gr[2], gr[3]);
@@ -4672,10 +4699,10 @@ public class GpuSurveillancePipeline {
     }
 
     /** Apply the persisted 'blindspot' UCM calibration to a BS scaler. */
-    private void applyBlindSpotCalibration(app.wheelstop.android.streaming.GpuStreamScaler s) {
+    private void applyBlindSpotCalibration(GpuStreamScaler s) {
         try {
-            app.wheelstop.android.config.UnifiedConfigManager.forceReload();
-            org.json.JSONObject bs = app.wheelstop.android.config.UnifiedConfigManager.getBlindSpot();
+            UnifiedConfigManager.forceReload();
+            org.json.JSONObject bs = UnifiedConfigManager.getBlindSpot();
             if (bs != null && bs.length() > 0) {
                 s.setBlindSpotParams(
                     (float) bs.optDouble("rearFov", 1.66),
@@ -4853,7 +4880,7 @@ public class GpuSurveillancePipeline {
         // disableBlindSpot won't wrongly "retain the lane for camview"; the user
         // re-issues /api/camview/show if they still want it after BS turns off.
         if (camViewActive) {
-            try { app.wheelstop.android.surveillance.ClusterProjectionController.getInstance().releaseSustained("camview"); } catch (Throwable ignored) {}
+            try { ClusterProjectionController.getInstance().releaseSustained("camview"); } catch (Throwable ignored) {}
             camViewActive = false;
             camViewHideAtMs = 0L;
             logger.info("BS: took lane ownership from camera-view (priority)");
@@ -4899,7 +4926,7 @@ public class GpuSurveillancePipeline {
         }
 
         // Own SurfaceControl layer (GPU → screen, no encoder/WS/decoder).
-        bsLayer = new app.wheelstop.android.surveillance.BsNativeLayer(BS_WIDTH, BS_HEIGHT);
+        bsLayer = new BsNativeLayer(BS_WIDTH, BS_HEIGHT);
         if (!bsLayer.create()) {
             bsLayer = null;
             throw new RuntimeException("BS: SurfaceControl layer create failed");
@@ -4907,9 +4934,9 @@ public class GpuSurveillancePipeline {
 
         // Own scaler — same per-role offsets as the live stream so the stitch
         // matches the recorder's camera arrangement.
-        app.wheelstop.android.camera.ResolvedCameraConfig cfg =
-            app.wheelstop.android.camera.CameraConfigResolver.resolve(getVehicleModel());
-        bsScaler = new app.wheelstop.android.streaming.GpuStreamScaler(
+        ResolvedCameraConfig cfg =
+            CameraConfigResolver.resolve(getVehicleModel());
+        bsScaler = new GpuStreamScaler(
             BS_WIDTH, BS_HEIGHT, cfg.getQuadrantStripOffsetX());
 
         // BS-LIFECYCLE-1: from here on, bsScaler+bsLayer are assigned to the
@@ -4923,8 +4950,13 @@ public class GpuSurveillancePipeline {
         // libod host-authorization (same context fallback as the stream lane).
         try {
             android.content.Context odCtx = savedContext;
+<<<<<<< HEAD
             if (odCtx == null) odCtx = app.wheelstop.android.daemon.CameraDaemon.getAppContext();
             if (odCtx != null) app.wheelstop.android.blindspot.BsCoefficients.authorize(odCtx);
+=======
+            if (odCtx == null) odCtx = CameraDaemon.getAppContext();
+            if (odCtx != null) Od.authorize(odCtx);
+>>>>>>> vendor/upstream
         } catch (Throwable t) {
             logger.warn("BS: od init failed: " + t.getMessage());
         }
@@ -4933,14 +4965,14 @@ public class GpuSurveillancePipeline {
         bsScaler.setCameraLayout(escoPath ? 3 : 0);
         if (escoPath) {
             bsScaler.setProducerLayout(
-                app.wheelstop.android.camera.Dilink4Constants.CORNER_FRONT,
-                app.wheelstop.android.camera.Dilink4Constants.CORNER_RIGHT,
-                app.wheelstop.android.camera.Dilink4Constants.CORNER_REAR,
-                app.wheelstop.android.camera.Dilink4Constants.CORNER_LEFT,
-                app.wheelstop.android.camera.Dilink4Constants.FLIP_FRONT,
-                app.wheelstop.android.camera.Dilink4Constants.FLIP_RIGHT,
-                app.wheelstop.android.camera.Dilink4Constants.FLIP_REAR,
-                app.wheelstop.android.camera.Dilink4Constants.FLIP_LEFT);
+                Dilink4Constants.CORNER_FRONT,
+                Dilink4Constants.CORNER_RIGHT,
+                Dilink4Constants.CORNER_REAR,
+                Dilink4Constants.CORNER_LEFT,
+                Dilink4Constants.FLIP_FRONT,
+                Dilink4Constants.FLIP_RIGHT,
+                Dilink4Constants.FLIP_REAR,
+                Dilink4Constants.FLIP_LEFT);
             // Parity with the recorder + stream lanes: the blind-spot scaler is
             // another GpuStreamScaler sampling the SAME producer, so it needs the
             // same two dilink4 corrections or its card diverges visually from
@@ -4949,7 +4981,7 @@ public class GpuSurveillancePipeline {
             // is inert for those views today; pushing it keeps the contract
             // uniform if the branch layout ever changes.)
             try {
-                org.json.JSONObject bsCamCfg = app.wheelstop.android.config.UnifiedConfigManager
+                org.json.JSONObject bsCamCfg = UnifiedConfigManager
                     .loadConfig().optJSONObject("camera");
                 if (bsCamCfg != null) {
                     bsScaler.setRedMaskEnabled(
@@ -4965,9 +4997,9 @@ public class GpuSurveillancePipeline {
         // GL-thread init + WAIT (captured locals, same rationale as the stream lane).
         // The scaler renders into the SurfaceControl layer's Surface (wrapped in an
         // EGLSurface on the GL thread) instead of an encoder input surface.
-        final app.wheelstop.android.streaming.GpuStreamScaler scalerLocal = bsScaler;
+        final GpuStreamScaler scalerLocal = bsScaler;
         final android.view.Surface layerSurfaceLocal = bsLayer.getSurface();
-        final app.wheelstop.android.camera.EGLCore eglCoreLocal = camera.getEglCore();
+        final EGLCore eglCoreLocal = camera.getEglCore();
         final Object initLock = new Object();
         final boolean[] initDone = {false};
         final Exception[] initError = {null};
@@ -5028,8 +5060,8 @@ public class GpuSurveillancePipeline {
      *  thread, then the SC layer) — used by enableBlindSpotInternal's failure
      *  path so a throw/race never leaks GL/SurfaceControl resources. */
     private void releasePartialBsLane() {
-        final app.wheelstop.android.streaming.GpuStreamScaler scalerRef = bsScaler;
-        final app.wheelstop.android.surveillance.BsNativeLayer layerRef = bsLayer;
+        final GpuStreamScaler scalerRef = bsScaler;
+        final BsNativeLayer layerRef = bsLayer;
         bsScaler = null;
         bsLayer = null;
         try { if (camera != null) camera.clearBsStreamingComponents(); } catch (Throwable ignored) {}
@@ -5060,9 +5092,9 @@ public class GpuSurveillancePipeline {
     private void resolveBsGeometry() {
         try {
             android.content.Context ctx = savedContext;
-            if (ctx == null) ctx = app.wheelstop.android.daemon.CameraDaemon.getAppContext();
+            if (ctx == null) ctx = CameraDaemon.getAppContext();
 
-            org.json.JSONObject bs = app.wheelstop.android.config.UnifiedConfigManager.getBlindSpot();
+            org.json.JSONObject bs = UnifiedConfigManager.getBlindSpot();
             // Resolve the display target FIRST so panel + geometry-key pick the
             // right display. Default head_unit = byte-for-byte the shipping path.
             bsTarget = (bs != null) ? bs.optString("target", "head_unit") : "head_unit";
@@ -5121,11 +5153,29 @@ public class GpuSurveillancePipeline {
                 r = clampBsRect(r[0], r[1], r[2], r[3]);
             }
             bsGeomRect = new int[]{r[0], r[1], r[2], r[3]};   // atomic publish
+<<<<<<< HEAD
             // Push the resolved rotation onto the layer so the setGeometry calls that
             // follow (enable / show / retarget) composite the buffer at the right
             // angle. Cheap store; the rect above already matches the rotated aspect.
             app.wheelstop.android.surveillance.BsNativeLayer layer = bsLayer;
             if (layer != null) layer.setBufferRotation(bsRotationDeg);
+=======
+            // Rotation is applied in the GL render (bsScaler.setContentRotation via
+            // applyBlindSpotCalibration), so the SurfaceControl layer stays at IDENTITY
+            // orientation — a 90/270 LAYER transform is dropped by this firmware's
+            // compositor and blanks the card (issue #164). Force the layer's buffer
+            // rotation to 0 so no setGeometry call ever re-introduces a layer-level
+            // transform, and keep the dest rect at the buffer's native 4:3 (done above).
+            BsNativeLayer layer = bsLayer;
+            if (layer != null) layer.setBufferRotation(0);
+            // Keep the GL scaler's card rotation in sync with the freshly-resolved angle
+            // (covers the settings-write / enable path; the turn-tick AUTO path syncs it
+            // too). Gated to side/rear inside resolveBsRotation. bsCorner is resolved for
+            // the current side just above (preset branch), so align the rotated card to
+            // that corner's edge — a 90/270 card hugs left/right per side, not centered.
+            GpuStreamScaler bss = bsScaler;
+            if (bss != null) bss.setContentRotation(bsRotationDeg, bsRotationAlignX());
+>>>>>>> vendor/upstream
         } catch (Throwable t) {
             logger.warn("resolveBsGeometry failed: " + t.getMessage());
             if (bsGeomRect[2] <= 0) bsGeomRect = new int[]{24, 24, 640, 480};
@@ -5173,8 +5223,8 @@ public class GpuSurveillancePipeline {
                     : snapDeg(bs.optInt("rotationBase", 0));
             boolean reverse = false;
             try {
-                reverse = app.wheelstop.android.monitor.GearMonitor.getInstance().getCurrentGear()
-                        == app.wheelstop.android.monitor.GearMonitor.GEAR_R;
+                reverse = GearMonitor.getInstance().getCurrentGear()
+                        == GearMonitor.GEAR_R;
             } catch (Throwable ignored) {}
             return reverse ? (base + 180) % 360 : base;
         }
@@ -5228,7 +5278,7 @@ public class GpuSurveillancePipeline {
      *  reposition to pick cornerLeft/cornerRight without a full resolveBsGeometry. */
     private org.json.JSONObject currentGeometryObj() {
         try {
-            org.json.JSONObject bs = app.wheelstop.android.config.UnifiedConfigManager.getBlindSpot();
+            org.json.JSONObject bs = UnifiedConfigManager.getBlindSpot();
             if (bs == null) return null;
             return bs.optJSONObject(isClusterTarget() ? "geometryCluster" : "geometry");
         } catch (Throwable t) {
@@ -5244,7 +5294,7 @@ public class GpuSurveillancePipeline {
     public void setBsGeometry(int x, int y, int w, int h) {
         int[] r = clampBsRect(x, y, w, h);
         bsGeomRect = new int[]{r[0], r[1], r[2], r[3]};   // atomic publish
-        app.wheelstop.android.surveillance.BsNativeLayer layer = bsLayer;
+        BsNativeLayer layer = bsLayer;
         if (layer != null && layer.isCreated() && bsLayerVisible) {
             layer.setGeometry(r[0], r[1], r[2], r[3]);
         }
@@ -5264,10 +5314,10 @@ public class GpuSurveillancePipeline {
         try {
             boolean cluster = "cluster".equals(target);
             android.content.Context ctx = savedContext;
-            if (ctx == null) ctx = app.wheelstop.android.daemon.CameraDaemon.getAppContext();
+            if (ctx == null) ctx = CameraDaemon.getAppContext();
             android.graphics.Point panel = (ctx != null)
-                ? (cluster ? app.wheelstop.android.surveillance.BsNativeLayer.clusterDisplaySize(ctx)
-                           : app.wheelstop.android.surveillance.BsNativeLayer.displaySize(ctx))
+                ? (cluster ? BsNativeLayer.clusterDisplaySize(ctx)
+                           : BsNativeLayer.displaySize(ctx))
                 : new android.graphics.Point(1920, cluster ? 720 : 1080);
             int p = Math.max(15, Math.min(pct, 90));
             int w = (int) (panel.x * (p / 100.0));
@@ -5296,7 +5346,7 @@ public class GpuSurveillancePipeline {
             String cornerVal = (corner != null) ? corner : "tr";
             org.json.JSONObject g;
             try {
-                org.json.JSONObject bsNow = app.wheelstop.android.config.UnifiedConfigManager.getBlindSpot();
+                org.json.JSONObject bsNow = UnifiedConfigManager.getBlindSpot();
                 org.json.JSONObject existing = (bsNow != null) ? bsNow.optJSONObject(geomKey) : null;
                 g = (existing != null) ? new org.json.JSONObject(existing.toString()) : new org.json.JSONObject();
             } catch (Throwable t) {
@@ -5306,7 +5356,7 @@ public class GpuSurveillancePipeline {
             g.put("corner", cornerVal);
             g.put("cornerLeft", cornerVal);
             g.put("cornerRight", cornerVal);
-            app.wheelstop.android.config.UnifiedConfigManager.updateSection("blindspot",
+            UnifiedConfigManager.updateSection("blindspot",
                 new org.json.JSONObject().put(geomKey, g));
             // Apply live only if editing the active target; otherwise it's persisted
             // for when that target is next selected.
@@ -5328,8 +5378,8 @@ public class GpuSurveillancePipeline {
      *  clusterDisplaySize falls back to the fixed 1920×720. */
     private android.graphics.Point panelForTarget(android.content.Context ctx) {
         return isClusterTarget()
-            ? app.wheelstop.android.surveillance.BsNativeLayer.clusterDisplaySize(ctx)
-            : app.wheelstop.android.surveillance.BsNativeLayer.displaySize(ctx);
+            ? BsNativeLayer.clusterDisplaySize(ctx)
+            : BsNativeLayer.displaySize(ctx);
     }
 
     /** Recompute the px rect from the current size%/corner preset + LIVE panel.
@@ -5364,7 +5414,7 @@ public class GpuSurveillancePipeline {
     private int[] clampBsRect(int x, int y, int w, int h) {
         try {
             android.content.Context ctx = savedContext;
-            if (ctx == null) ctx = app.wheelstop.android.daemon.CameraDaemon.getAppContext();
+            if (ctx == null) ctx = CameraDaemon.getAppContext();
             android.graphics.Point panel = (ctx != null)
                 ? panelForTarget(ctx)
                 : new android.graphics.Point(1920, isClusterTarget() ? 720 : 1080);
@@ -5393,11 +5443,11 @@ public class GpuSurveillancePipeline {
     /** Show/hide the BS layer (turn-trigger / debug-preview gate). */
     public void setBlindSpotVisible(boolean visible) {
         bsLayerVisible = visible;
-        app.wheelstop.android.camera.PanoramicCameraGpu cam = camera;
+        PanoramicCameraGpu cam = camera;
         if (cam != null) cam.setBsLayerVisible(visible);
         // Ramp global camera fps when BS is the sole consumer (edge-detected).
         fireBsVisibilityChanged();
-        app.wheelstop.android.surveillance.BsNativeLayer layer = bsLayer;
+        BsNativeLayer layer = bsLayer;
         if (layer == null || !layer.isCreated()) return;
         if (visible) {
             // Retarget to the cluster's layerStack before showing (no-op if already
@@ -5435,7 +5485,7 @@ public class GpuSurveillancePipeline {
             // + clear the visible intent. (setBlindSpotVisible(false) is just
             // layer.hide() + gate off — no teardown, pipeline stays warm.)
             bsLayerVisible = false;
-            app.wheelstop.android.camera.PanoramicCameraGpu cam = camera;
+            PanoramicCameraGpu cam = camera;
             if (cam != null) cam.setBsLayerVisible(false);
             fireBsVisibilityChanged();   // drop global fps if BS is sole consumer
             // INCREMENTING-STACK FIX: the fission VirtualDisplay is destroyed on this
@@ -5447,8 +5497,8 @@ public class GpuSurveillancePipeline {
             // tagging the layer onto a dead stack. The next onClusterProjectionReady
             // re-resolves the live stack fresh. Guarded by bsLifecycleLock (same lock
             // serializing the show path); bsClusterStack is volatile.
-            bsClusterStack = app.wheelstop.android.surveillance.BsNativeLayer.STACK_UNRESOLVED;
-            app.wheelstop.android.surveillance.BsNativeLayer layer = bsLayer;
+            bsClusterStack = BsNativeLayer.STACK_UNRESOLVED;
+            BsNativeLayer layer = bsLayer;
             if (layer != null && layer.isCreated()) layer.hide();
         } catch (Throwable t) {
             logger.warn("onClusterProjectionClosed failed: " + t.getMessage());
@@ -5484,12 +5534,12 @@ public class GpuSurveillancePipeline {
         bsLifecycleLock.lock();
         try {
             bsLayerVisible = true;
-            app.wheelstop.android.camera.PanoramicCameraGpu cam = camera;
+            PanoramicCameraGpu cam = camera;
             if (cam != null) cam.setBsLayerVisible(true);   // unconditional — re-arm gate
             // Edge-detected: only the first show-tick of a signal session reaches the
             // listener (per-250ms re-asserts no-op via bsLastNotifiedVisible).
             fireBsVisibilityChanged();
-            app.wheelstop.android.surveillance.BsNativeLayer layer = bsLayer;
+            BsNativeLayer layer = bsLayer;
             if (layer == null || !layer.isCreated()) return;
             if (!layer.isShown()) {
                 // I9 GUARD: resolving the live layerStack below spawns a `dumpsys
@@ -5501,8 +5551,8 @@ public class GpuSurveillancePipeline {
                 // projThread (isOnProjThread()==true), resolves the stack, and shows. The
                 // cheap render-gate re-arm above (volatile writes + fireBsVisibilityChanged)
                 // already ran on this tick, so the GL lane stays armed in the meantime.
-                app.wheelstop.android.surveillance.ClusterProjectionController ctrl =
-                    app.wheelstop.android.surveillance.ClusterProjectionController.getInstance();
+                ClusterProjectionController ctrl =
+                    ClusterProjectionController.getInstance();
                 if (!ctrl.isOnProjThread()) {
                     ctrl.requestShowRedrive();   // I9-safe: dumpsys re-runs on projThread
                     return;
@@ -5511,13 +5561,13 @@ public class GpuSurveillancePipeline {
                 // fission display may have materialised AFTER the projection-ready commit
                 // (READY_SETTLE_MS=900ms is shorter than the ~1-3s materialise on some
                 // models), so a single resolve at onClusterProjectionReady can be stale.
-                int live = app.wheelstop.android.surveillance.BsNativeLayer.clusterLayerStack(bsClusterStack);
+                int live = BsNativeLayer.clusterLayerStack(bsClusterStack);
                 // STACK_UNRESOLVED (-1) = no fission display found → DO NOT SHOW. Tagging
                 // the layer with a wrong/sentinel stack composites it onto a dead stack =
                 // BLACK (the model-dependent bug). Keep it hidden; bsTurnTick re-enters
                 // every poll within the linger/cap window and retries once the display
                 // appears. Never pass a negative stack to setLayerStack/setGeometry.
-                if (live == app.wheelstop.android.surveillance.BsNativeLayer.STACK_UNRESOLVED) {
+                if (live == BsNativeLayer.STACK_UNRESOLVED) {
                     logger.warn("clusterShowWhenReady: fission display unresolved — deferring show");
                     return;
                 }
@@ -5532,7 +5582,7 @@ public class GpuSurveillancePipeline {
                 // close-first → show declines here; show-first → close-hide hides it.
                 // No-op for the bsTurnTick callers (they only enter on c.isReady(), i.e.
                 // projState==ST_OPEN). The dumpsys above already ran on projThread (I9).
-                if (!app.wheelstop.android.surveillance.ClusterProjectionController
+                if (!ClusterProjectionController
                         .getInstance().isOpen()) {
                     logger.warn("clusterShowWhenReady: projection no longer open — declining show");
                     return;
@@ -5563,13 +5613,13 @@ public class GpuSurveillancePipeline {
             // showed on the cluster at all.
             boolean camViewCluster = camViewActive && !blindSpotEnabled && isCamViewClusterTarget();
             if (!isClusterTarget() && !camViewCluster) return;
-            app.wheelstop.android.surveillance.BsNativeLayer layer = bsLayer;
+            BsNativeLayer layer = bsLayer;
             if (layer == null || !layer.isCreated()) return;
-            int live = app.wheelstop.android.surveillance.BsNativeLayer.clusterLayerStack(bsClusterStack);
+            int live = BsNativeLayer.clusterLayerStack(bsClusterStack);
             // Only adopt a positively-resolved stack; keep last-known-good on a miss
             // (don't poison bsClusterStack with the -1 sentinel — clusterShowWhenReady
             // re-resolves and defers the show until the display is actually present).
-            if (live != app.wheelstop.android.surveillance.BsNativeLayer.STACK_UNRESOLVED) {
+            if (live != BsNativeLayer.STACK_UNRESOLVED) {
                 bsClusterStack = live;
                 // INCREMENTING-STACK FIX ("no video after 3-4 attempts"): SurfaceFlinger
                 // assigns a NEW, higher layerStack each time the fission VirtualDisplay
@@ -5621,7 +5671,7 @@ public class GpuSurveillancePipeline {
             // clusterShowWhenReady() still re-checks isOpen()/stack/lock itself.
             boolean sustained;
             try {
-                sustained = app.wheelstop.android.surveillance.ClusterProjectionController
+                sustained = ClusterProjectionController
                         .getInstance().isSustainedHeld();
             } catch (Throwable t) {
                 sustained = false;
@@ -5640,15 +5690,15 @@ public class GpuSurveillancePipeline {
      *  just re-resolves geometry; the projection opens lazily on the next signal. */
     public void retargetBlindSpot() {
         try {
-            app.wheelstop.android.config.UnifiedConfigManager.forceReload();
-            org.json.JSONObject bs = app.wheelstop.android.config.UnifiedConfigManager.getBlindSpot();
+            UnifiedConfigManager.forceReload();
+            org.json.JSONObject bs = UnifiedConfigManager.getBlindSpot();
             String newTarget = (bs != null) ? bs.optString("target", "head_unit") : "head_unit";
             boolean wasCluster = isClusterTarget();
             bsTarget = newTarget;
-            app.wheelstop.android.surveillance.BsNativeLayer layer = bsLayer;
+            BsNativeLayer layer = bsLayer;
             if (wasCluster && !isClusterTarget()) {
                 // Leaving the cluster — restore gauges and move the card home.
-                try { app.wheelstop.android.surveillance.ClusterProjectionController.getInstance().forceClose("retarget-headunit"); } catch (Throwable ignored) {}
+                try { ClusterProjectionController.getInstance().forceClose("retarget-headunit"); } catch (Throwable ignored) {}
                 if (layer != null) layer.setLayerStack(0);
             }
             resolveBsGeometry();
@@ -5669,7 +5719,7 @@ public class GpuSurveillancePipeline {
         try {
             if (!isClusterTarget()) return;
             setBlindSpotVisible(false);
-            app.wheelstop.android.surveillance.ClusterProjectionController.getInstance().forceClose("relayout");
+            ClusterProjectionController.getInstance().forceClose("relayout");
         } catch (Throwable t) {
             logger.warn("relayoutCluster failed: " + t.getMessage());
         }
@@ -5685,7 +5735,7 @@ public class GpuSurveillancePipeline {
         try {
             java.util.Map<String, Object> m = new java.util.HashMap<>();
             m.put("clusterMapActive", false);
-            app.wheelstop.android.config.UnifiedConfigManager.updateValues("navMap", m);
+            UnifiedConfigManager.updateValues("navMap", m);
             logger.info("BS open (no sustained map): dismissed any orphaned cluster-map Activity");
         } catch (Throwable t) {
             logger.debug("dismissOrphanClusterMap failed: " + t.getMessage());
@@ -5762,7 +5812,7 @@ public class GpuSurveillancePipeline {
                 // Configure the shared scaler for the camview program on first entry /
                 // after a program handover (transition-only, not every tick).
                 if (laneProgram != PROG_CAMVIEW) {
-                    app.wheelstop.android.streaming.GpuStreamScaler s = bsScaler;
+                    GpuStreamScaler s = bsScaler;
                     if (s != null) {
                         // Plain camera view: modes 0-4 do NOT sample the blind-spot stitch
                         // path, so no calibration/warp is applied (clean single-cam/mosaic).
@@ -5781,12 +5831,12 @@ public class GpuSurveillancePipeline {
                     // Same ACC-off safety gate as BS: never (re)open the projection while
                     // ACC is authoritatively off (the ACC-off edge force-closed it to
                     // restore the gauges; re-opening here would blank them again).
-                    if (app.wheelstop.android.monitor.AccMonitor.isAccStateAuthoritative()
-                            && !app.wheelstop.android.monitor.AccMonitor.isAccOn()) {
+                    if (AccMonitor.isAccStateAuthoritative()
+                            && !AccMonitor.isAccOn()) {
                         return;
                     }
-                    app.wheelstop.android.surveillance.ClusterProjectionController c =
-                        app.wheelstop.android.surveillance.ClusterProjectionController.getInstance();
+                    ClusterProjectionController c =
+                        ClusterProjectionController.getInstance();
                     // Camera-view is a SUSTAINED consumer (stays until hidden), unlike the
                     // transient turn-signal session. acquireSustained("camview") holds the
                     // projection open under its OWN token (independent of the nav map's
@@ -5823,7 +5873,7 @@ public class GpuSurveillancePipeline {
             // Blind-spot is enabled and owns the lane. If it was just handed the lane
             // back from camview (laneProgram != PROG_BS), re-assert the BS program.
             if (laneProgram != PROG_BS) {
-                app.wheelstop.android.streaming.GpuStreamScaler s = bsScaler;
+                GpuStreamScaler s = bsScaler;
                 if (s != null) { s.setViewMode(bsViewMode); applyBlindSpotCalibration(s); }
                 // Blind-spot has priority and now OWNS the lane + projection lifecycle.
                 // If camera-view was holding a sustained cluster projection, release its
@@ -5831,7 +5881,7 @@ public class GpuSurveillancePipeline {
                 // while masked — BS manages the projection via its own transient path
                 // from here. Idempotent (no-op if camview never held). This closes the
                 // "camview stuck sustained → BS transient gauge-restore disarmed" gap.
-                try { app.wheelstop.android.surveillance.ClusterProjectionController.getInstance().releaseSustained("camview"); } catch (Throwable ignored) {}
+                try { ClusterProjectionController.getInstance().releaseSustained("camview"); } catch (Throwable ignored) {}
                 laneProgram = PROG_BS;
             }
             boolean cluster = isClusterTarget();
@@ -5844,10 +5894,10 @@ public class GpuSurveillancePipeline {
             if (!cluster) {
                 try {
                     android.content.Context ctx = savedContext;
-                    if (ctx == null) ctx = app.wheelstop.android.daemon.CameraDaemon.getAppContext();
+                    if (ctx == null) ctx = CameraDaemon.getAppContext();
                     if (ctx != null) {
                         android.graphics.Point panel =
-                            app.wheelstop.android.surveillance.BsNativeLayer.displaySize(ctx);
+                            BsNativeLayer.displaySize(ctx);
                         if (panel.x != bsLastPanelW || panel.y != bsLastPanelH) {
                             resolveBsGeometry();   // updates bsGeomRect + bsLastPanel*
                             if (bsLayerVisible && bsLayer != null) {
@@ -5859,7 +5909,7 @@ public class GpuSurveillancePipeline {
                 } catch (Throwable ignored) {}
             }
 
-            org.json.JSONObject bs = app.wheelstop.android.config.UnifiedConfigManager.getBlindSpot();
+            org.json.JSONObject bs = UnifiedConfigManager.getBlindSpot();
             // AUTO rotation (direction-of-travel): when rotation="auto" the effective
             // angle depends on gear (forward=base, reverse=base+180), so it must be
             // re-evaluated live rather than only on a settings write. Re-resolve
@@ -5878,6 +5928,7 @@ public class GpuSurveillancePipeline {
                 int wantRot = resolveBsRotation(bs, bsViewMode);
                 if (wantRot != bsRotationDeg) {
                     bsRotationDeg = wantRot;
+<<<<<<< HEAD
                     app.wheelstop.android.surveillance.BsNativeLayer rl = bsLayer;
                     if (rl != null) {
                         rl.setBufferRotation(wantRot);
@@ -5886,6 +5937,13 @@ public class GpuSurveillancePipeline {
                             rl.setGeometry(g[0], g[1], g[2], g[3]);
                         }
                     }
+=======
+                    GpuStreamScaler bss = bsScaler;
+                    // bsCorner reflects the current side (setBlindSpotViewMode's
+                    // reposition runs before this on a side change), so align the
+                    // rotated card to that side's edge.
+                    if (bss != null) bss.setContentRotation(wantRot, bsRotationAlignX());
+>>>>>>> vendor/upstream
                 }
             }
             boolean debugPreview = bs.optBoolean("debugPreview", false);
@@ -5897,15 +5955,15 @@ public class GpuSurveillancePipeline {
                     // cluster projection while ACC is authoritatively off, so the ACC-off
                     // force-close that restored the gauges isn't undone by a left-on
                     // calibration preview on the next tick.
-                    if (app.wheelstop.android.monitor.AccMonitor.isAccStateAuthoritative()
-                            && !app.wheelstop.android.monitor.AccMonitor.isAccOn()) {
+                    if (AccMonitor.isAccStateAuthoritative()
+                            && !AccMonitor.isAccOn()) {
                         return;
                     }
                     // Calibration on the cluster: keep the projection open while
                     // previewing; show only once the cluster display is present
                     // (onClusterProjectionReady also shows it on the ready edge).
-                    app.wheelstop.android.surveillance.ClusterProjectionController c =
-                        app.wheelstop.android.surveillance.ClusterProjectionController.getInstance();
+                    ClusterProjectionController c =
+                        ClusterProjectionController.getInstance();
                     c.requestOpen(); c.noteSignal(); c.requestCloseLingered();
                     bsLayerVisible = true;   // intent
                     if (c.isReady()) clusterShowWhenReady();   // desync-proof show
@@ -5915,7 +5973,7 @@ public class GpuSurveillancePipeline {
                 return;
             }
             // Turn-gated: daemon owns the light HAL. readTurnNow packs bit0=L,bit1=R.
-            int packed = app.wheelstop.android.byd.BydDataCollector.getInstance().readTurnNow();
+            int packed = BydDataCollector.getInstance().readTurnNow();
             boolean leftOn = packed > 0 && (packed & 0x1) != 0;
             boolean rightOn = packed > 0 && (packed & 0x2) != 0;
             int side = (leftOn && !rightOn) ? 7 : (rightOn && !leftOn) ? 8 : 0;  // both/none → hide
@@ -5931,15 +5989,15 @@ public class GpuSurveillancePipeline {
                     // next tick if the indicator is mid-blink at ACC-off — FLASHING the
                     // gauges. Gated on isAccStateAuthoritative() so an unknown/default
                     // state (daemon just restarted) never wrongly suppresses projection.
-                    if (app.wheelstop.android.monitor.AccMonitor.isAccStateAuthoritative()
-                            && !app.wheelstop.android.monitor.AccMonitor.isAccOn()) {
+                    if (AccMonitor.isAccStateAuthoritative()
+                            && !AccMonitor.isAccOn()) {
                         return;
                     }
                     // Lazy-open the OEM cluster projection on the first signal; keep it
                     // open across the blink phase. Show the layer only once the cluster
                     // display is present (never composite stack-1 onto nothing).
-                    app.wheelstop.android.surveillance.ClusterProjectionController c =
-                        app.wheelstop.android.surveillance.ClusterProjectionController.getInstance();
+                    ClusterProjectionController c =
+                        ClusterProjectionController.getInstance();
                     // Belt-and-braces for the map-leak fix: if NO sustained map holds
                     // the projection, this BS open must not re-surface an orphaned
                     // parked cluster-map Activity. Dismiss it once per signal session
@@ -5962,7 +6020,7 @@ public class GpuSurveillancePipeline {
                 // normally (a real blink reaches here between flashes; a forgotten
                 // signal never does, keeping the cap effective).
                 if (cluster && side == 0) {
-                    app.wheelstop.android.surveillance.ClusterProjectionController.getInstance()
+                    ClusterProjectionController.getInstance()
                         .notifySignalCleared();
                 }
                 if (bsLayerVisible && (now - bsLastTurnOnMs) >= BS_OFF_DEBOUNCE_MS) {
@@ -5973,7 +6031,7 @@ public class GpuSurveillancePipeline {
                     if (cluster) {
                         // Hide the card now; restore the gauges after the linger window
                         // (rides brief blink gaps without re-paying the open latency).
-                        app.wheelstop.android.surveillance.ClusterProjectionController.getInstance()
+                        ClusterProjectionController.getInstance()
                             .requestCloseLingered();
                     }
                 }
@@ -5997,13 +6055,13 @@ public class GpuSurveillancePipeline {
             // restore the gauges FIRST, before any teardown. Gated on isClusterTarget()
             // so a head-unit-only user never even constructs the controller.
             if (isClusterTarget() && !camviewKeepsLane) {
-                try { app.wheelstop.android.surveillance.ClusterProjectionController.getInstance().forceClose("bs-disabled"); } catch (Throwable ignored) {}
+                try { ClusterProjectionController.getInstance().forceClose("bs-disabled"); } catch (Throwable ignored) {}
             }
             blindSpotEnabled = false;
 
             if (!camviewKeepsLane) {
                 stopBsTurnLoop();   // stop the daemon turn-trigger before teardown
-                app.wheelstop.android.camera.PanoramicCameraGpu cam = camera;
+                PanoramicCameraGpu cam = camera;
                 if (cam != null) cam.setBsLayerVisible(false);
                 bsLayerVisible = false;
                 fireBsVisibilityChanged();   // BS gone — let RMM re-reconcile camera profile
@@ -6064,12 +6122,12 @@ public class GpuSurveillancePipeline {
             }
         }
 
-        final app.wheelstop.android.streaming.GpuStreamScaler scalerRef = bsScaler;
-        final app.wheelstop.android.surveillance.BsNativeLayer layerRef = bsLayer;
+        final GpuStreamScaler scalerRef = bsScaler;
+        final BsNativeLayer layerRef = bsLayer;
         bsScaler = null;
         bsLayer = null;
         bsLayerVisible = false;
-        app.wheelstop.android.camera.PanoramicCameraGpu cam = camera;
+        PanoramicCameraGpu cam = camera;
         if (cam != null) cam.setBsLayerVisible(false);
 
         // GL-thread teardown: scaler.release (which destroys its EGLSurface wrapping
@@ -6133,7 +6191,7 @@ public class GpuSurveillancePipeline {
             // token would orphan (projection pinned open, gauges blanked, max-cap
             // disarmed) until ACC-off. Idempotent: no-op if it wasn't holding.
             if (camViewActive && isCamViewClusterTarget() && !"cluster".equals(newTarget)) {
-                try { app.wheelstop.android.surveillance.ClusterProjectionController.getInstance().releaseSustained("camview"); } catch (Throwable ignored) {}
+                try { ClusterProjectionController.getInstance().releaseSustained("camview"); } catch (Throwable ignored) {}
             }
             camViewMode = (mode >= 0 && mode <= 4) ? mode : 0;
             camViewTarget = newTarget;
@@ -6241,7 +6299,7 @@ public class GpuSurveillancePipeline {
             // if another sustained holder (nav map) remains OR a transient blind-spot
             // turn-signal currently wants it; otherwise it force-closes + restores the
             // gauges. Runs before any lane handoff/teardown, in BOTH branches below.
-            try { app.wheelstop.android.surveillance.ClusterProjectionController.getInstance().releaseSustained("camview"); } catch (Throwable ignored) {}
+            try { ClusterProjectionController.getInstance().releaseSustained("camview"); } catch (Throwable ignored) {}
 
             // If BS still needs the lane, just hand it back: hide the camview image,
             // force a reconfig so the next tick re-applies the BS program.
@@ -6285,7 +6343,7 @@ public class GpuSurveillancePipeline {
         try {
             java.util.List<String> cmd = new java.util.ArrayList<>(java.util.Arrays.asList(
                     "am", "broadcast",
-                    "-a", app.wheelstop.android.overlay.StatusOverlayService.ACTION_CAMVIEW_STATE,
+                    "-a", StatusOverlayService.ACTION_CAMVIEW_STATE,
                     "-p", "app.wheelstop.android",
                     "--ez", "active", active ? "true" : "false"));
             if (target != null) { cmd.add("--es"); cmd.add("target"); cmd.add(target); }
@@ -6309,12 +6367,12 @@ public class GpuSurveillancePipeline {
     private void resolveCamViewGeometry() {
         try {
             android.content.Context ctx = savedContext;
-            if (ctx == null) ctx = app.wheelstop.android.daemon.CameraDaemon.getAppContext();
-            org.json.JSONObject cv = app.wheelstop.android.config.UnifiedConfigManager.getCamView();
+            if (ctx == null) ctx = CameraDaemon.getAppContext();
+            org.json.JSONObject cv = UnifiedConfigManager.getCamView();
             android.graphics.Point panel = (ctx != null)
                 ? (isCamViewClusterTarget()
-                    ? app.wheelstop.android.surveillance.BsNativeLayer.clusterDisplaySize(ctx)
-                    : app.wheelstop.android.surveillance.BsNativeLayer.displaySize(ctx))
+                    ? BsNativeLayer.clusterDisplaySize(ctx)
+                    : BsNativeLayer.displaySize(ctx))
                 : new android.graphics.Point(1920, isCamViewClusterTarget() ? 720 : 1080);
             String geomKey = isCamViewClusterTarget() ? "geometryCluster" : "geometry";
             org.json.JSONObject g = (cv != null) ? cv.optJSONObject(geomKey) : null;
@@ -6469,10 +6527,14 @@ public class GpuSurveillancePipeline {
         try {
             android.content.Context odCtx = ctx;
             if (odCtx == null) odCtx = savedContext;
-            if (odCtx == null) odCtx = app.wheelstop.android.daemon.CameraDaemon.getAppContext();
+            if (odCtx == null) odCtx = CameraDaemon.getAppContext();
             if (odCtx != null) {
                 if (this.savedContext == null) this.savedContext = odCtx;
+<<<<<<< HEAD
                 app.wheelstop.android.blindspot.BsCoefficients.authorize(odCtx);
+=======
+                Od.authorize(odCtx);
+>>>>>>> vendor/upstream
             } else {
                 logger.error("od authorize retry skipped: no context available");
             }
@@ -6484,7 +6546,7 @@ public class GpuSurveillancePipeline {
     /**
      * Gets the stream scaler component.
      */
-    public app.wheelstop.android.streaming.GpuStreamScaler getStreamScaler() {
+    public GpuStreamScaler getStreamScaler() {
         return streamScaler;
     }
     
@@ -6498,7 +6560,7 @@ public class GpuSurveillancePipeline {
     /**
      * Gets the WebSocket stream server.
      */
-    public app.wheelstop.android.streaming.WebSocketStreamServer getWebSocketServer() {
+    public WebSocketStreamServer getWebSocketServer() {
         return wsStreamServer;
     }
     
@@ -6531,12 +6593,12 @@ public class GpuSurveillancePipeline {
         // view 7/8 on the live stream) AND the dedicated blind-spot lane's scaler
         // (what the overlay actually renders) — so the debug-editor sliders
         // update whichever the user is watching.
-        app.wheelstop.android.streaming.GpuStreamScaler ss = streamScaler;
+        GpuStreamScaler ss = streamScaler;
         if (ss != null) {
             ss.setBlindSpotParams(hfov, sideHFov, yaw, roll, feather, projExp, vscale, pitch,
                                   rearRoll, rearPitch);
         }
-        app.wheelstop.android.streaming.GpuStreamScaler bs = bsScaler;
+        GpuStreamScaler bs = bsScaler;
         if (bs != null) {
             bs.setBlindSpotParams(hfov, sideHFov, yaw, roll, feather, projExp, vscale, pitch,
                                   rearRoll, rearPitch);
@@ -6554,13 +6616,14 @@ public class GpuSurveillancePipeline {
      * the overlay renders), same as {@link #setBlindSpotParams}. No-op-safe.
      */
     public void setBlindSpotMergeMode(int mode) {
-        app.wheelstop.android.streaming.GpuStreamScaler ss = streamScaler;
+        GpuStreamScaler ss = streamScaler;
         if (ss != null) ss.setBlindSpotMergeMode(mode);
-        app.wheelstop.android.streaming.GpuStreamScaler bs = bsScaler;
+        GpuStreamScaler bs = bsScaler;
         if (bs != null) bs.setBlindSpotMergeMode(mode);
         logger.info("Blind-spot merge mode set to " + mode);
     }
 
+<<<<<<< HEAD
     /** Forward blind-spot card clarity (views 7/8) to the scaler(s): contrast
      *  pivot (1.0 = neutral) and unsharp amount (0.0 = off). Pushes to BOTH the
      *  shared stream scaler (browser preview) and the dedicated BS lane's scaler
@@ -6570,6 +6633,22 @@ public class GpuSurveillancePipeline {
         if (ss != null) ss.setBlindSpotClarity(contrast, sharpen);
         app.wheelstop.android.streaming.GpuStreamScaler bs = bsScaler;
         if (bs != null) bs.setBlindSpotClarity(contrast, sharpen);
+=======
+    /**
+     * Fisheye/lens-dewarp strength (0..100) for the single-camera blind-spot views
+     * (side/rear). Separate knob from recording.rectifyStrength. Pushes to BOTH the
+     * shared stream scaler (browser preview) and the dedicated BS lane's scaler (what
+     * the overlay renders), mirroring {@link #setBlindSpotMergeMode}. The dewarp is a
+     * no-op in the merged 'both' view (shader only samples it in the merge 1/2
+     * passthrough). No-op-safe when a lane isn't up.
+     */
+    public void setBlindSpotRectifyStrength(int strength) {
+        GpuStreamScaler ss = streamScaler;
+        if (ss != null) ss.setBlindSpotRectifyStrength((float) strength);
+        GpuStreamScaler bs = bsScaler;
+        if (bs != null) bs.setBlindSpotRectifyStrength((float) strength);
+        logger.info("Blind-spot fisheye strength set to " + strength);
+>>>>>>> vendor/upstream
     }
 
     /** Map the persisted string merge mode to the scaler's int code. */
@@ -6591,7 +6670,7 @@ public class GpuSurveillancePipeline {
         bsLifecycleLock.lock();
         try {
             resolveBsGeometry();
-            app.wheelstop.android.surveillance.BsNativeLayer layer = bsLayer;
+            BsNativeLayer layer = bsLayer;
             if (layer != null && layer.isCreated() && bsLayerVisible) {
                 int[] g = bsGeomRect;
                 layer.setGeometry(g[0], g[1], g[2], g[3]);
@@ -6914,7 +6993,7 @@ public class GpuSurveillancePipeline {
      *         instead of misreporting success.
      */
     public boolean attachExternalStreamCallback(
-            app.wheelstop.android.camera.OemDashcamPipeline oemPipeline) {
+            OemDashcamPipeline oemPipeline) {
         streamLifecycleLock.lock();
         try {
             return attachExternalStreamCallbackLocked(oemPipeline);
@@ -6924,7 +7003,7 @@ public class GpuSurveillancePipeline {
     }
 
     private boolean attachExternalStreamCallbackLocked(
-            app.wheelstop.android.camera.OemDashcamPipeline oemPipeline) {
+            OemDashcamPipeline oemPipeline) {
         // Held under streamLifecycleLock so we share the lock with
         // disableStreaming. Otherwise: HTTP worker A passes the
         // `streamingEnabled` gate, worker B's disableStreaming acquires
@@ -6944,7 +7023,7 @@ public class GpuSurveillancePipeline {
             return false;
         }
         // Capture the live scaler under the monitor.
-        final app.wheelstop.android.streaming.GpuStreamScaler liveScaler = streamScaler;
+        final GpuStreamScaler liveScaler = streamScaler;
         if (liveScaler == null) {
             logger.warn("attachExternalStreamCallback: streamScaler null — streaming not initialized");
             return false;
@@ -7008,7 +7087,7 @@ public class GpuSurveillancePipeline {
             // before invoking unbindOemSource so the call doesn't pin
             // peers, but keep the local reference so a concurrent disable
             // that nulls streamScaler post-capture can't NPE us.
-            final app.wheelstop.android.streaming.GpuStreamScaler scaler = streamScaler;
+            final GpuStreamScaler scaler = streamScaler;
             if (!streamingEnabled || scaler == null) return;
             if (!externalStreamSourceActive) return;
             externalStreamSourceActive = false;
@@ -7021,8 +7100,8 @@ public class GpuSurveillancePipeline {
             // the scaler is no longer sampling OEM, the publish is wasted
             // work.
             try {
-                app.wheelstop.android.camera.OemDashcamPipeline oem =
-                    app.wheelstop.android.daemon.CameraDaemon.getOemDashcamPipeline();
+                OemDashcamPipeline oem =
+                    CameraDaemon.getOemDashcamPipeline();
                 if (oem != null) oem.setStreamScalerForOemPublish(null);
             } catch (Throwable ignored) {}
             logger.info("Stream source: OEM → AVM mosaic");
@@ -7131,9 +7210,9 @@ public class GpuSurveillancePipeline {
         if (cam == null) return;
         int windshieldCameraId = -1;
         try {
-            windshieldCameraId = app.wheelstop.android.camera.CameraConfigResolver
+            windshieldCameraId = CameraConfigResolver
                 .resolve(getVehicleModel())
-                .getDirectCameraIdForRole(app.wheelstop.android.camera.CameraRole.WINDSHIELD);
+                .getDirectCameraIdForRole(CameraRole.WINDSHIELD);
         } catch (Throwable t) {
             windshieldCameraId = -1;
         }
@@ -7193,13 +7272,13 @@ public class GpuSurveillancePipeline {
     }
 
     /** Load the persisted field selection for a flow, or the legacy default. */
-    private app.wheelstop.android.telemetry.TelemetryFields resolveFieldsForFlow(String flow) {
+    private TelemetryFields resolveFieldsForFlow(String flow) {
         try {
-            org.json.JSONArray arr = app.wheelstop.android.config.UnifiedConfigManager
+            org.json.JSONArray arr = UnifiedConfigManager
                     .getTelemetryOverlayFields(flow);
-            return app.wheelstop.android.telemetry.TelemetryFields.fromJsonArray(arr);
+            return TelemetryFields.fromJsonArray(arr);
         } catch (Throwable t) {
-            return app.wheelstop.android.telemetry.TelemetryFields.legacyDefault();
+            return TelemetryFields.legacyDefault();
         }
     }
 

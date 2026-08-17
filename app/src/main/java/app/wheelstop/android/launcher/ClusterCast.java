@@ -1,4 +1,8 @@
 package app.wheelstop.android.launcher;
+import app.wheelstop.android.config.UnifiedConfigManager;
+import app.wheelstop.android.daemon.CameraDaemon;
+import app.wheelstop.android.navmap.ClusterMapProjector;
+import app.wheelstop.android.surveillance.BsNativeLayer;
 
 import app.wheelstop.android.logging.DaemonLogger;
 import app.wheelstop.android.surveillance.ClusterProjectionController;
@@ -122,7 +126,7 @@ public final class ClusterCast {
      *  live + fully guarded so a missing/garbled config falls back to the default. */
     private static boolean freeformResizeEnabled() {
         try {
-            org.json.JSONObject s = app.wheelstop.android.config.UnifiedConfigManager.getSurveillance();
+            org.json.JSONObject s = UnifiedConfigManager.getSurveillance();
             return s != null
                     ? s.optBoolean(FLAG_FREEFORM_RESIZE, FREEFORM_RESIZE_DEFAULT)
                     : FREEFORM_RESIZE_DEFAULT;
@@ -193,7 +197,7 @@ public final class ClusterCast {
         final boolean fullPanel = fl <= FULL_PANEL_EPSILON && ft <= FULL_PANEL_EPSILON
                 && fr >= 1 - FULL_PANEL_EPSILON && fb >= 1 - FULL_PANEL_EPSILON;
         try {
-            org.json.JSONObject cfg = app.wheelstop.android.config.UnifiedConfigManager.loadConfig();
+            org.json.JSONObject cfg = UnifiedConfigManager.loadConfig();
             org.json.JSONObject proj = cfg != null ? cfg.optJSONObject(PROJECTION_SECTION) : null;
             org.json.JSONObject windows = proj != null ? proj.optJSONObject(WINDOWS_KEY) : null;
             if (fullPanel && (windows == null || !windows.has(key))) return true;   // already absent
@@ -213,7 +217,7 @@ public final class ClusterCast {
             }
             // updateSection merges at the SECTION level only, so autoStartOnAcc/autoStartPackage
             // survive — but the nested windows map must be merged by hand (above).
-            return app.wheelstop.android.config.UnifiedConfigManager.updateSection(
+            return UnifiedConfigManager.updateSection(
                     PROJECTION_SECTION, new org.json.JSONObject().put(WINDOWS_KEY, merged));
         } catch (Throwable t2) {
             logger.warn("cluster cast: persisting box for " + key + " failed: " + t2.getMessage());
@@ -232,7 +236,7 @@ public final class ClusterCast {
         int pw = panel[0], ph = panel[1];
         if (pw <= 1 || ph <= 1) return null;
         try {
-            org.json.JSONObject cfg = app.wheelstop.android.config.UnifiedConfigManager.loadConfig();
+            org.json.JSONObject cfg = UnifiedConfigManager.loadConfig();
             org.json.JSONObject proj = cfg != null ? cfg.optJSONObject(PROJECTION_SECTION) : null;
             org.json.JSONObject windows = proj != null ? proj.optJSONObject(WINDOWS_KEY) : null;
             org.json.JSONObject rect = windows != null ? windows.optJSONObject(pkg) : null;
@@ -363,10 +367,10 @@ public final class ClusterCast {
         if (cached != null) return cached;
         int pw = 0, ph = 0;
         try {
-            android.content.Context ctx = app.wheelstop.android.daemon.CameraDaemon.getAppContext();
+            android.content.Context ctx = CameraDaemon.getAppContext();
             if (ctx != null) {
                 android.graphics.Point p =
-                        app.wheelstop.android.surveillance.BsNativeLayer.clusterDisplaySize(ctx);
+                        BsNativeLayer.clusterDisplaySize(ctx);
                 if (p != null) { pw = p.x; ph = p.y; }
             }
         } catch (Throwable ignored) {}
@@ -387,7 +391,7 @@ public final class ClusterCast {
     private static void persistStrandedCastPkg(String pkg) {
         java.util.Map<String, Object> m = new java.util.HashMap<>();
         m.put(CAST_STRANDED_PKG, pkg != null ? pkg : "");
-        try { app.wheelstop.android.config.UnifiedConfigManager.updateValues("surveillance", m); }
+        try { UnifiedConfigManager.updateValues("surveillance", m); }
         catch (Throwable ignored) {}
     }
 
@@ -395,7 +399,7 @@ public final class ClusterCast {
      *  rewrite (mirrors ClusterProjectionController.clearGateFlagsStatic). */
     private static void clearStrandedCastPkg() {
         try {
-            org.json.JSONObject s = app.wheelstop.android.config.UnifiedConfigManager.getSurveillance();
+            org.json.JSONObject s = UnifiedConfigManager.getSurveillance();
             if (s == null || s.optString(CAST_STRANDED_PKG, "").isEmpty()) return;
         } catch (Throwable ignored) {}
         persistStrandedCastPkg("");
@@ -418,7 +422,7 @@ public final class ClusterCast {
         final String autoPkg;
         final boolean mapAutoProject;
         try {
-            org.json.JSONObject cfg = app.wheelstop.android.config.UnifiedConfigManager.forceReload();
+            org.json.JSONObject cfg = UnifiedConfigManager.forceReload();
             org.json.JSONObject s = cfg.optJSONObject("surveillance");
             pkg = s != null ? s.optString(CAST_STRANDED_PKG, "") : "";
             org.json.JSONObject proj = cfg.optJSONObject("projection");
@@ -610,9 +614,9 @@ public final class ClusterCast {
         // clears navMap.clusterMapActive (the map Activity self-finishes ~500ms), freeing
         // the foreground for the cast app.
         try {
-            if (app.wheelstop.android.navmap.ClusterMapProjector.isActive()) {
+            if (ClusterMapProjector.isActive()) {
                 logger.info("cluster cast: stopping active map projection to take the cluster");
-                app.wheelstop.android.navmap.ClusterMapProjector.stop();
+                ClusterMapProjector.stop();
             }
         } catch (Throwable t) {
             logger.warn("cluster cast: map stop failed (continuing): " + t.getMessage());
@@ -756,11 +760,11 @@ public final class ClusterCast {
             // this — the car is powering down and the ACC-off teardown ordering must not be disturbed.
             if (rehomeMode != NO_REHOME) {
                 try {
-                    org.json.JSONObject cfg = app.wheelstop.android.config.UnifiedConfigManager.forceReload();
+                    org.json.JSONObject cfg = UnifiedConfigManager.forceReload();
                     org.json.JSONObject nav = cfg != null ? cfg.optJSONObject("navMap") : null;
                     if (nav != null && nav.optBoolean("autoProjectCluster", false)) {
                         logger.info("cluster cast: restoring auto-project map after cast stop");
-                        app.wheelstop.android.navmap.ClusterMapProjector.start();
+                        ClusterMapProjector.start();
                     }
                 } catch (Throwable t) {
                     logger.warn("cluster cast: map restore after stop failed: " + t.getMessage());

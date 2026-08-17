@@ -118,8 +118,7 @@
     "tyres_nothing_to_update": "没有需要更新的内容",
     "tyres_persist_failed": "无法保存胎压阈值",
     "recordings_index_unavailable": "录像索引不可用",
-    "surveillance_all_classes_off": "此次保存会关闭所有对象类别，导致 AI 检测完全停用。请确认后继续。",
-    "vehicle_blocked_in_motion": "車輛行駛中無法使用此操作"
+    "surveillance_all_classes_off": "此次保存会关闭所有对象类别，导致 AI 检测完全停用。请确认后继续。"
   },
   "notifications": {
     "charging_started": "開始充電",

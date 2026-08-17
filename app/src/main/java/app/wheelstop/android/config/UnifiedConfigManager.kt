@@ -1,5 +1,9 @@
 package app.wheelstop.android.config
 
+import app.wheelstop.android.BuildConfig
+import app.wheelstop.android.camera.CameraProfiles
+import app.wheelstop.android.surveillance.SurveillanceSchedule
+import app.wheelstop.android.util.Constants
 import android.util.Log
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -582,7 +586,7 @@ object UnifiedConfigManager {
         // everywhere (mirrors rectifyStrength above).
         if (!recording.has("segmentDurationMinutes")) {
             recording.put("segmentDurationMinutes",
-                app.wheelstop.android.util.Constants.SEGMENT_DURATION_MINUTES)
+                Constants.SEGMENT_DURATION_MINUTES)
         }
 
         // Streaming defaults
@@ -593,7 +597,7 @@ object UnifiedConfigManager {
         // installs that only have probedCameraId continue to work unchanged.
         if (!camera.has("cameraProfile")) {
             camera.put("cameraProfile",
-                app.wheelstop.android.camera.CameraProfiles.PROFILE_AUTO)
+                CameraProfiles.PROFILE_AUTO)
         }
         if (!camera.has("targetFps"))         camera.put("targetFps", 15)
         // Surveillance (ACC-off / parked sentry) camera fps. Independent of the
@@ -1111,7 +1115,7 @@ object UnifiedConfigManager {
                     // early-return above gates unchanged loads), so a 2-3Hz writer
                     // makes it the dominant logcat line. Each Log.d is a synchronous
                     // write; gate it out of release builds.
-                    if (app.wheelstop.android.BuildConfig.DEBUG) {
+                    if (BuildConfig.DEBUG) {
                         Log.d(TAG, "Config loaded from $CONFIG_PATH")
                     }
                     config
@@ -1588,8 +1592,8 @@ object UnifiedConfigManager {
      * Returns a SurveillanceSchedule loaded from the surveillance section.
      */
     @JvmStatic
-    fun getSurveillanceSchedule(): app.wheelstop.android.surveillance.SurveillanceSchedule {
-        val schedule = app.wheelstop.android.surveillance.SurveillanceSchedule()
+    fun getSurveillanceSchedule(): SurveillanceSchedule {
+        val schedule = SurveillanceSchedule()
         schedule.loadFromJson(getSurveillance())
         return schedule
     }
@@ -1916,10 +1920,10 @@ object UnifiedConfigManager {
     @JvmStatic
     fun getSegmentDurationMinutes(): Int {
         val raw = getRecording().optInt("segmentDurationMinutes",
-            app.wheelstop.android.util.Constants.SEGMENT_DURATION_MINUTES)
+            Constants.SEGMENT_DURATION_MINUTES)
         return raw.coerceIn(
-            app.wheelstop.android.util.Constants.MIN_SEGMENT_DURATION_MINUTES,
-            app.wheelstop.android.util.Constants.MAX_SEGMENT_DURATION_MINUTES)
+            Constants.MIN_SEGMENT_DURATION_MINUTES,
+            Constants.MAX_SEGMENT_DURATION_MINUTES)
     }
 
     /** Set the shared clip segment length in minutes (clamped to MIN..MAX). */
@@ -1927,8 +1931,8 @@ object UnifiedConfigManager {
     fun setSegmentDurationMinutes(minutes: Int): Boolean {
         return updateValues("recording", mapOf(
             "segmentDurationMinutes" to minutes.coerceIn(
-                app.wheelstop.android.util.Constants.MIN_SEGMENT_DURATION_MINUTES,
-                app.wheelstop.android.util.Constants.MAX_SEGMENT_DURATION_MINUTES)
+                Constants.MIN_SEGMENT_DURATION_MINUTES,
+                Constants.MAX_SEGMENT_DURATION_MINUTES)
         ))
     }
     
@@ -2330,7 +2334,7 @@ object UnifiedConfigManager {
     @JvmStatic
     fun getUpdateChannel(): String {
         val ch = loadConfig().optJSONObject("updates")?.optString("channel", "")
-        return if (!ch.isNullOrEmpty()) ch else app.wheelstop.android.BuildConfig.UPDATE_CHANNEL
+        return if (!ch.isNullOrEmpty()) ch else BuildConfig.UPDATE_CHANNEL
     }
 
     /**

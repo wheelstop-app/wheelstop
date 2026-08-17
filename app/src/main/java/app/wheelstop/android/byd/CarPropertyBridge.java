@@ -1,4 +1,6 @@
 package app.wheelstop.android.byd;
+import app.wheelstop.android.daemon.DaemonBootstrap;
+import app.wheelstop.android.shell.HiddenApiBypass;
 
 import android.content.ContentResolver;
 import android.content.Context;
@@ -119,7 +121,7 @@ public final class CarPropertyBridge {
                 log("currentApplication() returned null: " + t);
             }
             try {
-                Context daemonCtx = app.wheelstop.android.daemon.CameraDaemon.getAppContext();
+                Context daemonCtx = CameraDaemon.getAppContext();
                 if (daemonCtx != null) {
                     instance = new CarPropertyBridge(daemonCtx);
                     return instance;
@@ -128,7 +130,7 @@ public final class CarPropertyBridge {
                 log("CameraDaemon.getAppContext() fallback failed: " + t);
             }
             try {
-                Context daemonCtx = app.wheelstop.android.daemon.DaemonBootstrap.getContext();
+                Context daemonCtx = DaemonBootstrap.getContext();
                 if (daemonCtx != null) {
                     instance = new CarPropertyBridge(daemonCtx);
                     return instance;
@@ -272,7 +274,7 @@ public final class CarPropertyBridge {
      * uid/package match holds inside the provider.
      */
     private ICarPropertyService resolveServiceViaProvider() {
-        try { app.wheelstop.android.shell.HiddenApiBypass.INSTANCE.bypass(); }
+        try { HiddenApiBypass.INSTANCE.bypass(); }
         catch (Throwable ignore) {}
 
         String authority = PROVIDER_URI.getAuthority();

@@ -1,4 +1,6 @@
 package app.wheelstop.android.server;
+import app.wheelstop.android.byd.AudioPlaybackController;
+import app.wheelstop.android.byd.AvasController;
 
 import android.media.AudioFormat;
 import android.media.AudioManager;
@@ -102,7 +104,7 @@ public class AudioApiHandler {
             return true;
         }
         if (cleanPath.equals("/api/audio/library/stop") && method.equals("POST")) {
-            app.wheelstop.android.byd.AudioPlaybackController.stop();
+            AudioPlaybackController.stop();
             JSONObject r = new JSONObject();
             r.put("success", true);
             HttpResponse.sendJson(out, r.toString());
@@ -354,7 +356,7 @@ public class AudioApiHandler {
             HttpResponse.sendJsonError(out, "Sound not found: " + safe);
             return;
         }
-        boolean ok = app.wheelstop.android.byd.AudioPlaybackController.play(f.getAbsolutePath(), channel);
+        boolean ok = AudioPlaybackController.play(f.getAbsolutePath(), channel);
         resp.put("success", ok);
         if (!ok) resp.put("error", "Could not play");
         HttpResponse.sendJson(out, resp.toString());
@@ -425,7 +427,7 @@ public class AudioApiHandler {
     private static void handleAvasTone(OutputStream out, String body) throws Exception {
         JSONObject response = new JSONObject();
         try {
-            boolean available = app.wheelstop.android.byd.AvasController.isAvailable();
+            boolean available = AvasController.isAvailable();
             response.put("avasAvailable", available);
             if (!available) {
                 response.put("success", false);
@@ -443,17 +445,17 @@ public class AudioApiHandler {
             }
 
             if (stop || pattern < 0) {
-                app.wheelstop.android.byd.AvasController.stop();
+                AvasController.stop();
                 response.put("success", true);
                 response.put("action", "stopped");
             } else {
-                boolean ok = app.wheelstop.android.byd.AvasController.playPattern(pattern);
+                boolean ok = AvasController.playPattern(pattern);
                 response.put("success", ok);
                 response.put("action", ok ? "playing" : "rejected");
                 response.put("pattern", pattern);
-                response.put("patternName", app.wheelstop.android.byd.AvasController.patternName(pattern));
+                response.put("patternName", AvasController.patternName(pattern));
                 if (!ok) response.put("error", "invalid pattern index (0-"
-                        + (app.wheelstop.android.byd.AvasController.PATTERN_COUNT - 1) + ")");
+                        + (AvasController.PATTERN_COUNT - 1) + ")");
             }
             logger.info("avas-tone: " + response.optString("action"));
         } catch (Exception e) {
@@ -471,13 +473,13 @@ public class AudioApiHandler {
     private static void handleEngineSoundState(OutputStream out) throws Exception {
         JSONObject response = new JSONObject();
         try {
-            boolean available = app.wheelstop.android.byd.AvasController.isAvailable();
+            boolean available = AvasController.isAvailable();
             response.put("avasAvailable", available);
             response.put("success", true);
             if (available) {
-                response.put("supported", app.wheelstop.android.byd.AvasController.isEngineSoundSupported());
-                response.put("on", app.wheelstop.android.byd.AvasController.isEngineSoundOn());
-                response.put("preset", app.wheelstop.android.byd.AvasController.getEngineSoundPreset());
+                response.put("supported", AvasController.isEngineSoundSupported());
+                response.put("on", AvasController.isEngineSoundOn());
+                response.put("preset", AvasController.getEngineSoundPreset());
             } else {
                 response.put("supported", false);
             }
@@ -502,7 +504,7 @@ public class AudioApiHandler {
     private static void handleEngineSound(OutputStream out, String body) throws Exception {
         JSONObject response = new JSONObject();
         try {
-            boolean available = app.wheelstop.android.byd.AvasController.isAvailable();
+            boolean available = AvasController.isAvailable();
             response.put("avasAvailable", available);
             if (!available) {
                 response.put("success", false);
@@ -517,11 +519,11 @@ public class AudioApiHandler {
 
             if (hasOn) {
                 boolean on = req.getBoolean("on");
-                boolean ok = app.wheelstop.android.byd.AvasController.setEngineSound(on, preset);
+                boolean ok = AvasController.setEngineSound(on, preset);
                 response.put("success", ok);
                 response.put("on", on);
             } else if (preset >= 1) {
-                int applied = app.wheelstop.android.byd.AvasController.selectEngineSoundPreset(preset);
+                int applied = AvasController.selectEngineSoundPreset(preset);
                 response.put("success", applied >= 0);
                 response.put("preset", applied);
             } else {

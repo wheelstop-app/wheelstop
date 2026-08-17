@@ -118,8 +118,7 @@
     "tyres_order": "La pression maximale doit être supérieure à la pression minimale pour chaque essieu",
     "tyres_critical_order": "La pression critique ne doit pas dépasser la pression minimale de l'un ou l'autre essieu",
     "tyres_nothing_to_update": "Rien à mettre à jour",
-    "tyres_persist_failed": "Échec de l'enregistrement des limites de pression des pneus",
-    "vehicle_blocked_in_motion": "Cette action n'est pas disponible pendant que le véhicule est en mouvement"
+    "tyres_persist_failed": "Échec de l'enregistrement des limites de pression des pneus"
   },
   "notifications": {
     "charging_started": "La charge a démarré",

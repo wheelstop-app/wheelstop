@@ -1,4 +1,73 @@
 package app.wheelstop.android.daemon;
+import app.wheelstop.android.analytics.AnalyticsPinger;
+import app.wheelstop.android.automation.Automations;
+import app.wheelstop.android.automation.condition.BydEvent;
+import app.wheelstop.android.byd.AcAutoOffTimer;
+import app.wheelstop.android.byd.BydDataCollector;
+import app.wheelstop.android.byd.BydDeviceHelper;
+import app.wheelstop.android.byd.BydVehicleData;
+import app.wheelstop.android.byd.cloud.BydCloudDataProvider;
+import app.wheelstop.android.byd.cloud.VehicleCloudSnapshot;
+import app.wheelstop.android.camera.AvcHalWarmup;
+import app.wheelstop.android.camera.AvmImageReaderFpsProbe;
+import app.wheelstop.android.camera.BydCameraCoordinator;
+import app.wheelstop.android.camera.CameraConfigResolver;
+import app.wheelstop.android.camera.CameraProfiles;
+import app.wheelstop.android.camera.ConcurrentAvmProbe;
+import app.wheelstop.android.camera.OemDashcamPipeline;
+import app.wheelstop.android.camera.PanoramicCameraGpu;
+import app.wheelstop.android.camera.ResolvedCameraConfig;
+import app.wheelstop.android.charging.ChargingSessionManager;
+import app.wheelstop.android.config.UnifiedConfigManager;
+import app.wheelstop.android.geo.GeoBackfillSweep;
+import app.wheelstop.android.geo.GeoCache;
+import app.wheelstop.android.launcher.ClusterCast;
+import app.wheelstop.android.monitor.DataUsageMonitor;
+import app.wheelstop.android.monitor.GearMonitor;
+import app.wheelstop.android.monitor.GpsMonitor;
+import app.wheelstop.android.monitor.NetworkMonitor;
+import app.wheelstop.android.monitor.PerformanceMonitor;
+import app.wheelstop.android.monitor.SocHistoryDatabase;
+import app.wheelstop.android.monitor.VehicleDataMonitor;
+import app.wheelstop.android.mqtt.MqttConnectionManager;
+import app.wheelstop.android.notifications.CategoryRegistry;
+import app.wheelstop.android.notifications.NotificationBus;
+import app.wheelstop.android.notifications.NotificationStore;
+import app.wheelstop.android.notifications.push.SubscriptionStore;
+import app.wheelstop.android.notifications.push.VapidKeyStore;
+import app.wheelstop.android.notifications.push.VapidSigner;
+import app.wheelstop.android.notifications.sinks.HistorySink;
+import app.wheelstop.android.notifications.sinks.LogSink;
+import app.wheelstop.android.notifications.sinks.PushSink;
+import app.wheelstop.android.notifications.sinks.TelegramSink;
+import app.wheelstop.android.od.Od;
+import app.wheelstop.android.power.StealthPanel;
+import app.wheelstop.android.receiver.CastPackageWatcher;
+import app.wheelstop.android.recording.RecordingModeManager;
+import app.wheelstop.android.roadsense.RoadSenseController;
+import app.wheelstop.android.server.AacIngestServer;
+import app.wheelstop.android.server.KeymapApiHandler;
+import app.wheelstop.android.server.NotificationApiHandler;
+import app.wheelstop.android.server.OemDashcamApiHandler;
+import app.wheelstop.android.server.RecordingsIndex;
+import app.wheelstop.android.server.StreamingApiHandler;
+import app.wheelstop.android.storage.ExternalStorageCleaner;
+import app.wheelstop.android.storage.StorageManager;
+import app.wheelstop.android.surveillance.ClusterMirrorController;
+import app.wheelstop.android.surveillance.ClusterProjectionController;
+import app.wheelstop.android.surveillance.ClusterViewMirrorService;
+import app.wheelstop.android.surveillance.GpuPipelineConfig;
+import app.wheelstop.android.surveillance.GpuSurveillancePipeline;
+import app.wheelstop.android.surveillance.HardwareEventRecorderGpu;
+import app.wheelstop.android.surveillance.NativeMotion;
+import app.wheelstop.android.surveillance.SafeLocationManager;
+import app.wheelstop.android.surveillance.ScreenDeterrent;
+import app.wheelstop.android.surveillance.SurveillanceSchedule;
+import app.wheelstop.android.telemetry.TelemetryDataCollector;
+import app.wheelstop.android.trips.OdometerReader;
+import app.wheelstop.android.trips.TripAnalyticsManager;
+import app.wheelstop.android.ui.model.ParkedShutdown;
+import app.wheelstop.android.util.DaemonFonts;
 
 import android.os.Handler;
 import android.os.Looper;
@@ -59,9 +128,9 @@ public class CameraDaemon {
     // Recording config defaults. Runtime panoramic geometry comes from
     // CameraConfigResolver; these stay as legacy-profile fallbacks for code
     // paths that still read the daemon constants directly.
-    public static final int PANO_WIDTH = app.wheelstop.android.camera.CameraProfiles
+    public static final int PANO_WIDTH = CameraProfiles
         .getLegacyDefault().getPanoWidth();
-    public static final int PANO_HEIGHT = app.wheelstop.android.camera.CameraProfiles
+    public static final int PANO_HEIGHT = CameraProfiles
         .getLegacyDefault().getPanoHeight();
     public static final int VIEW_WIDTH = PANO_WIDTH / 4;
     public static final int VIEW_HEIGHT = PANO_HEIGHT;
@@ -89,7 +158,7 @@ public class CameraDaemon {
     private static TcpCommandServer tcpServer;
     private static HttpServer httpServer;
     private static SurveillanceIpcServer ipcServer;
-    private static app.wheelstop.android.server.AacIngestServer aacIngestServer;
+    private static AacIngestServer aacIngestServer;
     private static AccMonitor accMonitor;
     
     // ==================== SURVEILLANCE ====================
@@ -99,7 +168,7 @@ public class CameraDaemon {
     // via Thread.start() happens-before is fragile against future refactors
     // that read the field before the constructing thread starts a worker;
     // volatile gives a hard guarantee on ARM weak-memory cores.
-    private static volatile app.wheelstop.android.surveillance.GpuSurveillancePipeline gpuPipeline;
+    private static volatile GpuSurveillancePipeline gpuPipeline;
     // Volatile: written from ACC handlers (multiple threads), read by HTTP
     // handlers, accOnDisarmWatchdog poll thread, lock-gate watchdog, and
     // status JSON readers. Without volatile, the ARM weak-memory model lets
@@ -119,7 +188,7 @@ public class CameraDaemon {
     // /api/oem-dashcam/config GET) deliberately don't hold the lock — the
     // volatile barrier is what makes a freshly-published reference visible
     // across CPU cores without a lock acquisition on every read.
-    private static volatile app.wheelstop.android.camera.OemDashcamPipeline oemDashcamPipeline;
+    private static volatile OemDashcamPipeline oemDashcamPipeline;
     private static volatile boolean safeZoneSuppressed = false;
     // Pending ACC OFF state: if ACC goes off before GPU pipeline is ready,
     // queue the request and apply it once the pipeline initializes
@@ -162,7 +231,7 @@ public class CameraDaemon {
     // gate is open. Cloud is fragile in the field (rarely fires lock events
     // even when MQTT is healthy), so device-SDK and polling exist as
     // independent backups rather than as a fallback chain.
-    private static app.wheelstop.android.byd.cloud.BydCloudDataProvider.CloudLockStateListener cloudLockListener = null;
+    private static BydCloudDataProvider.CloudLockStateListener cloudLockListener = null;
     private static Thread unlockPollThread = null;
     // Reverse watchdog: periodically queries hardware ACC state and force-
     // disables surveillance if ACC went ON without an event reaching us.
@@ -178,7 +247,7 @@ public class CameraDaemon {
     // ==================== RECORDING MODE MANAGER ====================
     // Volatile: read by static onGearChanged/onAccStateChanged/onSafeZoneEnter
     // from arbitrary threads. See gpuPipeline volatile rationale.
-    private static volatile app.wheelstop.android.recording.RecordingModeManager recordingModeManager;
+    private static volatile RecordingModeManager recordingModeManager;
     
     // ==================== AVC HAL KEEP-ALIVE ====================
     // Keeps com.byd.avc alive while ACC is ON and pipeline is running.
@@ -189,7 +258,7 @@ public class CameraDaemon {
     // observe `avcHalWarmup == null`, both `new AvcHalWarmup()`, both call
     // startKeepAlive() — leaking a duplicate keep-alive thread that never
     // gets stopped (the field holds only the second instance).
-    private static volatile app.wheelstop.android.camera.AvcHalWarmup avcHalWarmup;
+    private static volatile AvcHalWarmup avcHalWarmup;
     private static final Object AVC_WARMUP_INIT_LOCK = new Object();
     
     // ==================== STREAM MODE ====================
@@ -210,17 +279,17 @@ public class CameraDaemon {
     // poll threads, hard memory guarantee instead of relying on
     // Thread.start() happens-before.
     private static volatile AbrpTelemetryService abrpTelemetryService;
-    private static volatile app.wheelstop.android.abrp.SohEstimator sohEstimator;
+    private static volatile SohEstimator sohEstimator;
 
     // ==================== MQTT CONNECTIONS ====================
-    private static volatile app.wheelstop.android.mqtt.MqttConnectionManager mqttConnectionManager;
+    private static volatile MqttConnectionManager mqttConnectionManager;
 
     // ==================== TRIP ANALYTICS ====================
-    private static volatile app.wheelstop.android.trips.TripAnalyticsManager tripAnalyticsManager;
+    private static volatile TripAnalyticsManager tripAnalyticsManager;
     private static volatile java.util.concurrent.CompletableFuture<Void> tripAnalyticsInitFuture;
 
     // ==================== CHARGING ANALYTICS ====================
-    private static volatile app.wheelstop.android.charging.ChargingSessionManager chargingSessionManager;
+    private static volatile ChargingSessionManager chargingSessionManager;
 
     // ==================== DATA LAYER (RecordingsIndex parallel kick) ====================
     // Completes when the parallel RecordingsIndex.init() + warmupAsync kick
@@ -229,17 +298,17 @@ public class CameraDaemon {
     private static volatile java.util.concurrent.CompletableFuture<Void> dataLayerInitFuture;
 
     // ==================== TELEMETRY DATA COLLECTOR ====================
-    private static volatile app.wheelstop.android.telemetry.TelemetryDataCollector telemetryDataCollector;
+    private static volatile TelemetryDataCollector telemetryDataCollector;
 
     // ==================== ROADSENSE ====================
     // Daemon-side road-hazard detection brain (D-019/D-023). Reuses the already-
     // initialized BydDataCollector + GpsMonitor singletons; the app-side IMU
     // sidecar feeds it via the IMU_BATCH IPC command (see handleCommand). Driven
     // by the daemon housekeeping tick (onVehicleStatePoll + onWarningTick).
-    private static volatile app.wheelstop.android.roadsense.RoadSenseController roadSense;
+    private static volatile RoadSenseController roadSense;
 
     /** Accessor for the IPC server's IMU_BATCH case. */
-    public static app.wheelstop.android.roadsense.RoadSenseController getRoadSense() { return roadSense; }
+    public static RoadSenseController getRoadSense() { return roadSense; }
 
     // ==================== SHARED APP CONTEXT ====================
     // Volatile: written at boot AND re-published on ACC ON via
@@ -321,7 +390,7 @@ public class CameraDaemon {
     private static void reinitContextDependentComponents() {
         // Re-init BydDataCollector (was 0/17 devices with broken context)
         try {
-            app.wheelstop.android.byd.BydDataCollector collector = app.wheelstop.android.byd.BydDataCollector.getInstance();
+            BydDataCollector collector = BydDataCollector.getInstance();
             collector.init(sharedAppContext);
             collector.logSummary();
             log("ACC ON: BydDataCollector re-initialized (" + collector.getData().availableDevices.length + " devices)");
@@ -331,14 +400,14 @@ public class CameraDaemon {
 
         // Start BYD Cloud MQTT subscriber (if credentials configured)
         try {
-            app.wheelstop.android.byd.cloud.BydCloudDataProvider.getInstance().startSubscriberIfConfigured();
+            BydCloudDataProvider.getInstance().startSubscriberIfConfigured();
         } catch (Exception e) {
             log("Cloud subscriber start failed: " + e.getMessage());
         }
         
         // Re-init GearMonitor with valid context
         try {
-            app.wheelstop.android.monitor.GearMonitor gearMonitor = app.wheelstop.android.monitor.GearMonitor.getInstance();
+            GearMonitor gearMonitor = GearMonitor.getInstance();
             gearMonitor.init(sharedAppContext);
             if (telemetryDataCollector != null) {
                 gearMonitor.setTelemetrySource(telemetryDataCollector);
@@ -361,7 +430,7 @@ public class CameraDaemon {
         // Re-init RecordingModeManager if it wasn't created (sharedAppContext was null at init time)
         if (recordingModeManager == null && gpuPipeline != null) {
             try {
-                recordingModeManager = new app.wheelstop.android.recording.RecordingModeManager(
+                recordingModeManager = new RecordingModeManager(
                     sharedAppContext, gpuPipeline);
                 log("ACC ON: RecordingModeManager created with valid context");
 
@@ -387,8 +456,8 @@ public class CameraDaemon {
                         // GearMonitor and replay current gear here so
                         // DRIVE_MODE recording is live immediately.
                         try {
-                            app.wheelstop.android.monitor.GearMonitor gm =
-                                app.wheelstop.android.monitor.GearMonitor.getInstance();
+                            GearMonitor gm =
+                                GearMonitor.getInstance();
                             if (!gm.isRunning()) {
                                 try {
                                     gm.start();
@@ -420,8 +489,8 @@ public class CameraDaemon {
         
         // Re-init VehicleDataMonitor
         try {
-            app.wheelstop.android.monitor.VehicleDataMonitor vehicleMonitor =
-                app.wheelstop.android.monitor.VehicleDataMonitor.getInstance();
+            VehicleDataMonitor vehicleMonitor =
+                VehicleDataMonitor.getInstance();
             vehicleMonitor.init(sharedAppContext);
             if (!vehicleMonitor.isRunning()) {
                 vehicleMonitor.start();
@@ -473,7 +542,7 @@ public class CameraDaemon {
             java.util.Map<String, Object> reset = new java.util.HashMap<>();
             reset.put("screenDeterrentActiveUntilMs", 0L);
             reset.put("screenDeterrentForceStop", false);
-            app.wheelstop.android.config.UnifiedConfigManager.updateValues(
+            UnifiedConfigManager.updateValues(
                     "surveillance", reset);
         } catch (Exception ignored) {}
 
@@ -484,7 +553,7 @@ public class CameraDaemon {
         // gauges are restored on this respawn. Stateless / harmless if nothing
         // leaked. Mirrors the screen-deterrent reset above.
         try {
-            app.wheelstop.android.surveillance.ClusterProjectionController.clearStaleGateAtBoot();
+            ClusterProjectionController.clearStaleGateAtBoot();
         } catch (Exception ignored) {}
 
         // SAFETY (companion to the gauge restore above): if that SIGKILL'd daemon was casting a
@@ -494,14 +563,14 @@ public class CameraDaemon {
         // no-op if nothing was stranded or AMS already reparented it. Reads via forceReload like
         // clearStaleGateAtBoot, so it needs no UnifiedConfigManager.init() first.
         try {
-            app.wheelstop.android.launcher.ClusterCast.reparentStrandedCastAtBoot();
+            ClusterCast.reparentStrandedCastAtBoot();
         } catch (Exception ignored) {}
 
         // Enable daemon logging for StorageManager (uses DaemonLogger instead of android.util.Log).
         // The StorageManager singleton itself is constructed later, after the HTTP/TCP/IPC
         // server threads are already running — so a flaky external volume can't wedge the
         // daemon's recovery UI. See "RECOVERY-FIRST STARTUP" comment further down.
-        app.wheelstop.android.storage.StorageManager.enableDaemonLogging();
+        StorageManager.enableDaemonLogging();
 
         log("=== CAMERA DAEMON STARTING ===");
         // Build stamp — bump BUILD_TAG on every change so the field log
@@ -556,7 +625,7 @@ public class CameraDaemon {
         // every daemon-side overlay/deterrent/thumbnail text draw is safe.
         // No-op / harmless on DiLink 3/4 where the font system already works.
         try {
-            boolean fontsOk = app.wheelstop.android.util.DaemonFonts.bootstrap();
+            boolean fontsOk = DaemonFonts.bootstrap();
             log("Font bootstrap: " + (fontsOk ? "OK (text enabled)"
                     : "FAILED (text disabled — icons/shapes only, daemon stays alive)"));
         } catch (Throwable t) {
@@ -601,7 +670,7 @@ public class CameraDaemon {
         tcpServer = new TcpCommandServer(TCP_PORT);
         httpServer = new HttpServer(HTTP_PORT);
         ipcServer = new SurveillanceIpcServer(19877);
-        aacIngestServer = new app.wheelstop.android.server.AacIngestServer();
+        aacIngestServer = new AacIngestServer();
         accMonitor = new AccMonitor();
 
         // Initialize the unified config (migration from legacy + schema fill)
@@ -611,7 +680,7 @@ public class CameraDaemon {
         // could interleave with migrateFromLegacy()'s own save. Running init
         // first makes the daemon a clean atomic writer from its first accepted
         // command. (init() is fast — file read + optional one-shot migration.)
-        app.wheelstop.android.config.UnifiedConfigManager.init();
+        UnifiedConfigManager.init();
 
         new Thread(tcpServer::start, "TcpServer").start();
         new Thread(httpServer::start, "HttpServer").start();
@@ -641,7 +710,7 @@ public class CameraDaemon {
         new Thread(() -> {
             try {
                 if (!probeAccStateWithBackoff("panel-recovery")) {
-                    app.wheelstop.android.power.StealthPanel.turnOn(sharedAppContext);
+                    StealthPanel.turnOn(sharedAppContext);
                 }
             } catch (Throwable t) {
                 log("Panel boot recovery failed: " + t.getMessage());
@@ -700,7 +769,7 @@ public class CameraDaemon {
         // here. Cheap (two `pm list packages` calls); no-op when the user
         // never opted in or the package isn't on this trim. We're already
         // running as UID shell so pm calls succeed directly.
-        app.wheelstop.android.server.OemDashcamApiHandler.enforceStickyDisableIfRequested();
+        OemDashcamApiHandler.enforceStickyDisableIfRequested();
         // OEM Dashcam pipeline: sticky enable is INTENTIONALLY deferred until
         // after the ACC hardware probe at line ~794. The two-axis resolver
         // gates each axis on AccMonitor.isAccOn(), and AccMonitor defaults to
@@ -720,7 +789,7 @@ public class CameraDaemon {
         new Thread(() -> {
             try {
                 Thread.sleep(15_000);   // wait for pano probe to settle
-                app.wheelstop.android.camera.ConcurrentAvmProbe.runIfNeeded();
+                ConcurrentAvmProbe.runIfNeeded();
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
             } catch (Throwable t) {
@@ -739,8 +808,8 @@ public class CameraDaemon {
         // but on a pathological ROM they can still take seconds. Doing this
         // here means the user's web UI is already alive even on slow paths,
         // and the watchdogs below kick in once the singleton exists.
-        app.wheelstop.android.storage.StorageManager storageManager =
-            app.wheelstop.android.storage.StorageManager.getInstance();
+        StorageManager storageManager =
+            StorageManager.getInstance();
         storageManager.fixAllPermissions();
 
         // Start the SD-card mount watchdog at daemon boot (instead of only on
@@ -762,7 +831,7 @@ public class CameraDaemon {
         // entirely when key mapping is off / unconfigured, and only ever restarts
         // when the keys are already broken — see KeymapApiHandler for the ladder.
         try {
-            app.wheelstop.android.server.KeymapApiHandler.startAccessibilityWatchdog();
+            KeymapApiHandler.startAccessibilityWatchdog();
         } catch (Throwable t) {
             log("Keymap a11y watchdog start failed: " + t.getMessage());
         }
@@ -773,8 +842,8 @@ public class CameraDaemon {
         // attribute the app-UID (10xxx) traffic alongside the UID-2000 daemons +
         // tunnels. startIfEnabled re-checks on every config-change edge below.
         try {
-            app.wheelstop.android.monitor.DataUsageMonitor dum =
-                    app.wheelstop.android.monitor.DataUsageMonitor.getInstance();
+            DataUsageMonitor dum =
+                    DataUsageMonitor.getInstance();
             if (sharedAppContext != null) dum.resolveAppUid(sharedAppContext);
             dum.startIfEnabled();
         } catch (Throwable t) {
@@ -786,7 +855,7 @@ public class CameraDaemon {
         // Without this the cleaner is lazy-initialized on first UI/API hit,
         // meaning a fresh boot with `enabled=true` in config never actually
         // begins reserving SD space until the user opens a settings screen.
-        app.wheelstop.android.storage.ExternalStorageCleaner.getInstance();
+        ExternalStorageCleaner.getInstance();
 
         // Periodic cleanup of our own recordings/surveillance dirs — runs
         // continuously instead of only while a recording is active. This
@@ -811,7 +880,7 @@ public class CameraDaemon {
         // a destructive delete during an active write. init() may re-wire the
         // concrete probe later; that is idempotent (probeWired is already true).
         storageManager.setEncoderWritingProbe(() -> {
-            app.wheelstop.android.surveillance.GpuSurveillancePipeline p = gpuPipeline; // static field
+            GpuSurveillancePipeline p = gpuPipeline; // static field
             return p != null && p.isEncoderWriting();
         });
         storageManager.startPeriodicCleanup();
@@ -835,11 +904,11 @@ public class CameraDaemon {
                 try {
                     log("Initializing RecordingsIndex (parallel)...");
                     long t0 = System.currentTimeMillis();
-                    boolean idxOk = app.wheelstop.android.server.RecordingsIndex.getInstance().init();
+                    boolean idxOk = RecordingsIndex.getInstance().init();
                     if (idxOk) {
                         log("RecordingsIndex initialized in "
                                 + (System.currentTimeMillis() - t0) + "ms — kicking off async warmup");
-                        app.wheelstop.android.server.RecordingsIndex.getInstance().warmupAsync();
+                        RecordingsIndex.getInstance().warmupAsync();
                         try {
                             RecordingsIndexFileWatcher.getInstance().start();
                         } catch (Throwable t) {
@@ -863,8 +932,8 @@ public class CameraDaemon {
                 // future completes so a slow walk can't delay startup.
                 try {
                     long t1 = System.currentTimeMillis();
-                    app.wheelstop.android.storage.StorageManager sm =
-                            app.wheelstop.android.storage.StorageManager.getInstance();
+                    StorageManager sm =
+                            StorageManager.getInstance();
                     sm.getRecordingsSize();
                     sm.getRecordingsCount();
                     sm.getSurveillanceSize();
@@ -899,7 +968,7 @@ public class CameraDaemon {
             if (irProbeSentinel.exists()) {
                 log("=== ImageReader probe sentinel detected — running probe ===");
                 File irProbeDir = new File("/data/local/tmp/imagereader_probe");
-                new app.wheelstop.android.camera.AvmImageReaderFpsProbe(irProbeDir).run();
+                new AvmImageReaderFpsProbe(irProbeDir).run();
                 if (!irProbeSentinel.delete()) {
                     log("WARN: Could not delete ImageReader probe sentinel " + irProbeSentinel);
                 }
@@ -998,7 +1067,7 @@ public class CameraDaemon {
         initGpsMonitor();
 
         // Initialize Safe Location Manager (geofence zones)
-        app.wheelstop.android.surveillance.SafeLocationManager.getInstance().init();
+        SafeLocationManager.getInstance().init();
 
         // RoadSense: daemon-side road-hazard detection (D-019/D-023). BydDataCollector
         // + GpsMonitor are up by now (initGpsMonitor above; collector re-init on ACC ON),
@@ -1011,7 +1080,7 @@ public class CameraDaemon {
         // listener that start()s/stop()s it live when the user flips the toggle. No daemon
         // restart needed either way.
         try {
-            roadSense = new app.wheelstop.android.roadsense.RoadSenseController(sharedAppContext);
+            roadSense = new RoadSenseController(sharedAppContext);
             roadSense.attach();
             log("RoadSense controller attached (starts iff enabled)");
         } catch (Throwable t) {
@@ -1026,12 +1095,12 @@ public class CameraDaemon {
         // waste. Users who enable the feature later trigger the natural
         // lazy-load path (first put / first get) at no perceptible cost.
         try {
-            boolean recordingOn = app.wheelstop.android.config.UnifiedConfigManager
+            boolean recordingOn = UnifiedConfigManager
                     .isGeocodingEnabledForFlow("recording");
-            boolean surveillanceOn = app.wheelstop.android.config.UnifiedConfigManager
+            boolean surveillanceOn = UnifiedConfigManager
                     .isGeocodingEnabledForFlow("surveillance");
             if (recordingOn || surveillanceOn) {
-                app.wheelstop.android.geo.GeoCache.getInstance().ensureLoaded();
+                GeoCache.getInstance().ensureLoaded();
             }
         } catch (Throwable t) {
             log("GeoCache prewarm failed: " + t.getMessage());
@@ -1077,8 +1146,8 @@ public class CameraDaemon {
                 try {
                     log("Initializing Trip Analytics (parallel)...");
                     long t0 = System.currentTimeMillis();
-                    app.wheelstop.android.trips.TripAnalyticsManager tam =
-                            new app.wheelstop.android.trips.TripAnalyticsManager();
+                    TripAnalyticsManager tam =
+                            new TripAnalyticsManager();
                     tam.init(sharedAppContext, telemetryDataCollector, sohEstSnapshot);
                     tripAnalyticsManager = tam;
                     // initSurveillance() runs synchronously on the main
@@ -1087,7 +1156,7 @@ public class CameraDaemon {
                     // the volatile and forward defensively in case a future
                     // refactor moves the parallel kick earlier — the
                     // setTelemetryDataCollector call is idempotent.
-                    app.wheelstop.android.telemetry.TelemetryDataCollector tdc = telemetryDataCollector;
+                    TelemetryDataCollector tdc = telemetryDataCollector;
                     if (tdc != null) {
                         try { tam.setTelemetryDataCollector(tdc); }
                         catch (Throwable ignored) {}
@@ -1116,10 +1185,10 @@ public class CameraDaemon {
                     // (handles mid-drive daemon restart).
                     if (tam.isEnabled()) {
                         try {
-                            int currentGear = app.wheelstop.android.monitor.GearMonitor.getInstance().getCurrentGear();
-                            if (currentGear != app.wheelstop.android.monitor.GearMonitor.GEAR_P) {
+                            int currentGear = GearMonitor.getInstance().getCurrentGear();
+                            if (currentGear != GearMonitor.GEAR_P) {
                                 log("Trip Analytics: non-P gear detected at startup (gear="
-                                        + app.wheelstop.android.monitor.GearMonitor.gearToString(currentGear)
+                                        + GearMonitor.gearToString(currentGear)
                                         + ") — auto-starting trip recording");
                                 tam.onGearChanged(currentGear);
                             }
@@ -1150,7 +1219,7 @@ public class CameraDaemon {
         // killProcess) and any watchdog restart; without it a pending shutdown would be lost
         // exactly when the car is parked with the AC still running.
         try {
-            app.wheelstop.android.byd.AcAutoOffTimer.restore();
+            AcAutoOffTimer.restore();
         } catch (Exception e) {
             log("AcAutoOffTimer restore error: " + e.getMessage());
         }
@@ -1205,7 +1274,7 @@ public class CameraDaemon {
         // Initialize MQTT Connection Manager
         try {
             log("Initializing MQTT connections...");
-            mqttConnectionManager = new app.wheelstop.android.mqtt.MqttConnectionManager();
+            mqttConnectionManager = new MqttConnectionManager();
             mqttConnectionManager.init(deviceId, sohEstimator);
 
             // Set IPC reference so SurveillanceIpcServer can access MQTT
@@ -1220,7 +1289,7 @@ public class CameraDaemon {
 
         // Start BYD Cloud MQTT subscriber for remote command results + push data
         try {
-            app.wheelstop.android.byd.cloud.BydCloudDataProvider.getInstance().startSubscriberIfConfigured();
+            BydCloudDataProvider.getInstance().startSubscriberIfConfigured();
         } catch (Exception e) {
             log("Cloud MQTT subscriber start failed: " + e.getMessage());
         }
@@ -1234,7 +1303,7 @@ public class CameraDaemon {
 
         // Initialize OdometerReader for trip distance
         try {
-            app.wheelstop.android.trips.OdometerReader.getInstance().init(sharedAppContext);
+            OdometerReader.getInstance().init(sharedAppContext);
         } catch (Exception e) {
             log("OdometerReader init error: " + e.getMessage());
         }
@@ -1286,7 +1355,7 @@ public class CameraDaemon {
                 // the false default before any IPC arrives.
                 log("RECOVERY: Hardware probe shows ACC ON but RMM null — "
                     + "queuing pendingAccOn for delayed seed");
-                app.wheelstop.android.monitor.AccMonitor.setAccState(true);
+                AccMonitor.setAccState(true);
                 pendingAccOn = true;
                 pendingAccOff = false;
             }
@@ -1299,7 +1368,7 @@ public class CameraDaemon {
         // phase. enforceStickyEnableIfRequested submits the recalc to the
         // dedicated lifecycle executor; it runs async so daemon boot isn't
         // blocked by AVC warmup + AVMCamera open inside the OEM pipeline.
-        app.wheelstop.android.server.OemDashcamApiHandler.enforceStickyEnableIfRequested();
+        OemDashcamApiHandler.enforceStickyEnableIfRequested();
 
         // Periodic OEM self-heal. The OEM lifecycle is edge-driven (ACC IPC,
         // surveillance IPC, config POST, stream-view, pano-ready); a start
@@ -1308,7 +1377,7 @@ public class CameraDaemon {
         // at ACC ON — otherwise stayed dead until the next incidental edge.
         // This ticker re-drives the (idempotent) resolver every 30s so a
         // missed/lost start recovers within ~30s instead of mid-drive.
-        app.wheelstop.android.server.OemDashcamApiHandler.startSelfHealTicker();
+        OemDashcamApiHandler.startSelfHealTicker();
 
         // Periodic blind-spot self-arm. The app arms the BS lane only on the
         // com.byd.action.ACC_ON broadcast EDGE; on a hard reboot ACC is already
@@ -1318,15 +1387,15 @@ public class CameraDaemon {
         // (no-op once armed) brings the lane up independently within ~30s. Also
         // re-driven inline from the daemon ACC-on edge + the pano-ready hook so
         // the common cold-reboot case arms in seconds, not at the first tick.
-        app.wheelstop.android.server.StreamingApiHandler.startBsSelfHealTicker();
-        app.wheelstop.android.server.StreamingApiHandler.resolveBlindSpotLifecycle();
+        StreamingApiHandler.startBsSelfHealTicker();
+        StreamingApiHandler.resolveBlindSpotLifecycle();
 
         // Recover gracefully if the app cast onto the cluster (or the persisted ACC-on
         // auto-start app) is uninstalled: tear down a live cast + mirror in the SF-safe
         // order and clear a stale auto-start package. Runtime-registered (manifest
         // PACKAGE_REMOVED receivers don't fire on API 26+); no-op if no app context.
         try {
-            app.wheelstop.android.receiver.CastPackageWatcher.register(getAppContext());
+            CastPackageWatcher.register(getAppContext());
         } catch (Throwable t) {
             log("CastPackageWatcher register failed: " + t.getMessage());
         }
@@ -1336,7 +1405,7 @@ public class CameraDaemon {
         // the cluster into (the resize-correct mirror path — HTTP can't carry a Surface).
         // uid-2000 daemon + live Looper make ServiceManager.addService valid here. Guarded.
         try {
-            app.wheelstop.android.surveillance.ClusterViewMirrorService.register();
+            ClusterViewMirrorService.register();
         } catch (Throwable t) {
             log("ClusterViewMirrorService register failed: " + t.getMessage());
         }
@@ -1393,16 +1462,16 @@ public class CameraDaemon {
             String codec = HttpServer.getRecordingCodec();
             if (codec != null) {
                 // Just update the config, don't reinitialize encoder
-                app.wheelstop.android.surveillance.GpuPipelineConfig.VideoCodec videoCodec;
+                GpuPipelineConfig.VideoCodec videoCodec;
                 switch (codec.toUpperCase()) {
                     case "H265":
                     case "HEVC":
-                        videoCodec = app.wheelstop.android.surveillance.GpuPipelineConfig.VideoCodec.H265;
+                        videoCodec = GpuPipelineConfig.VideoCodec.H265;
                         break;
                     case "H264":
                     case "AVC":
                     default:
-                        videoCodec = app.wheelstop.android.surveillance.GpuPipelineConfig.VideoCodec.H264;
+                        videoCodec = GpuPipelineConfig.VideoCodec.H264;
                         break;
                 }
                 gpuPipeline.getConfig().setVideoCodec(videoCodec);
@@ -1556,12 +1625,12 @@ public class CameraDaemon {
         // synchronized init on the cold path. Prevents two concurrent
         // callers from each instantiating AvcHalWarmup and orphaning a
         // running keep-alive thread.
-        app.wheelstop.android.camera.AvcHalWarmup local = avcHalWarmup;
+        AvcHalWarmup local = avcHalWarmup;
         if (local == null) {
             synchronized (AVC_WARMUP_INIT_LOCK) {
                 local = avcHalWarmup;
                 if (local == null) {
-                    local = new app.wheelstop.android.camera.AvcHalWarmup();
+                    local = new AvcHalWarmup();
                     avcHalWarmup = local;
                 }
             }
@@ -1691,7 +1760,7 @@ public class CameraDaemon {
         int agreementCount = 0;
         for (int attempt = 0; attempt < 3; attempt++) {
             try {
-                boolean reading = app.wheelstop.android.monitor.AccMonitor
+                boolean reading = AccMonitor
                     .probeAccState(sharedAppContext);
                 if (!firstReadingSet) {
                     lastReading = reading;
@@ -1728,7 +1797,7 @@ public class CameraDaemon {
         if (!firstReadingSet) {
             // Every attempt threw — fall back to AccMonitor cache (same
             // behaviour as the prior single-attempt catch branch).
-            boolean cacheFallback = !app.wheelstop.android.monitor.AccMonitor.isAccOn();
+            boolean cacheFallback = !AccMonitor.isAccOn();
             log("WARN: ACC HW probe (" + tag + ") all attempts failed — "
                 + "falling back to AccMonitor cache accIsOff=" + cacheFallback);
             return cacheFallback;
@@ -1740,7 +1809,7 @@ public class CameraDaemon {
 
     private static boolean isDilink4ModeActive() {
         try {
-            org.json.JSONObject c = app.wheelstop.android.config.UnifiedConfigManager
+            org.json.JSONObject c = UnifiedConfigManager
                 .loadConfig().optJSONObject("camera");
             if (c == null) return false;
             return "dilink4".equalsIgnoreCase(c.optString("cameraMode", "default"));
@@ -1840,7 +1909,7 @@ public class CameraDaemon {
      * for the automation "Publish MQTT" action to fan a message out to every active
      * connection. Null-check at the call site — a car with no MQTT setup returns null.
      */
-    public static app.wheelstop.android.mqtt.MqttConnectionManager getMqttConnectionManager() {
+    public static MqttConnectionManager getMqttConnectionManager() {
         return mqttConnectionManager;
     }
 
@@ -1908,9 +1977,10 @@ public class CameraDaemon {
         // reconcile cadence for the rest of the daemon's life.
         memoryLogScheduler.scheduleAtFixedRate(() -> {
             try {
-                app.wheelstop.android.server.RecordingsIndex.getInstance().reconcile();
+                RecordingsIndex.getInstance()
+                        .requestReconcile("hourly-integrity");
             } catch (Throwable t) {
-                log("RecordingsIndex reconcile tick failed: "
+                log("RecordingsIndex reconcile request failed: "
                     + t.getClass().getSimpleName() + ": " + t.getMessage());
             }
         }, 60, 60, java.util.concurrent.TimeUnit.MINUTES);
@@ -1938,7 +2008,7 @@ public class CameraDaemon {
         });
         geoBackfillScheduler.scheduleAtFixedRate(() -> {
             try {
-                app.wheelstop.android.geo.GeoBackfillSweep.run();
+                GeoBackfillSweep.run();
             } catch (Throwable t) {
                 log("Geo backfill tick failed: "
                     + t.getClass().getSimpleName() + ": " + t.getMessage());
@@ -1957,7 +2027,7 @@ public class CameraDaemon {
         // scheduleAtFixedRate cancels a recurring task on first uncaught throw.
         memoryLogScheduler.scheduleAtFixedRate(() -> {
             try {
-                app.wheelstop.android.analytics.AnalyticsPinger.INSTANCE.maybePing(
+                AnalyticsPinger.INSTANCE.maybePing(
                     System.currentTimeMillis());
             } catch (Throwable t) {
                 log("Analytics ping tick failed: "
@@ -2044,7 +2114,7 @@ public class CameraDaemon {
      * `.disabled` sentinel (see ParkedShutdown / writeDisableSentinel).
      */
     private static void writeParkedShutdownMarker() {
-        String path = app.wheelstop.android.ui.model.ParkedShutdown.MARKER_PATH;
+        String path = ParkedShutdown.MARKER_PATH;
         try {
             java.io.FileWriter fw = new java.io.FileWriter(path);
             fw.write(String.valueOf(System.currentTimeMillis()));
@@ -2115,15 +2185,15 @@ public class CameraDaemon {
         }
         
         // Stop all monitors
-        try { app.wheelstop.android.monitor.VehicleDataMonitor.getInstance().stop(); } catch (Exception ignored) {}
-        try { app.wheelstop.android.monitor.GpsMonitor.getInstance().stop(); } catch (Exception ignored) {}
-        try { app.wheelstop.android.monitor.GearMonitor.getInstance().stop(); } catch (Exception ignored) {}
-        try { app.wheelstop.android.monitor.PerformanceMonitor.getInstance().stop(); } catch (Exception ignored) {}
+        try { VehicleDataMonitor.getInstance().stop(); } catch (Exception ignored) {}
+        try { GpsMonitor.getInstance().stop(); } catch (Exception ignored) {}
+        try { GearMonitor.getInstance().stop(); } catch (Exception ignored) {}
+        try { PerformanceMonitor.getInstance().stop(); } catch (Exception ignored) {}
         // Stop the charging fast-sampler BEFORE closing the H2 DB it writes to.
         try { if (chargingSessionManager != null) chargingSessionManager.shutdown(); } catch (Exception ignored) {}
-        try { app.wheelstop.android.monitor.SocHistoryDatabase.getInstance().stop(); } catch (Exception ignored) {}
-        try { app.wheelstop.android.monitor.DataUsageMonitor.getInstance().shutdown(); } catch (Exception ignored) {}
-        try { app.wheelstop.android.notifications.NotificationStore.getInstance().stop(); } catch (Exception ignored) {}
+        try { SocHistoryDatabase.getInstance().stop(); } catch (Exception ignored) {}
+        try { DataUsageMonitor.getInstance().shutdown(); } catch (Exception ignored) {}
+        try { NotificationStore.getInstance().stop(); } catch (Exception ignored) {}
         
         // Stop services. Both the trip analytics + recordings index inits
         // run on parallel threads (see main()); join with a short timeout
@@ -2152,7 +2222,7 @@ public class CameraDaemon {
         // "upsert failed: connection closed" warning).
         try { RecordingsIndexFileWatcher.getInstance().stop(); }
         catch (Exception e) { log("RecordingsIndexFileWatcher stop error: " + e.getMessage()); }
-        try { app.wheelstop.android.server.RecordingsIndex.getInstance().close(); }
+        try { RecordingsIndex.getInstance().close(); }
         catch (Exception e) { log("RecordingsIndex close error: " + e.getMessage()); }
         if (abrpTelemetryService != null) abrpTelemetryService.stop();
         if (mqttConnectionManager != null) mqttConnectionManager.stopAll();
@@ -2162,7 +2232,7 @@ public class CameraDaemon {
         if (aacIngestServer != null) aacIngestServer.stop();
 
         // Shutdown StorageManager (schedulers, executors)
-        try { app.wheelstop.android.storage.StorageManager.getInstance().shutdown(); } catch (Exception ignored) {}
+        try { StorageManager.getInstance().shutdown(); } catch (Exception ignored) {}
         
         // Release singleton lock
         releaseSingletonLock();
@@ -2381,14 +2451,14 @@ public class CameraDaemon {
                 //    cancel() is non-blocking; the executor's finally block
                 //    clears UCM and turns the backlight off.
                 try {
-                    app.wheelstop.android.surveillance.ScreenDeterrent.getInstance().cancel();
+                    ScreenDeterrent.getInstance().cancel();
                     // Defensive: clear cross-process flags directly in case
                     // the executor doesn't get a chance to finish (SIGKILL
                     // or VM dying mid-cleanup).
                     java.util.Map<String, Object> reset = new java.util.HashMap<>();
                     reset.put("screenDeterrentActiveUntilMs", 0L);
                     reset.put("screenDeterrentForceStop", false);
-                    app.wheelstop.android.config.UnifiedConfigManager.updateValues(
+                    UnifiedConfigManager.updateValues(
                             "surveillance", reset);
                     log("Shutdown hook: screen deterrent flags cleared");
                 } catch (Exception e) {
@@ -2411,13 +2481,13 @@ public class CameraDaemon {
                 //     shutdownIfActive is SYNCHRONOUS (unbind+destroy the VD, bounded await)
                 //     so it completes before the projection close. No-op if never started.
                 try {
-                    app.wheelstop.android.receiver.CastPackageWatcher.unregister(getAppContext());
+                    CastPackageWatcher.unregister(getAppContext());
                 } catch (Exception e) {
                     log("Shutdown hook: CastPackageWatcher unregister error: " + e.getMessage());
                 }
                 try {
-                    app.wheelstop.android.surveillance.ClusterViewMirrorService.forceDetachIfActive("daemon-shutdown");
-                    app.wheelstop.android.surveillance.ClusterMirrorController.shutdownIfActive();
+                    ClusterViewMirrorService.forceDetachIfActive("daemon-shutdown");
+                    ClusterMirrorController.shutdownIfActive();
                     log("Shutdown hook: cluster mirror torn down");
                 } catch (Exception e) {
                     log("Shutdown hook: cluster mirror cleanup error: " + e.getMessage());
@@ -2425,7 +2495,7 @@ public class CameraDaemon {
 
                 // 0.5b THEN close the OEM cluster projection + restore gauges.
                 try {
-                    app.wheelstop.android.surveillance.ClusterProjectionController.shutdownIfActive();
+                    ClusterProjectionController.shutdownIfActive();
                     log("Shutdown hook: cluster projection restore issued");
                 } catch (Exception e) {
                     log("Shutdown hook: cluster projection cleanup error: " + e.getMessage());
@@ -2445,7 +2515,7 @@ public class CameraDaemon {
                 //      geocode hits. Inline flush is bounded (≤ 4 MB JSON
                 //      write) and finishes well within the shutdown budget.
                 try {
-                    app.wheelstop.android.geo.GeoCache.getInstance().flushNow();
+                    GeoCache.getInstance().flushNow();
                 } catch (Exception e) {
                     log("Shutdown hook: GeoCache flush error: " + e.getMessage());
                 }
@@ -2458,7 +2528,7 @@ public class CameraDaemon {
                 //     OEM MediaCodec, drainer, and AVMCamera handle until
                 //     daemon respawn. Tearing down here is unconditional.
                 try {
-                    app.wheelstop.android.camera.OemDashcamPipeline oem =
+                    OemDashcamPipeline oem =
                         getOemDashcamPipeline();
                     if (oem != null && oem.isRunning()) {
                         try { oem.stopRecording(); } catch (Throwable ignored) {}
@@ -2490,7 +2560,7 @@ public class CameraDaemon {
                 //     exit kills the daemon thread mid-release and leaks
                 //     the MediaCodec until the next process spawn.
                 try {
-                    boolean drained = app.wheelstop.android.surveillance.GpuSurveillancePipeline
+                    boolean drained = GpuSurveillancePipeline
                         .shutdownStreamEncoderReleaseExec(4000);
                     if (drained) {
                         log("Shutdown hook: stream encoder release executor drained");
@@ -2506,16 +2576,16 @@ public class CameraDaemon {
                 // 3. Stop all monitors (VehicleDataMonitor, GpsMonitor, GearMonitor,
                 //    PerformanceMonitor) — these hold BYD device listeners and schedulers
                 try {
-                    app.wheelstop.android.monitor.VehicleDataMonitor.getInstance().stop();
+                    VehicleDataMonitor.getInstance().stop();
                 } catch (Exception e) { /* may not be initialized */ }
                 try {
-                    app.wheelstop.android.monitor.GpsMonitor.getInstance().stop();
+                    GpsMonitor.getInstance().stop();
                 } catch (Exception e) { /* may not be initialized */ }
                 try {
-                    app.wheelstop.android.monitor.GearMonitor.getInstance().stop();
+                    GearMonitor.getInstance().stop();
                 } catch (Exception e) { /* may not be initialized */ }
                 try {
-                    app.wheelstop.android.monitor.PerformanceMonitor.getInstance().stop();
+                    PerformanceMonitor.getInstance().stop();
                 } catch (Exception e) { /* may not be initialized */ }
                 
                 // 4. Close SOC History Database (H2 JDBC connection + scheduler).
@@ -2532,10 +2602,10 @@ public class CameraDaemon {
                     if (chargingSessionManager != null) chargingSessionManager.shutdown();
                 } catch (Exception e) { /* may not be initialized */ }
                 try {
-                    app.wheelstop.android.monitor.SocHistoryDatabase.getInstance().stop();
+                    SocHistoryDatabase.getInstance().stop();
                 } catch (Exception e) { /* may not be initialized */ }
                 try {
-                    app.wheelstop.android.notifications.NotificationStore.getInstance().stop();
+                    NotificationStore.getInstance().stop();
                 } catch (Exception e) { /* may not be initialized */ }
                 
                 // 5. Stop services (MQTT, ABRP, Trip Analytics).
@@ -2566,7 +2636,7 @@ public class CameraDaemon {
                 // hit a closed JDBC connection.
                 try { RecordingsIndexFileWatcher.getInstance().stop(); }
                 catch (Exception e) { /* ignore */ }
-                try { app.wheelstop.android.server.RecordingsIndex.getInstance().close(); }
+                try { RecordingsIndex.getInstance().close(); }
                 catch (Exception e) { /* ignore */ }
 
                 // 6. Stop servers (TCP, HTTP, IPC)
@@ -2585,7 +2655,7 @@ public class CameraDaemon {
 
                 // 7. Shutdown StorageManager (schedulers, executors, SD card watchdog)
                 try {
-                    app.wheelstop.android.storage.StorageManager.getInstance().shutdown();
+                    StorageManager.getInstance().shutdown();
                 } catch (Exception e) { /* ignore */ }
                 
                 // 8. Release singleton lock (must be last)
@@ -2740,11 +2810,11 @@ public class CameraDaemon {
         return deviceId;
     }
     
-    public static app.wheelstop.android.trips.TripAnalyticsManager getTripAnalyticsManager() {
+    public static TripAnalyticsManager getTripAnalyticsManager() {
         return tripAnalyticsManager;
     }
 
-    public static app.wheelstop.android.charging.ChargingSessionManager getChargingSessionManager() {
+    public static ChargingSessionManager getChargingSessionManager() {
         return chargingSessionManager;
     }
 
@@ -2806,16 +2876,16 @@ public class CameraDaemon {
             // correct strip dimensions per vehicle. Falls back to legacy Seal
             // if ro.product.model is unrecognized — same behavior as before
             // for existing Seal/Atto installs.
-            app.wheelstop.android.camera.ResolvedCameraConfig resolvedCamera =
-                app.wheelstop.android.camera.CameraConfigResolver.resolve();
+            ResolvedCameraConfig resolvedCamera =
+                CameraConfigResolver.resolve();
 
             // SOTA: Use StorageManager for surveillance output directory
-            app.wheelstop.android.storage.StorageManager storageManager =
-                app.wheelstop.android.storage.StorageManager.getInstance();
+            StorageManager storageManager =
+                StorageManager.getInstance();
             File eventDir = storageManager.getSurveillanceDir();
 
             // Create GPU pipeline with resolved profile dimensions
-            gpuPipeline = new app.wheelstop.android.surveillance.GpuSurveillancePipeline(
+            gpuPipeline = new GpuSurveillancePipeline(
                 resolvedCamera.getPanoWidth(), resolvedCamera.getPanoHeight(), eventDir);
             
             // Get AssetManager from the app's APK
@@ -2865,16 +2935,16 @@ public class CameraDaemon {
             // IMPORTANT: Set codec FIRST, then bitrate (so bitrate is calculated for correct codec)
             String persistedCodec = HttpServer.getRecordingCodec();
             if (persistedCodec != null) {
-                app.wheelstop.android.surveillance.GpuPipelineConfig.VideoCodec videoCodec;
+                GpuPipelineConfig.VideoCodec videoCodec;
                 switch (persistedCodec.toUpperCase()) {
                     case "H265":
                     case "HEVC":
-                        videoCodec = app.wheelstop.android.surveillance.GpuPipelineConfig.VideoCodec.H265;
+                        videoCodec = GpuPipelineConfig.VideoCodec.H265;
                         break;
                     case "H264":
                     case "AVC":
                     default:
-                        videoCodec = app.wheelstop.android.surveillance.GpuPipelineConfig.VideoCodec.H264;
+                        videoCodec = GpuPipelineConfig.VideoCodec.H264;
                         break;
                 }
                 gpuPipeline.getConfig().setVideoCodec(videoCodec);
@@ -2890,8 +2960,8 @@ public class CameraDaemon {
             // and can OOM (5s × 30fps × 10Mbps tries to grab 187 MB).
             String persistedQuality = HttpServer.getRecordingQuality();
             if (persistedQuality != null) {
-                app.wheelstop.android.surveillance.GpuPipelineConfig.RecordingQuality tier =
-                    app.wheelstop.android.surveillance.GpuPipelineConfig.RecordingQuality.fromString(persistedQuality);
+                GpuPipelineConfig.RecordingQuality tier =
+                    GpuPipelineConfig.RecordingQuality.fromString(persistedQuality);
                 gpuPipeline.getConfig().setRecordingQuality(tier);
                 int effectiveBitrate = gpuPipeline.getConfig().getEffectiveBitrate();
                 log("Pre-init: Set quality to " + tier + " (" + effectiveBitrate / 1_000_000 + " Mbps for " +
@@ -2901,17 +2971,17 @@ public class CameraDaemon {
                 // migrated to the tier-based config yet.
                 String persistedBitrate = HttpServer.getRecordingBitrate();
                 if (persistedBitrate != null) {
-                    app.wheelstop.android.surveillance.GpuPipelineConfig.BitratePreset preset;
+                    GpuPipelineConfig.BitratePreset preset;
                     switch (persistedBitrate.toUpperCase()) {
                         case "LOW":
-                            preset = app.wheelstop.android.surveillance.GpuPipelineConfig.BitratePreset.LOW;
+                            preset = GpuPipelineConfig.BitratePreset.LOW;
                             break;
                         case "HIGH":
-                            preset = app.wheelstop.android.surveillance.GpuPipelineConfig.BitratePreset.HIGH;
+                            preset = GpuPipelineConfig.BitratePreset.HIGH;
                             break;
                         case "MEDIUM":
                         default:
-                            preset = app.wheelstop.android.surveillance.GpuPipelineConfig.BitratePreset.MEDIUM;
+                            preset = GpuPipelineConfig.BitratePreset.MEDIUM;
                             break;
                     }
                     gpuPipeline.getConfig().setBitratePreset(preset);
@@ -2921,7 +2991,7 @@ public class CameraDaemon {
                 }
             }
             
-            gpuPipeline.init(assetManager, app.wheelstop.android.daemon.DaemonBootstrap.getContext());
+            gpuPipeline.init(assetManager, DaemonBootstrap.getContext());
             
             log("GPU Surveillance initialized: profile=" + resolvedCamera.getProfile().getDisplayName()
                 + ", panoCam=" + resolvedCamera.getPanoCameraId()
@@ -2931,9 +3001,9 @@ public class CameraDaemon {
             
             // Clean up orphaned .tmp files from previous crashed recordings
             try {
-                app.wheelstop.android.storage.StorageManager sm = app.wheelstop.android.storage.StorageManager.getInstance();
-                app.wheelstop.android.surveillance.HardwareEventRecorderGpu.cleanupOrphanedTmpFiles(sm.getRecordingsDir());
-                app.wheelstop.android.surveillance.HardwareEventRecorderGpu.cleanupOrphanedTmpFiles(sm.getSurveillanceDir());
+                StorageManager sm = StorageManager.getInstance();
+                HardwareEventRecorderGpu.cleanupOrphanedTmpFiles(sm.getRecordingsDir());
+                HardwareEventRecorderGpu.cleanupOrphanedTmpFiles(sm.getSurveillanceDir());
             } catch (Exception e) {
                 log("Tmp cleanup error: " + e.getMessage());
             }
@@ -2946,7 +3016,7 @@ public class CameraDaemon {
                 sharedAppContext = createAppContext();
             }
             if (sharedAppContext != null) {
-                recordingModeManager = new app.wheelstop.android.recording.RecordingModeManager(
+                recordingModeManager = new RecordingModeManager(
                     sharedAppContext, gpuPipeline);
                 log("RecordingModeManager initialized");
 
@@ -2956,7 +3026,7 @@ public class CameraDaemon {
                 // and is about to instantiate its own.
                 synchronized (AVC_WARMUP_INIT_LOCK) {
                     if (avcHalWarmup == null) {
-                        avcHalWarmup = new app.wheelstop.android.camera.AvcHalWarmup();
+                        avcHalWarmup = new AvcHalWarmup();
                     }
                 }
                 log("AvcHalWarmup initialized");
@@ -2970,7 +3040,7 @@ public class CameraDaemon {
                 // covers the gap during sentry mode.
                 if (isDilink4ModeActive()) {
                     try {
-                        app.wheelstop.android.camera.AvcHalWarmup.ensureAvcAlive();
+                        AvcHalWarmup.ensureAvcAlive();
                     } catch (Throwable t) {
                         log("Boot-time AVC ensureAlive failed: " + t.getMessage());
                     }
@@ -2983,7 +3053,7 @@ public class CameraDaemon {
                 // Now initialize TelemetryDataCollector (context is guaranteed available)
                 try {
                     telemetryDataCollector =
-                        new app.wheelstop.android.telemetry.TelemetryDataCollector();
+                        new TelemetryDataCollector();
                     telemetryDataCollector.init(sharedAppContext);
                     gpuPipeline.setTelemetryCollector(telemetryDataCollector);
                     
@@ -2991,23 +3061,23 @@ public class CameraDaemon {
                     // honours per-flow keys (panoEnabled / oemDashcamEnabled)
                     // and falls back to legacy `enabled` for pano so older
                     // configs continue to work.
-                    boolean overlayEnabled = app.wheelstop.android.config.UnifiedConfigManager
+                    boolean overlayEnabled = UnifiedConfigManager
                         .isTelemetryOverlayEnabledFor("pano");
                     gpuPipeline.setOverlayEnabled(overlayEnabled);
                     // Apply the independent ACC-off surveillance overlay master
                     // (opt-in, default off). Its field selection is loaded per
                     // event at record-start via the pipeline's flow resolver.
-                    boolean survOverlayEnabled = app.wheelstop.android.config.UnifiedConfigManager
+                    boolean survOverlayEnabled = UnifiedConfigManager
                         .isTelemetryOverlayEnabledFor("surveillance");
                     gpuPipeline.setSurveillanceOverlayEnabled(survOverlayEnabled);
                     log("TelemetryDataCollector initialized, pano overlay=" + overlayEnabled
                         + " surveillance overlay=" + survOverlayEnabled);
 
                     // Apply persisted recording layout (standard 360 mosaic / dashcam)
-                    String recLayout = app.wheelstop.android.config.UnifiedConfigManager
+                    String recLayout = UnifiedConfigManager
                         .getRecording().optString("recordingLayout", "standard");
                     gpuPipeline.setRecordingLayout("dashcam".equals(recLayout) ? 1 : 0);
-                    boolean dashcamUseWindshield = app.wheelstop.android.config.UnifiedConfigManager
+                    boolean dashcamUseWindshield = UnifiedConfigManager
                         .getRecording().optBoolean("dashcamUseWindshield", false);
                     gpuPipeline.setDashcamUseWindshield(dashcamUseWindshield);
                     log("Recording layout: " + recLayout);
@@ -3017,7 +3087,7 @@ public class CameraDaemon {
                     // Falls back to the dashcam values when the sentry keys are
                     // unset so existing installs keep their current look.
                     org.json.JSONObject survLayoutCfg =
-                        app.wheelstop.android.config.UnifiedConfigManager.getSurveillance();
+                        UnifiedConfigManager.getSurveillance();
                     String survLayout = survLayoutCfg.optString("recordingLayout", recLayout);
                     gpuPipeline.setSurveillanceRecordingLayout("dashcam".equals(survLayout) ? 1 : 0);
                     boolean survUseWindshield = survLayoutCfg.has("useWindshield")
@@ -3230,7 +3300,7 @@ public class CameraDaemon {
         // enableSurveillance() retry loop or the 45-second fallback timer fires
         // AFTER ACC has already turned ON. AccMonitor is the source of truth
         // because it's updated synchronously by onAccStateChanged() on the IPC thread.
-        if (app.wheelstop.android.monitor.AccMonitor.isAccOn()) {
+        if (AccMonitor.isAccOn()) {
             log("enableSurveillance() REJECTED — ACC is ON (race condition guard)");
             return;  // No recalc — resolver will fire from the ACC transition.
         }
@@ -3256,8 +3326,8 @@ public class CameraDaemon {
             }
 
             // SOTA: Safe Location check — don't start camera if parked at safe zone
-            app.wheelstop.android.surveillance.SafeLocationManager safeMgr =
-                app.wheelstop.android.surveillance.SafeLocationManager.getInstance();
+            SafeLocationManager safeMgr =
+                SafeLocationManager.getInstance();
             if (safeMgr.isInSafeZone()) {
                 log("SAFE ZONE: Surveillance suppressed — " + safeMgr.getCurrentZoneName()
                     + " (dist=" + Math.round(safeMgr.getDistanceToNearestZone()) + "m)");
@@ -3291,7 +3361,7 @@ public class CameraDaemon {
             }
         } finally {
             try {
-                app.wheelstop.android.server.OemDashcamApiHandler.scheduleLifecycleRecalc();
+                OemDashcamApiHandler.scheduleLifecycleRecalc();
             } catch (Throwable ignored) {}
         }
     }
@@ -3333,7 +3403,7 @@ public class CameraDaemon {
         // toggle off, etc.). Recalc so surv=continuous tears down and surv=smart
         // unwarms the pipeline if no other consumer keeps it alive.
         try {
-            app.wheelstop.android.server.OemDashcamApiHandler.scheduleLifecycleRecalc();
+            OemDashcamApiHandler.scheduleLifecycleRecalc();
         } catch (Throwable ignored) {}
     }
     
@@ -3416,7 +3486,7 @@ public class CameraDaemon {
                 log("LOCK GATE TIMEOUT: thread interrupted before deadline — not arming");
                 return;
             }
-            if (app.wheelstop.android.monitor.AccMonitor.isAccOn()) {
+            if (AccMonitor.isAccOn()) {
                 log("LOCK GATE TIMEOUT: ACC is ON — not arming");
                 return;
             }
@@ -3446,7 +3516,7 @@ public class CameraDaemon {
                     log("LOCK GATE: already armed via lock detection — force-arm deadline is a no-op");
                     return;
                 }
-                if (app.wheelstop.android.monitor.AccMonitor.isAccOn()) {
+                if (AccMonitor.isAccOn()) {
                     log("LOCK GATE TIMEOUT: ACC turned ON before force-arm — not arming");
                     return;
                 }
@@ -3471,8 +3541,8 @@ public class CameraDaemon {
                 // enabled and we're now outside it, skip the force-arm and leave the
                 // intent flag set so the periodic checker arms when the window opens.
                 try {
-                    app.wheelstop.android.surveillance.SurveillanceSchedule schedule =
-                        app.wheelstop.android.config.UnifiedConfigManager.getSurveillanceSchedule();
+                    SurveillanceSchedule schedule =
+                        UnifiedConfigManager.getSurveillanceSchedule();
                     if (schedule != null && schedule.isEnabled() && !schedule.isActiveNow()) {
                         log("LOCK GATE TIMEOUT: outside schedule window ("
                             + schedule.getSummary() + ") — not force-arming; "
@@ -3498,7 +3568,7 @@ public class CameraDaemon {
                 // surveillance isn't running) and a later unlock would call a
                 // spurious disableSurveillance(). Revert the flag if the pipeline did
                 // not actually start.
-                if (app.wheelstop.android.monitor.AccMonitor.isAccOn()) {
+                if (AccMonitor.isAccOn()) {
                     log("LOCK GATE TIMEOUT: ACC turned ON during force-arm — reverting doorLockListenerArmed");
                     doorLockListenerArmed = false;
                 } else if (safeZoneSuppressed
@@ -3522,7 +3592,7 @@ public class CameraDaemon {
      * are no-ops. Every lock-event source flows through here.
      */
     private static synchronized void applyLockEvent(boolean locked, String source) {
-        if (app.wheelstop.android.monitor.AccMonitor.isAccOn()) {
+        if (AccMonitor.isAccOn()) {
             log("LOCK GATE [" + source + "]: " + (locked ? "LOCKED" : "UNLOCKED")
                 + " but ACC is ON — ignoring");
             return;
@@ -3540,8 +3610,8 @@ public class CameraDaemon {
         // automation fires regardless of whether surveillance was already armed. Level-
         // triggered + deduped in Automations.update, so a repeated same-state read no-ops.
         try {
-            app.wheelstop.android.automation.Automations.update(
-                    app.wheelstop.android.automation.condition.BydEvent.LOCK,
+            Automations.update(
+                    BydEvent.LOCK,
                     locked ? "locked" : "unlocked");
         } catch (Throwable t) {
             log("lock automation publish failed: " + t.getMessage());
@@ -3563,8 +3633,8 @@ public class CameraDaemon {
      *  with the device-SDK source. No primary/fallback toggle. */
     private static void attachCloudLockSource() {
         try {
-            app.wheelstop.android.byd.cloud.BydCloudDataProvider cloudProvider =
-                app.wheelstop.android.byd.cloud.BydCloudDataProvider.getInstance();
+            BydCloudDataProvider cloudProvider =
+                BydCloudDataProvider.getInstance();
             if (cloudLockListener != null) {
                 cloudProvider.removeLockStateListener(cloudLockListener);
             }
@@ -3593,10 +3663,10 @@ public class CameraDaemon {
     /** @return true=locked, false=unlocked, null=unknown/cloud unavailable. */
     private static Boolean currentCloudLockState() {
         try {
-            app.wheelstop.android.byd.cloud.BydCloudDataProvider cloudProvider =
-                app.wheelstop.android.byd.cloud.BydCloudDataProvider.getInstance();
+            BydCloudDataProvider cloudProvider =
+                BydCloudDataProvider.getInstance();
             if (!cloudProvider.isLockStateFresh()) return null;
-            app.wheelstop.android.byd.cloud.VehicleCloudSnapshot cs = cloudProvider.getSnapshot();
+            VehicleCloudSnapshot cs = cloudProvider.getSnapshot();
             if (cs == null) return null;
             if (cs.isAllLocked()) return true;
             if (cs.isAnyUnlocked()) return false;
@@ -3629,7 +3699,7 @@ public class CameraDaemon {
                 } catch (InterruptedException ie) {
                     return;
                 }
-                if (app.wheelstop.android.monitor.AccMonitor.isAccOn()) {
+                if (AccMonitor.isAccOn()) {
                     log("ACC-ON disarm watchdog exiting (AccMonitor=ON)");
                     return;
                 }
@@ -3663,7 +3733,7 @@ public class CameraDaemon {
                     //      clean level read — so a REAL ACC-ON (clean read) still
                     //      disarms promptly, while bluffs are ignored.
                     boolean hwSaysAccOff = probeAccStateWithBackoff("disarm-watchdog");
-                    boolean trustworthy = app.wheelstop.android.monitor.AccMonitor
+                    boolean trustworthy = AccMonitor
                         .wasLastProbeTrustworthy();
                     if (!hwSaysAccOff && trustworthy && surveillanceEnabled) {
                         log("ACC-ON DISARM WATCHDOG: hardware says ACC ON (clean read) "
@@ -4109,10 +4179,10 @@ public class CameraDaemon {
     private static int readDoorLockStatus() {
         if (sharedAppContext == null) return DOOR_STATE_INVALID;
         try {
-            Object otaDevice = app.wheelstop.android.byd.BydDeviceHelper.getDevice(
+            Object otaDevice = BydDeviceHelper.getDevice(
                 "android.hardware.bydauto.ota.BYDAutoOtaDevice", sharedAppContext);
             if (otaDevice == null) return DOOR_STATE_INVALID;
-            Object v = app.wheelstop.android.byd.BydDeviceHelper.callGetter(
+            Object v = BydDeviceHelper.callGetter(
                 otaDevice, "getLFDoorLockState");
             if (v instanceof Number) {
                 int state = ((Number) v).intValue();
@@ -4153,13 +4223,13 @@ public class CameraDaemon {
             // and a missed lock is already backstopped by the force-arm timeout.
             int consecutiveUnlockReads = 0;
 
-            while (!app.wheelstop.android.monitor.AccMonitor.isAccOn()) {
+            while (!AccMonitor.isAccOn()) {
                 try {
                     Thread.sleep(UNLOCK_POLL_INTERVAL_MS);
                 } catch (InterruptedException e) {
                     return;
                 }
-                if (app.wheelstop.android.monitor.AccMonitor.isAccOn()) return;
+                if (AccMonitor.isAccOn()) return;
 
                 // Source 1: OTA device poll (BYDAutoOtaDevice.getLFDoorLockState).
                 // Works ACC=OFF with sub-second latency for the LF (driver) door —
@@ -4198,7 +4268,7 @@ public class CameraDaemon {
                 if (restPollCounter >= 12) { // ~ once per minute at 5s interval
                     restPollCounter = 0;
                     try {
-                        app.wheelstop.android.byd.cloud.BydCloudDataProvider.getInstance()
+                        BydCloudDataProvider.getInstance()
                                 .refreshLockStateIfStale();
                         // The data provider fires its CloudLockStateListener
                         // automatically when the fetch reveals a transition,
@@ -4231,7 +4301,7 @@ public class CameraDaemon {
         // Detach all three lock-event sources
         if (cloudLockListener != null) {
             try {
-                app.wheelstop.android.byd.cloud.BydCloudDataProvider.getInstance()
+                BydCloudDataProvider.getInstance()
                     .removeLockStateListener(cloudLockListener);
             } catch (Exception ignored) {}
             cloudLockListener = null;
@@ -4270,7 +4340,7 @@ public class CameraDaemon {
                 + ", duplicate IPC / heartbeat)");
             // Still refresh AccMonitor so any consumer reading the cache sees
             // the asserted value — this is cheap and idempotent.
-            app.wheelstop.android.monitor.AccMonitor.setAccState(!accIsOff);
+            AccMonitor.setAccState(!accIsOff);
             return;
         }
         // FIX (audit R2, finding "Dedup short-circuit eats drain dispatch when
@@ -4284,7 +4354,7 @@ public class CameraDaemon {
         // dispatch chain exactly once.
 
         // Update AccMonitor state for HTTP API responses
-        app.wheelstop.android.monitor.AccMonitor.setAccState(!accIsOff);
+        AccMonitor.setAccState(!accIsOff);
 
         // CRITICAL: Capture the BydVehicleData snapshot and record the ACC
         // transition BEFORE any pipeline/teardown work. The OFF event must
@@ -4298,10 +4368,10 @@ public class CameraDaemon {
         // Wrapped in try/catch — must NEVER throw out of onAccStateChanged
         // because that would break the daemon's state machine.
         try {
-            app.wheelstop.android.byd.BydVehicleData accSnapshot = null;
+            BydVehicleData accSnapshot = null;
             try {
-                app.wheelstop.android.byd.BydDataCollector collector =
-                    app.wheelstop.android.byd.BydDataCollector.getInstance();
+                BydDataCollector collector =
+                    BydDataCollector.getInstance();
                 if (collector != null && collector.isInitialized()) {
                     accSnapshot = collector.getData();
                 }
@@ -4310,7 +4380,7 @@ public class CameraDaemon {
                 // null snapshot, the row will still be recorded with the
                 // event type so future correlation is possible.
             }
-            app.wheelstop.android.monitor.SocHistoryDatabase.getInstance()
+            SocHistoryDatabase.getInstance()
                 .recordAccEvent(accIsOff ? "OFF" : "ON", accSnapshot);
         } catch (Throwable t) {
             log("recordAccEvent failed (non-fatal): " + t.getMessage());
@@ -4384,11 +4454,11 @@ public class CameraDaemon {
                     // are nulled out by migrateOemDashcamModes, so this
                     // branch silently no-op'd on every install after first
                     // boot. Now read the mode-tier accessors directly.
-                    String recMode = app.wheelstop.android.config.UnifiedConfigManager
+                    String recMode = UnifiedConfigManager
                         .getOemRecordingMode();
-                    String survMode = app.wheelstop.android.config.UnifiedConfigManager
+                    String survMode = UnifiedConfigManager
                         .getOemSurveillanceMode();
-                    boolean anyTriggerOn = app.wheelstop.android.config.UnifiedConfigManager
+                    boolean anyTriggerOn = UnifiedConfigManager
                         .isAnyOemDashcamTriggerEnabled();
                     // Determine whether surveillance suppression also suppresses OEM keep-alive.
                     // User explicitly opted into safe-zone privacy / schedule windows; we honor
@@ -4399,12 +4469,12 @@ public class CameraDaemon {
                     // ACC OFF too" intent and intentionally bypasses surveillance suppression,
                     // mirroring how pano dashcam recording continues across ACC OFF when
                     // oem.recordingMode=continuous.
-                    boolean userEnabled = app.wheelstop.android.config.UnifiedConfigManager.isSurveillanceEnabled();
-                    boolean inSafeZone = app.wheelstop.android.surveillance.SafeLocationManager.getInstance().isInSafeZone();
+                    boolean userEnabled = UnifiedConfigManager.isSurveillanceEnabled();
+                    boolean inSafeZone = SafeLocationManager.getInstance().isInSafeZone();
                     boolean outsideSchedule = false;
                     try {
-                        app.wheelstop.android.surveillance.SurveillanceSchedule schedule =
-                            app.wheelstop.android.config.UnifiedConfigManager.getSurveillanceSchedule();
+                        SurveillanceSchedule schedule =
+                            UnifiedConfigManager.getSurveillanceSchedule();
                         outsideSchedule = (schedule != null && schedule.isEnabled() && !schedule.isActiveNow());
                     } catch (Exception ignored) {}
                     boolean surveillanceSuppressed = !userEnabled || inSafeZone || outsideSchedule;
@@ -4422,7 +4492,7 @@ public class CameraDaemon {
                         log("OEM Dashcam: ACC OFF — recalc (rec=" + recMode
                             + ", surv=" + survMode
                             + (surveillanceSuppressed ? ", survSuppressed" : "") + ")");
-                        app.wheelstop.android.server.OemDashcamApiHandler.scheduleLifecycleRecalc();
+                        OemDashcamApiHandler.scheduleLifecycleRecalc();
                     }
                 } catch (Throwable t) {
                     log("OEM Dashcam ACC OFF dispatch failed: " + t.getMessage());
@@ -4439,22 +4509,22 @@ public class CameraDaemon {
                 
                 // Stop GearMonitor polling — gear is always P when ACC is off.
                 // It will be restarted on ACC ON.
-                app.wheelstop.android.monitor.GearMonitor.getInstance().stop();
+                GearMonitor.getInstance().stop();
                 log("GearMonitor stopped (ACC OFF)");
                 
                 // Tell BydDataCollector to skip speed/engine/gearbox polling (always 0 when parked)
-                app.wheelstop.android.byd.BydDataCollector.getInstance().setAccState(false);
+                BydDataCollector.getInstance().setAccState(false);
                 
                 // CRITICAL: FORCE remount SD card when ACC goes off — BEFORE any early returns.
                 // Even if surveillance is disabled or suppressed by safe zone, the SD card must stay
                 // mounted so the HTTP server can serve existing recordings/events/trips.
                 // Android/BYD system unmounts SD card when ACC is off, so we MUST force remount.
-                app.wheelstop.android.storage.StorageManager storage = 
-                    app.wheelstop.android.storage.StorageManager.getInstance();
+                StorageManager storage = 
+                    StorageManager.getInstance();
                 boolean anyStorageOnSd = 
-                    storage.getSurveillanceStorageType() == app.wheelstop.android.storage.StorageManager.StorageType.SD_CARD ||
-                    storage.getRecordingsStorageType() == app.wheelstop.android.storage.StorageManager.StorageType.SD_CARD ||
-                    storage.getTripsStorageType() == app.wheelstop.android.storage.StorageManager.StorageType.SD_CARD;
+                    storage.getSurveillanceStorageType() == StorageManager.StorageType.SD_CARD ||
+                    storage.getRecordingsStorageType() == StorageManager.StorageType.SD_CARD ||
+                    storage.getTripsStorageType() == StorageManager.StorageType.SD_CARD;
                 if (anyStorageOnSd) {
                     log("FORCE mounting SD card (ACC OFF, SD card configured for storage)...");
                     if (storage.ensureSdCardMounted(true)) {
@@ -4478,8 +4548,8 @@ public class CameraDaemon {
                 // sentry pipeline / arm dispatch / door-lock gate / schedule checker below
                 // is skipped. Defense-in-depth with AccSentryDaemon's G1 gate (separate
                 // process, reached by a different IPC path). Fail-open: false → arm as usual.
-                boolean userEnabled = app.wheelstop.android.config.UnifiedConfigManager.isSurveillanceEnabled();
-                boolean onOnly = app.wheelstop.android.config.UnifiedConfigManager.isVehicleOnOnlyMode();
+                boolean userEnabled = UnifiedConfigManager.isSurveillanceEnabled();
+                boolean onOnly = UnifiedConfigManager.isVehicleOnOnlyMode();
                 if (onOnly) {
                     // "Vehicle ON only": all mandatory ACC-off bookkeeping above has now
                     // completed (recordAccEvent, trip finalize, recording segment finalize,
@@ -4499,8 +4569,8 @@ public class CameraDaemon {
                 }
                 
                 // Safe zone check — don't start surveillance if parked at home/work
-                app.wheelstop.android.surveillance.SafeLocationManager safeMgr =
-                    app.wheelstop.android.surveillance.SafeLocationManager.getInstance();
+                SafeLocationManager safeMgr =
+                    SafeLocationManager.getInstance();
                 if (safeMgr.isInSafeZone()) {
                     log("SAFE ZONE: Surveillance suppressed on ACC OFF — " + safeMgr.getCurrentZoneName()
                         + " (dist=" + Math.round(safeMgr.getDistanceToNearestZone()) + "m)");
@@ -4511,8 +4581,8 @@ public class CameraDaemon {
                 
                 // Schedule check — don't start surveillance outside configured time windows
                 try {
-                    app.wheelstop.android.surveillance.SurveillanceSchedule schedule = 
-                        app.wheelstop.android.config.UnifiedConfigManager.getSurveillanceSchedule();
+                    SurveillanceSchedule schedule = 
+                        UnifiedConfigManager.getSurveillanceSchedule();
                     if (schedule != null && schedule.isEnabled() && !schedule.isActiveNow()) {
                         log("SCHEDULE: Surveillance suppressed on ACC OFF — outside time window (" +
                             schedule.getSummary() + ")");
@@ -4540,7 +4610,7 @@ public class CameraDaemon {
                         }
                     }
                     gpuPipeline.setRecordingMode(
-                        app.wheelstop.android.surveillance.GpuPipelineConfig.RecordingMode.SENTRY);
+                        GpuPipelineConfig.RecordingMode.SENTRY);
                     // AVC keep-alive for sentry — same 60s poke we use during ACC-ON
                     // and streaming/recording-mode. See enableSurveillance() for why.
                     startAvcKeepAliveIfNeeded();
@@ -4553,7 +4623,7 @@ public class CameraDaemon {
                     //             (see registerDoorLockListenerAndArmOnLock).
                     // Both paths still honor safe-zone + schedule suppression via
                     // enableSurveillance() and the gates above.
-                    String armMode = app.wheelstop.android.config.UnifiedConfigManager
+                    String armMode = UnifiedConfigManager
                         .getSurveillanceArmMode();
                     if ("power".equals(armMode)) {
                         log("Pipeline started in sentry mode — arm mode=power, arming immediately");
@@ -4567,7 +4637,7 @@ public class CameraDaemon {
                         // start (ACC flipped ON, or safe-zone suppression). If the
                         // pipeline isn't actually running, revert the flag so it
                         // doesn't lie about being armed.
-                        if (app.wheelstop.android.monitor.AccMonitor.isAccOn()
+                        if (AccMonitor.isAccOn()
                                 || safeZoneSuppressed
                                 || gpuPipeline == null || !gpuPipeline.isRunning()) {
                             log("Arm mode=power: pipeline not running after enable "
@@ -4616,7 +4686,7 @@ public class CameraDaemon {
                     // ensureAvcAlive() (pidof on dilink4 — no am start)
                     // probes AVC presence without launching it.
                     try {
-                        app.wheelstop.android.camera.AvcHalWarmup.ensureAvcAlive();
+                        AvcHalWarmup.ensureAvcAlive();
                     } catch (Throwable th) {
                         log("AVC initial probe failed: " + th.getMessage());
                     }
@@ -4672,7 +4742,7 @@ public class CameraDaemon {
                 try {
                     new Thread(() -> {
                         try {
-                            app.wheelstop.android.storage.StorageManager.getInstance()
+                            StorageManager.getInstance()
                                 .remountExternalOnAccOn();
                         } catch (Throwable t) {
                             log("ACC ON: external remount failed: " + t.getMessage());
@@ -4742,7 +4812,7 @@ public class CameraDaemon {
                         reinitContextDependentComponents();
                         
                         // Now start GearMonitor if it still isn't running
-                        app.wheelstop.android.monitor.GearMonitor gm = app.wheelstop.android.monitor.GearMonitor.getInstance();
+                        GearMonitor gm = GearMonitor.getInstance();
                         if (!gm.isRunning()) {
                             try {
                                 gm.start();
@@ -4763,7 +4833,7 @@ public class CameraDaemon {
             }
             
             // Restart GearMonitor (stopped on ACC OFF)
-            app.wheelstop.android.monitor.GearMonitor gearMonitor = app.wheelstop.android.monitor.GearMonitor.getInstance();
+            GearMonitor gearMonitor = GearMonitor.getInstance();
             if (!gearMonitor.isRunning()) {
                 try {
                     gearMonitor.start();
@@ -4774,7 +4844,7 @@ public class CameraDaemon {
             }
             
             // Tell BydDataCollector to resume full polling (speed/engine/gearbox)
-            app.wheelstop.android.byd.BydDataCollector.getInstance().setAccState(true);
+            BydDataCollector.getInstance().setAccState(true);
             
             // If pipeline is currently in SURVEILLANCE mode, gracefully exit it:
             // finalize any in-progress sentry recording, flush the encoder, drop
@@ -4872,10 +4942,10 @@ public class CameraDaemon {
             // surv=smart during sentry, in which case rec=continuous still
             // needs to flip recording on now).
             try {
-                if (app.wheelstop.android.config.UnifiedConfigManager
+                if (UnifiedConfigManager
                         .isAnyOemDashcamTriggerEnabled()) {
                     log("OEM Dashcam: ACC ON — recalc");
-                    app.wheelstop.android.server.OemDashcamApiHandler.scheduleLifecycleRecalc();
+                    OemDashcamApiHandler.scheduleLifecycleRecalc();
                 }
             } catch (Throwable t) {
                 log("OEM Dashcam ACC ON dispatch failed: " + t.getMessage());
@@ -4918,7 +4988,7 @@ public class CameraDaemon {
     private static volatile int lastNotifiedGear = Integer.MIN_VALUE;
 
     public static void onGearChanged(int gear) {
-        String gearName = app.wheelstop.android.recording.RecordingModeManager.gearToString(gear);
+        String gearName = RecordingModeManager.gearToString(gear);
 
         // GearMonitor primes the system with one initial notification on
         // start(); subsequent rapid duplicates can also slip through during
@@ -4952,9 +5022,9 @@ public class CameraDaemon {
         // so this is idempotent with the snapshot path when both fire. Best-effort:
         // never let an automation publish failure disrupt gear notification.
         try {
-            app.wheelstop.android.automation.Automations.update(
-                    app.wheelstop.android.automation.condition.BydEvent.GEAR,
-                    app.wheelstop.android.monitor.GearMonitor.gearToString(gear).toLowerCase());
+            Automations.update(
+                    BydEvent.GEAR,
+                    GearMonitor.gearToString(gear).toLowerCase());
         } catch (Throwable t) {
             if (!redundant) log("gear automation publish failed: " + t.getMessage());
         }
@@ -5010,11 +5080,11 @@ public class CameraDaemon {
                     }
                     
                     // Only check when ACC is off
-                    if (app.wheelstop.android.monitor.AccMonitor.isAccOn()) continue;
+                    if (AccMonitor.isAccOn()) continue;
                     
                     try {
-                        app.wheelstop.android.surveillance.SurveillanceSchedule schedule =
-                            app.wheelstop.android.config.UnifiedConfigManager.getSurveillanceSchedule();
+                        SurveillanceSchedule schedule =
+                            UnifiedConfigManager.getSurveillanceSchedule();
 
                         // Schedule disabled = always active, no window to check — but
                         // still SELF-HEAL a dead sentry pipeline. Without a schedule
@@ -5040,7 +5110,7 @@ public class CameraDaemon {
                             boolean actuallyRunning = gpuPipeline != null
                                 && gpuPipeline.isRunning() && gpuPipeline.isSurveillanceMode();
                             if (intendWatching && !actuallyRunning
-                                    && app.wheelstop.android.config.UnifiedConfigManager.isSurveillanceEnabled()) {
+                                    && UnifiedConfigManager.isSurveillanceEnabled()) {
                                 log("SELF-HEAL: surveillance armed but pipeline not in sentry mode "
                                     + "(pipeline=" + (gpuPipeline != null)
                                     + ", running=" + (gpuPipeline != null && gpuPipeline.isRunning())
@@ -5062,7 +5132,7 @@ public class CameraDaemon {
                             disableSurveillance();
                         } else if (withinWindow && !currentlyActive && !safeZoneSuppressed) {
                             // Schedule window started — enable surveillance if other conditions met
-                            boolean userEnabled = app.wheelstop.android.config.UnifiedConfigManager
+                            boolean userEnabled = UnifiedConfigManager
                                 .isSurveillanceEnabled();
                             if (userEnabled) {
                                 log("SCHEDULE: Time window started (" + schedule.getSummary() + 
@@ -5111,8 +5181,8 @@ public class CameraDaemon {
             return;
         }
 
-        app.wheelstop.android.surveillance.GpuPipelineConfig.RecordingQuality tier =
-            app.wheelstop.android.surveillance.GpuPipelineConfig.RecordingQuality.fromString(quality);
+        GpuPipelineConfig.RecordingQuality tier =
+            GpuPipelineConfig.RecordingQuality.fromString(quality);
 
         gpuPipeline.getConfig().setRecordingQuality(tier);
         int effectiveBitrate = gpuPipeline.getConfig().getEffectiveBitrate();
@@ -5128,8 +5198,8 @@ public class CameraDaemon {
     public static void setStreamingQuality(String quality) {
         if (gpuPipeline == null) return;
         
-        app.wheelstop.android.surveillance.GpuPipelineConfig.StreamingQuality streamQuality =
-            app.wheelstop.android.surveillance.GpuPipelineConfig.StreamingQuality.fromString(quality);
+        GpuPipelineConfig.StreamingQuality streamQuality =
+            GpuPipelineConfig.StreamingQuality.fromString(quality);
         
         gpuPipeline.setStreamingQuality(streamQuality);
         log("Streaming quality set to: " + streamQuality.displayName);
@@ -5165,16 +5235,16 @@ public class CameraDaemon {
         }
         
         try {
-            app.wheelstop.android.surveillance.GpuPipelineConfig.VideoCodec videoCodec;
+            GpuPipelineConfig.VideoCodec videoCodec;
             switch (codec.toUpperCase()) {
                 case "H265":
                 case "HEVC":
-                    videoCodec = app.wheelstop.android.surveillance.GpuPipelineConfig.VideoCodec.H265;
+                    videoCodec = GpuPipelineConfig.VideoCodec.H265;
                     break;
                 case "H264":
                 case "AVC":
                 default:
-                    videoCodec = app.wheelstop.android.surveillance.GpuPipelineConfig.VideoCodec.H264;
+                    videoCodec = GpuPipelineConfig.VideoCodec.H264;
                     break;
             }
             
@@ -5217,20 +5287,20 @@ public class CameraDaemon {
     public static String getRecordingCodec() {
         if (gpuPipeline == null) return "H264";
         return gpuPipeline.getConfig().getVideoCodec() == 
-            app.wheelstop.android.surveillance.GpuPipelineConfig.VideoCodec.H265 ? "H265" : "H264";
+            GpuPipelineConfig.VideoCodec.H265 ? "H265" : "H264";
     }
     
     /**
      * Get GPU pipeline instance.
      */
-    public static app.wheelstop.android.surveillance.GpuSurveillancePipeline getGpuPipeline() {
+    public static GpuSurveillancePipeline getGpuPipeline() {
         return gpuPipeline;
     }
 
     /**
      * Get the OEM Dashcam pipeline instance (or null if not started).
      */
-    public static app.wheelstop.android.camera.OemDashcamPipeline getOemDashcamPipeline() {
+    public static OemDashcamPipeline getOemDashcamPipeline() {
         return oemDashcamPipeline;
     }
 
@@ -5239,7 +5309,7 @@ public class CameraDaemon {
      * initialises it (line 1856-1858). OEM lifecycle injects this so its
      * overlay refcount discipline can hold polling like pano does.
      */
-    public static app.wheelstop.android.telemetry.TelemetryDataCollector getTelemetryDataCollector() {
+    public static TelemetryDataCollector getTelemetryDataCollector() {
         return telemetryDataCollector;
     }
 
@@ -5260,7 +5330,7 @@ public class CameraDaemon {
      * after it constructs / starts the pipeline. Setting null indicates the
      * pipeline has been torn down.
      */
-    public static void setOemDashcamPipeline(app.wheelstop.android.camera.OemDashcamPipeline p) {
+    public static void setOemDashcamPipeline(OemDashcamPipeline p) {
         oemDashcamPipeline = p;
         oemDashcamPipelineGeneration.incrementAndGet();
     }
@@ -5306,8 +5376,8 @@ public class CameraDaemon {
         }
         
         try {
-            app.wheelstop.android.recording.RecordingModeManager.Mode modeEnum =
-                app.wheelstop.android.recording.RecordingModeManager.Mode.valueOf(mode.toUpperCase());
+            RecordingModeManager.Mode modeEnum =
+                RecordingModeManager.Mode.valueOf(mode.toUpperCase());
             recordingModeManager.setMode(modeEnum);
             log("Recording mode set to: " + mode);
         } catch (IllegalArgumentException e) {
@@ -5328,7 +5398,7 @@ public class CameraDaemon {
     /**
      * Get recording mode manager instance.
      */
-    public static app.wheelstop.android.recording.RecordingModeManager getRecordingModeManager() {
+    public static RecordingModeManager getRecordingModeManager() {
         return recordingModeManager;
     }
     
@@ -5378,15 +5448,15 @@ public class CameraDaemon {
         }
         
         // SOTA: Safe Location status
-        app.wheelstop.android.surveillance.SafeLocationManager safeMgr =
-            app.wheelstop.android.surveillance.SafeLocationManager.getInstance();
+        SafeLocationManager safeMgr =
+            SafeLocationManager.getInstance();
         status.put("safeZoneSuppressed", safeZoneSuppressed);
         status.put("inSafeZone", safeMgr.isInSafeZone());
         status.put("safeZoneName", safeMgr.getCurrentZoneName());
         
         // SOTA: BYD camera coordinator status
         if (gpuPipeline != null && gpuPipeline.getCamera() != null) {
-            app.wheelstop.android.camera.BydCameraCoordinator coordinator = 
+            BydCameraCoordinator coordinator = 
                 gpuPipeline.getCamera().getCameraCoordinator();
             if (coordinator != null) {
                 status.put("cameraServiceRegistered", coordinator.isRegistered());
@@ -5399,7 +5469,7 @@ public class CameraDaemon {
             }
             
             // SOTA: Camera probe status
-            app.wheelstop.android.camera.PanoramicCameraGpu cam = gpuPipeline.getCamera();
+            PanoramicCameraGpu cam = gpuPipeline.getCamera();
             status.put("probeComplete", cam.isProbeComplete());
             status.put("activeCameraId", cam.getCameraId());
             status.put("activeSurfaceMode", cam.getCameraSurfaceMode());
@@ -5441,8 +5511,8 @@ public class CameraDaemon {
             String todayPrefix = "event_" + new java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(new java.util.Date()) + "_";
             
             // SOTA: Use StorageManager for surveillance directory
-            app.wheelstop.android.storage.StorageManager storageManager =
-                app.wheelstop.android.storage.StorageManager.getInstance();
+            StorageManager storageManager =
+                StorageManager.getInstance();
             java.io.File sentryDir = storageManager.getSurveillanceDir();
             java.io.File[] files = null;
             
@@ -5706,10 +5776,10 @@ public class CameraDaemon {
         }
         
         // Load surveillance library - try default path first
-        if (!app.wheelstop.android.surveillance.NativeMotion.isLibraryLoaded()) {
+        if (!NativeMotion.isLibraryLoaded()) {
             // Try explicit path using nativeLibDir
             if (nativeLibDir != null) {
-                if (app.wheelstop.android.surveillance.NativeMotion.tryLoadLibrary(nativeLibDir)) {
+                if (NativeMotion.tryLoadLibrary(nativeLibDir)) {
                     log("Surveillance library loaded from: " + nativeLibDir);
                 } else {
                     // Try alternate paths
@@ -5718,19 +5788,30 @@ public class CameraDaemon {
             }
             
             // Final check
-            if (app.wheelstop.android.surveillance.NativeMotion.isLibraryLoaded()) {
+            if (NativeMotion.isLibraryLoaded()) {
                 log("Surveillance library loaded successfully");
             } else {
                 log("WARN: Surveillance library NOT available: " +
-                    app.wheelstop.android.surveillance.NativeMotion.getLoadError());
+                    NativeMotion.getLoadError());
             }
         } else {
             log("Surveillance library already loaded");
         }
 
+<<<<<<< HEAD
         // Blind-spot (view-7/8) stitch coefficients are computed in pure Kotlin now
         // (BsCoefficients.resolve()), not the withheld libod.so blob — so there is no native
         // library to load here. The daemon computes coefficients identically to the app.
+=======
+        // Load libod.so via explicit path too — System.loadLibrary("od") can't
+        // resolve by name in the app_process daemon (same reason as surveillance).
+        // Without this, Od.resolve() returns zeros in the daemon and the view-7/8
+        // stitch shader gets all-zero coefficients → black blind-spot stream.
+        if (nativeLibDir != null) {
+            boolean odLoaded = Od.tryLoadLibrary(nativeLibDir);
+            log("od native lib loaded (daemon): " + odLoaded);
+        }
+>>>>>>> vendor/upstream
     }
     
     private static void loadSurveillanceFromPath(String nativeLibDir) {
@@ -5852,7 +5933,7 @@ public class CameraDaemon {
     public static synchronized void initNotifications() throws Exception {
         if (notificationsInitialized) return;
 
-        app.wheelstop.android.notifications.CategoryRegistry registry = null;
+        CategoryRegistry registry = null;
 
         // The registry JSON ships in the APK assets. Use the cached
         // sharedAppContext if already populated; Do not create one
@@ -5860,7 +5941,7 @@ public class CameraDaemon {
         android.content.Context appContext = getAppContext();
         if (appContext != null) {
             try {
-                registry = app.wheelstop.android.notifications.CategoryRegistry.loadFromAssets(appContext);
+                registry = CategoryRegistry.loadFromAssets(appContext);
             } catch (Exception e) {
                 log("Failed to load notifications-categories.json: " + e.getMessage());
             }
@@ -5882,26 +5963,26 @@ public class CameraDaemon {
         java.io.File pushDir = new java.io.File("/data/local/tmp/.push");
         if (!pushDir.exists()) pushDir.mkdirs();
 
-        app.wheelstop.android.notifications.push.VapidKeyStore keyStore =
-                new app.wheelstop.android.notifications.push.VapidKeyStore(
+        VapidKeyStore keyStore =
+                new VapidKeyStore(
                         new java.io.File(pushDir, "vapid.json"));
         // Touch the keystore so we generate / cache the keypair eagerly.
         keyStore.publicKeyB64Url();
 
-        app.wheelstop.android.notifications.push.SubscriptionStore subStore =
-                new app.wheelstop.android.notifications.push.SubscriptionStore(
+        SubscriptionStore subStore =
+                new SubscriptionStore(
                         new java.io.File(pushDir, "subscriptions.json"));
         subStore.load();
 
-        app.wheelstop.android.notifications.push.VapidSigner signer =
-                new app.wheelstop.android.notifications.push.VapidSigner(keyStore, "");
+        VapidSigner signer =
+                new VapidSigner(keyStore, "");
 
         // Persistent notification log (Notifications ▸ Log tab). Dedicated H2
         // store; the HistorySink writes EVERY bus event so history captures all
         // categories with no per-publisher change. Init before subscribing so
         // the sink never sees an uninitialized store.
-        app.wheelstop.android.notifications.NotificationStore notifStore =
-                app.wheelstop.android.notifications.NotificationStore.getInstance();
+        NotificationStore notifStore =
+                NotificationStore.getInstance();
         try {
             notifStore.init();
         } catch (Exception e) {
@@ -5914,19 +5995,19 @@ public class CameraDaemon {
         // startup window then reaches the persisted log AND Web Push AND
         // Telegram. Subscribe order is cosmetic now (seal-time flush hits every
         // subscribed sink); HistorySink stays first only for readability.
-        app.wheelstop.android.notifications.NotificationBus.get()
-                .subscribe(new app.wheelstop.android.notifications.sinks.HistorySink(notifStore, registry));
-        app.wheelstop.android.notifications.NotificationBus.get()
-                .subscribe(new app.wheelstop.android.notifications.sinks.LogSink());
-        app.wheelstop.android.notifications.NotificationBus.get()
-                .subscribe(new app.wheelstop.android.notifications.sinks.PushSink(
+        NotificationBus.get()
+                .subscribe(new HistorySink(notifStore, registry));
+        NotificationBus.get()
+                .subscribe(new LogSink());
+        NotificationBus.get()
+                .subscribe(new PushSink(
                         subStore, registry, keyStore, signer));
         // Forward WARN/CRITICAL vehicle events (charging fault/full, door
         // opened, tyre alarm/leak, SOH mismatch) to Telegram too — they were
         // Web-Push-only before. Excludes surveillance.* (delivered to Telegram
         // directly via TelegramNotifier) so there is no double-send.
-        app.wheelstop.android.notifications.NotificationBus.get()
-                .subscribe(new app.wheelstop.android.notifications.sinks.TelegramSink());
+        NotificationBus.get()
+                .subscribe(new TelegramSink());
 
         // All sinks are now wired. Seal the bus: flush the buffered
         // boot-window events to every subscribed sink (once each) and switch to
@@ -5935,9 +6016,9 @@ public class CameraDaemon {
         // throw (NotificationApiHandler.init is field assignment), so the
         // NotificationsInit retry loop can never partially re-enter and
         // double-subscribe the sinks.
-        app.wheelstop.android.notifications.NotificationBus.get().sealPreSubscribeBuffer();
+        NotificationBus.get().sealPreSubscribeBuffer();
 
-        app.wheelstop.android.server.NotificationApiHandler.init(registry, subStore, keyStore);
+        NotificationApiHandler.init(registry, subStore, keyStore);
 
         notificationsInitialized = true;
         log("Notifications initialized: " + registry.all().size() + " categories, "
@@ -5966,7 +6047,7 @@ public class CameraDaemon {
             
             if (sharedAppContext == null) {
                 log("WARNING: Could not create app context for GpsMonitor, falling back to daemon mode");
-                app.wheelstop.android.monitor.GpsMonitor.getInstance().init(null);
+                GpsMonitor.getInstance().init(null);
                 return;
             }
             
@@ -5976,13 +6057,13 @@ public class CameraDaemon {
             Object locMgr = sharedAppContext.getSystemService(android.content.Context.LOCATION_SERVICE);
             if (locMgr == null) {
                 log("WARNING: LocationManager not available, falling back to daemon mode");
-                app.wheelstop.android.monitor.GpsMonitor.getInstance().init(null);
+                GpsMonitor.getInstance().init(null);
                 return;
             }
             log("LocationManager available: " + locMgr.getClass().getName());
             
-            app.wheelstop.android.monitor.GpsMonitor gpsMonitor =
-                app.wheelstop.android.monitor.GpsMonitor.getInstance();
+            GpsMonitor gpsMonitor =
+                GpsMonitor.getInstance();
             
             gpsMonitor.init(sharedAppContext);
             gpsMonitor.start();  // Start GPS tracking immediately
@@ -5990,13 +6071,13 @@ public class CameraDaemon {
             log("GPS Monitor initialized with Context mode");
             
             // Initialize NetworkMonitor for WiFi/Mobile Data status in sidebar
-            app.wheelstop.android.monitor.NetworkMonitor.init(sharedAppContext);
+            NetworkMonitor.init(sharedAppContext);
             log("Network Monitor initialized");
             
         } catch (Exception e) {
             log("Failed to initialize GPS Monitor with context: " + e.getMessage());
             log("Falling back to daemon mode (shell commands)");
-            app.wheelstop.android.monitor.GpsMonitor.getInstance().init(null);
+            GpsMonitor.getInstance().init(null);
         }
     }
     
@@ -6049,8 +6130,8 @@ public class CameraDaemon {
                 return;
             }
             
-            app.wheelstop.android.monitor.VehicleDataMonitor vehicleMonitor =
-                app.wheelstop.android.monitor.VehicleDataMonitor.getInstance();
+            VehicleDataMonitor vehicleMonitor =
+                VehicleDataMonitor.getInstance();
             
             vehicleMonitor.init(sharedAppContext);
             vehicleMonitor.start();
@@ -6059,7 +6140,7 @@ public class CameraDaemon {
             
             // Initialize Universal BYD Data Collector (runs alongside existing monitors)
             try {
-                app.wheelstop.android.byd.BydDataCollector collector = app.wheelstop.android.byd.BydDataCollector.getInstance();
+                BydDataCollector collector = BydDataCollector.getInstance();
                 collector.init(sharedAppContext);
                 collector.logSummary();
                 log("BYD Data Collector initialized (" + collector.getData().availableDevices.length + " devices)");
@@ -6068,8 +6149,8 @@ public class CameraDaemon {
             }
             
             // Initialize Gear Monitor for PROXIMITY_GUARD mode
-            app.wheelstop.android.monitor.GearMonitor gearMonitor =
-                app.wheelstop.android.monitor.GearMonitor.getInstance();
+            GearMonitor gearMonitor =
+                GearMonitor.getInstance();
             gearMonitor.init(sharedAppContext);
             // Wire GearMonitor to read gear from TelemetryDataCollector's cached snapshot
             // when the overlay poller is running, avoiding duplicate CAN bus reads
@@ -6096,15 +6177,15 @@ public class CameraDaemon {
             // dwarfing the GL/encoder pipeline and causing the ACC-ON lag. The
             // monitor is a diagnostics tool; it must cost nothing when nobody's
             // looking at it.
-            app.wheelstop.android.monitor.PerformanceMonitor perfMonitor =
-                app.wheelstop.android.monitor.PerformanceMonitor.getInstance();
+            PerformanceMonitor perfMonitor =
+                PerformanceMonitor.getInstance();
             perfMonitor.init(sharedAppContext);
 
             log("Performance Monitor initialized successfully (polling on-demand)");
             
             // Initialize SOC History Database for persistent battery tracking
-            app.wheelstop.android.monitor.SocHistoryDatabase socDb =
-                app.wheelstop.android.monitor.SocHistoryDatabase.getInstance();
+            SocHistoryDatabase socDb =
+                SocHistoryDatabase.getInstance();
             socDb.setSohEstimator(sohEstimator);
             socDb.init();
             socDb.start();
@@ -6116,8 +6197,8 @@ public class CameraDaemon {
             // (on the 2-min SoC tick); this manager only adds the fine-grained
             // ramp sampler driven by ChargingDetector's fused charging edge.
             try {
-                app.wheelstop.android.charging.ChargingSessionManager csm =
-                    new app.wheelstop.android.charging.ChargingSessionManager();
+                ChargingSessionManager csm =
+                    new ChargingSessionManager();
                 csm.init(sharedAppContext);
                 chargingSessionManager = csm;
                 log("Charging Analytics initialized successfully");
@@ -6138,7 +6219,7 @@ public class CameraDaemon {
             // tolerates concurrent UPDATE on the same connection (H2
             // serializes internally) and the migration runs once per
             // daemon lifetime.
-            final app.wheelstop.android.abrp.SohEstimator sohEstSnapshotForMigration = sohEstimator;
+            final SohEstimator sohEstSnapshotForMigration = sohEstimator;
             if (sohEstSnapshotForMigration != null
                     && sohEstSnapshotForMigration.getNominalCapacityKwh() > 0
                     && sohEstSnapshotForMigration.getNominalCapacityKwh() < 30.0) {

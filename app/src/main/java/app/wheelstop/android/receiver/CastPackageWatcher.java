@@ -1,4 +1,8 @@
 package app.wheelstop.android.receiver;
+import app.wheelstop.android.config.UnifiedConfigManager;
+import app.wheelstop.android.launcher.ClusterCast;
+import app.wheelstop.android.surveillance.ClusterMirrorController;
+import app.wheelstop.android.surveillance.ClusterViewMirrorService;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -103,23 +107,23 @@ public final class CastPackageWatcher extends BroadcastReceiver {
     private static void handleRemoval(String pkg, boolean replacing) {
         try {
             // 1) If the LIVE cast is this package, tear it down (order is load-bearing).
-            String castPkg = app.wheelstop.android.launcher.ClusterCast.getCastPackage();
+            String castPkg = ClusterCast.getCastPackage();
             if (pkg.equals(castPkg)) {
                 CameraDaemon.log(TAG + ": cast app " + pkg + " removed (replacing=" + replacing
                         + ") — tearing down cluster cast + mirror");
                 // Mirror FIRST (synchronous unbind+destroy of its VD), THEN the cast hold —
                 // same SurfaceFlinger-safe ordering as ACC-off.
                 try {
-                    app.wheelstop.android.surveillance.ClusterViewMirrorService
+                    ClusterViewMirrorService
                             .forceDetachIfActive("cast-app-uninstalled");
-                    app.wheelstop.android.surveillance.ClusterMirrorController
+                    ClusterMirrorController
                             .forceCloseIfActive("cast-app-uninstalled");
                 } catch (Throwable t) {
                     CameraDaemon.log(TAG + ": mirror teardown failed: " + t.getMessage());
                 }
                 try {
                     // ACC-off-safe stop: release the hold only, no am/shell reparent work.
-                    app.wheelstop.android.launcher.ClusterCast.stopForAccOff();
+                    ClusterCast.stopForAccOff();
                 } catch (Throwable t) {
                     CameraDaemon.log(TAG + ": cast stop failed: " + t.getMessage());
                 }
@@ -151,14 +155,14 @@ public final class CastPackageWatcher extends BroadcastReceiver {
     private static void clearAutoStartIfMatches(String removedPkg) {
         try {
             org.json.JSONObject proj =
-                    app.wheelstop.android.config.UnifiedConfigManager.forceReload().optJSONObject("projection");
+                    UnifiedConfigManager.forceReload().optJSONObject("projection");
             if (proj == null) return;
             String saved = proj.optString("autoStartPackage", "");
             if (saved.isEmpty() || !saved.equals(removedPkg)) return;
             org.json.JSONObject patch = new org.json.JSONObject();
             patch.put("autoStartPackage", "");
             patch.put("autoStartOnAcc", false);
-            app.wheelstop.android.config.UnifiedConfigManager.updateSection("projection", patch);
+            UnifiedConfigManager.updateSection("projection", patch);
             CameraDaemon.log(TAG + ": cleared stale auto-start package " + removedPkg + " (uninstalled)");
         } catch (Throwable t) {
             CameraDaemon.log(TAG + ": clearAutoStart failed: " + t.getMessage());
@@ -171,7 +175,7 @@ public final class CastPackageWatcher extends BroadcastReceiver {
     private static void clearSavedClusterWindow(String removedPkg) {
         try {
             org.json.JSONObject proj =
-                    app.wheelstop.android.config.UnifiedConfigManager.loadConfig().optJSONObject("projection");
+                    UnifiedConfigManager.loadConfig().optJSONObject("projection");
             org.json.JSONObject windows = proj != null ? proj.optJSONObject("windows") : null;
             if (windows == null || !windows.has(removedPkg)) return;
             org.json.JSONObject merged = new org.json.JSONObject();
@@ -180,7 +184,7 @@ public final class CastPackageWatcher extends BroadcastReceiver {
                 String k = it.next();
                 if (!k.equals(removedPkg)) merged.put(k, windows.get(k));
             }
-            app.wheelstop.android.config.UnifiedConfigManager.updateSection(
+            UnifiedConfigManager.updateSection(
                     "projection", new org.json.JSONObject().put("windows", merged));
             CameraDaemon.log(TAG + ": cleared saved cluster box for " + removedPkg + " (uninstalled)");
         } catch (Throwable t) {

@@ -1,4 +1,16 @@
 package app.wheelstop.android.server;
+import app.wheelstop.android.camera.CameraConfigResolver;
+import app.wheelstop.android.camera.CameraRole;
+import app.wheelstop.android.camera.OemDashcamPipeline;
+import app.wheelstop.android.camera.ResolvedCameraConfig;
+import app.wheelstop.android.config.UnifiedConfigManager;
+import app.wheelstop.android.recording.RecordingModeManager;
+import app.wheelstop.android.surveillance.GpuPipelineConfig;
+import app.wheelstop.android.surveillance.GpuSurveillancePipeline;
+import app.wheelstop.android.surveillance.HardwareEventRecorderGpu;
+import app.wheelstop.android.telegram.config.UnifiedTelegramConfig;
+import app.wheelstop.android.telemetry.TelemetryFields;
+import app.wheelstop.android.util.Constants;
 
 import app.wheelstop.android.camera.CameraConfigResolver;
 import app.wheelstop.android.camera.CameraRole;
@@ -500,6 +512,7 @@ public class QualitySettingsApiHandler {
                 response.put("message", Messages.get("messages.quality_storage_settings_updated"));
             }
 
+<<<<<<< HEAD
             // Re-arm RecordingsIndex FileObservers against the new active dir
             // set, AND walk the new active dir to populate the index. The
             // refresh-only call would only catch live writes going forward —
@@ -522,6 +535,8 @@ public class QualitySettingsApiHandler {
                 }, "RecordingsIndexStorageSwitchReconcile").start();
             }
             
+=======
+>>>>>>> vendor/upstream
             HttpResponse.sendJson(out, response.toString());
             
         } catch (Exception e) {
@@ -714,6 +729,10 @@ public class QualitySettingsApiHandler {
             if ("blindspot".equals(section) && data.has("rectifyStrength")) {
                 try {
                     GpuSurveillancePipeline p = CameraDaemon.getGpuPipeline();
+<<<<<<< HEAD
+=======
+                    if (p != null) p.setBlindSpotRectifyStrength(data.optInt("rectifyStrength", 0));
+>>>>>>> vendor/upstream
                 } catch (Exception e) {
                     CameraDaemon.log("blindspot fisheye dispatch failed: " + e.getMessage());
                 }
