@@ -18,9 +18,9 @@ public class DesignSystemAssetTest {
     public void nativeTokensAreSemanticAndThemeAware() throws IOException {
         String light = readRepositoryFile("app/src/main/res/values/colors_m3.xml");
         String dark = readRepositoryFile("app/src/main/res/values-night/colors_m3.xml");
-        String theme = readRepositoryFile("app/src/main/res/values/themes_overdrive.xml");
+        String theme = readRepositoryFile("app/src/main/res/values/themes_wheelstop.xml");
         String nightTheme =
-                readRepositoryFile("app/src/main/res/values-night/themes_overdrive.xml");
+                readRepositoryFile("app/src/main/res/values-night/themes_wheelstop.xml");
 
         assertTrue(light.contains(
                 "<color name=\"md_sys_color_primary\">@color/md_sys_color_primary_light</color>"));
@@ -30,10 +30,10 @@ public class DesignSystemAssetTest {
         assertFalse(nightTheme.matches("(?s).*@color/md_sys_color_[a-z_]+_dark.*"));
         assertTrue(theme.contains(
                 "<item name=\"textAppearanceHeadlineSmall\">"
-                        + "@style/TextAppearance.Overdrive.HeadlineSmall</item>"));
+                        + "@style/TextAppearance.Wheelstop.HeadlineSmall</item>"));
         assertTrue(nightTheme.contains(
                 "<item name=\"textAppearanceHeadlineSmall\">"
-                        + "@style/TextAppearance.Overdrive.HeadlineSmall</item>"));
+                        + "@style/TextAppearance.Wheelstop.HeadlineSmall</item>"));
     }
 
     @Test
@@ -51,7 +51,7 @@ public class DesignSystemAssetTest {
         String dimensions =
                 readRepositoryFile("app/src/main/res/values/dimens_overdrive.xml");
         String typography =
-                readRepositoryFile("app/src/main/res/values/themes_overdrive.xml");
+                readRepositoryFile("app/src/main/res/values/themes_wheelstop.xml");
 
         assertTrue(dimensions.contains(
                 "<dimen name=\"card_radius_standard\">8dp</dimen>"));

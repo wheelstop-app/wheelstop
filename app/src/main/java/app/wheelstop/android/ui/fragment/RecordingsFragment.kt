@@ -769,7 +769,7 @@ class RecordingsFragment : Fragment() {
 
     private fun openRecordingFilters() {
         val ctx = context ?: return
-        val sheet = BottomSheetDialog(ctx, R.style.Theme_Overdrive_M3_BottomSheet)
+        val sheet = BottomSheetDialog(ctx, R.style.Theme_Wheelstop_M3_BottomSheet)
         val content = LayoutInflater.from(ctx)
             .inflate(R.layout.sheet_recording_library_filters, null, false)
         // M3 sheets are edge-to-edge: without this the Apply button sits

@@ -72,7 +72,7 @@
             android:accessibilityHeading="true"
             android:gravity="center"
             android:text="@string/webview_camera_daemon_not_running"
-            android:textAppearance="@style/TextAppearance.Overdrive.HeadlineSmall"
+            android:textAppearance="@style/TextAppearance.Wheelstop.HeadlineSmall"
             android:textColor="?attr/colorOnSurface"
             android:textStyle="bold" />
 
@@ -87,7 +87,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnRetry"
-            style="@style/Widget.Overdrive.M3.Button.Tonal"
+            style="@style/Widget.Wheelstop.M3.Button.Tonal"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"

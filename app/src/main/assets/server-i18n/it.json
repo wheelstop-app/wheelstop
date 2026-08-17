@@ -119,7 +119,8 @@
     "tyres_persist_failed": "Salvataggio dei limiti degli pneumatici non riuscito",
     "recordings_index_unavailable": "Indice delle registrazioni non disponibile",
     "surveillance_all_classes_off": "Questo salvataggio disattiverebbe tutte le classi di oggetti, spegnendo completamente il rilevamento AI. Conferma per procedere.",
-    "tyres_invalid_unit": "pressureUnit deve essere kpa, psi o bar"
+    "tyres_invalid_unit": "pressureUnit deve essere kpa, psi o bar",
+    "vehicle_blocked_in_motion": "Questa azione non è disponibile mentre il veicolo è in movimento"
   },
   "notifications": {
     "charging_started": "Ricarica avviata",

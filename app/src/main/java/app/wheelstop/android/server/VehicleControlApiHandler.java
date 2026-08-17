@@ -2065,7 +2065,6 @@ public class VehicleControlApiHandler {
                 HttpResponse.sendJson(out, response.toString());
                 return;
             }
-<<<<<<< HEAD
             // Every screen/brightness target (infotainment, cluster, HUD, screen
             // power) removes or dims safety-relevant display information — gate
             // them all the same way. Volume is excluded: a separate, lower-severity
@@ -2077,7 +2076,8 @@ public class VehicleControlApiHandler {
                 response.put("error", Messages.get("errors.vehicle_blocked_in_motion"));
                 HttpResponse.sendJson(out, 409, response.toString());
                 return;
-=======
+            }
+
             String volumeChannel = null;
             if (isVolume || isVolumeStep) {
                 volumeChannel = optionalVolumeChannel(req);
@@ -2087,7 +2087,6 @@ public class VehicleControlApiHandler {
                     HttpResponse.sendJson(out, response.toString());
                     return;
                 }
->>>>>>> vendor/upstream
             }
             boolean ok;
             if (isMediaKey) {
@@ -2253,13 +2252,8 @@ public class VehicleControlApiHandler {
         }
     }
 
-<<<<<<< HEAD
-    /** Where screenshots are written (world-readable, same tree as other daemon files). */
-    private static final String SCREENSHOT_DIR = "/data/local/tmp/.wheelstop/screenshots";
-=======
     /** User-visible screenshot folder; the daemon runs as shell and can write shared storage. */
-    private static final String SCREENSHOT_DIR = "/storage/sdcard/OverDrive/screenshots";
->>>>>>> vendor/upstream
+    private static final String SCREENSHOT_DIR = "/storage/sdcard/Wheelstop/screenshots";
 
     /**
      * UI navigation + screenshot + move-to-display, run as the UID-2000 daemon via
@@ -2418,7 +2412,6 @@ public class VehicleControlApiHandler {
             // frames, so screen playback deliberately ignores any supplied channel and uses
             // Media. Anything else (default) is audio-only and honours its chosen channel.
             boolean onScreen = "screen".equalsIgnoreCase(req.optString("display", "speakers"));
-<<<<<<< HEAD
             if (onScreen && DrivingSafetyGuard.isMovementBlocked()) {
                 response.put("success", false);
                 response.put("outcome", "blocked_driving");
@@ -2426,10 +2419,8 @@ public class VehicleControlApiHandler {
                 HttpResponse.sendJson(out, 409, response.toString());
                 return;
             }
-=======
             String channel = onScreen ? "media" : req.optString("channel", "media");
             boolean loop = req.optBoolean("loop", false);
->>>>>>> vendor/upstream
             // Prefer a library "name"; fall back to an explicit "path".
             String name = req.optString("name", null);
             String path = req.optString("path", null);

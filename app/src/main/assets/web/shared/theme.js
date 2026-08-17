@@ -275,13 +275,8 @@
             '   background: var(--bg-hover, rgba(255,255,255,0.06));',
             '   color: var(--text-primary, #fff); }',
             '#bydThemePicker .byd-theme-opt.active {',
-<<<<<<< HEAD
             '   background: rgba(var(--primary-rgb), 0.12);',
             '   color: var(--brand-primary, #00D4AA); }',
-=======
-            '   background: var(--status-success-container, rgba(91, 211, 130, 0.14));',
-            '   color: var(--primary, #5DDBB6); }',
->>>>>>> vendor/upstream
             '#bydThemePicker .byd-theme-opt svg { width: 16px; height: 16px; flex-shrink: 0; }'
         ].join(' ');
         document.head.appendChild(s);

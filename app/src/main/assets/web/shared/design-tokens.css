@@ -108,7 +108,6 @@
 }
 
 :root[data-theme="light"] {
-<<<<<<< HEAD
     --primary-rgb: 125, 83, 0;
     --primary: #7D5300;
     --on-primary: #FFF0E1;
@@ -122,20 +121,6 @@
     --on-tertiary: #FFF3C5;
     --tertiary-container: #F9DD44;
     --on-tertiary-container: #5B4E00;
-=======
-    --primary: #007A62;
-    --on-primary: #FFFFFF;
-    --primary-container: #78F3CC;
-    --on-primary-container: #002115;
-    --secondary: #4B635A;
-    --on-secondary: #FFFFFF;
-    --secondary-container: #CDE8DC;
-    --on-secondary-container: #072019;
-    --tertiary: #00658F;
-    --on-tertiary: #FFFFFF;
-    --tertiary-container: #C5E7FF;
-    --on-tertiary-container: #001E2E;
->>>>>>> vendor/upstream
     --error: #BA1A1A;
     --on-error: #FFFFFF;
     --error-container: #FFDAD6;

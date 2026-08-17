@@ -65,11 +65,7 @@
 :root[data-theme="light"] {
     --bg-glass: rgba(247, 250, 247, 0.88);
 
-<<<<<<< HEAD
     --chart-line-1: #FFB020;
-=======
-    --chart-line-1: #007A62;
->>>>>>> vendor/upstream
     --chart-line-2: #00658F;
     --chart-warning: #B45309;
     --chart-soh: #7C3AED;
@@ -2158,22 +2154,14 @@ select.md-input ~ .md-label {
 }
 
 .btn-map-float.btn-directions {
-<<<<<<< HEAD
     background: linear-gradient(135deg, var(--primary) 0%, #C77A00 100%);
-=======
-    background: linear-gradient(135deg, var(--primary) 0%, #00a080 100%);
->>>>>>> vendor/upstream
     border: none;
     color: #000;
     box-shadow: 0 4px 20px rgba(var(--primary-rgb), 0.4);
 }
 
 .btn-map-float.btn-directions:hover {
-<<<<<<< HEAD
     background: linear-gradient(135deg, #FFD68A 0%, var(--primary) 100%);
-=======
-    background: linear-gradient(135deg, #00ffcc 0%, var(--primary) 100%);
->>>>>>> vendor/upstream
     transform: scale(1.08);
     box-shadow: 0 6px 30px rgba(var(--primary-rgb), 0.5);
 }

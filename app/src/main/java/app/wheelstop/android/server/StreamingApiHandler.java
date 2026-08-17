@@ -1044,7 +1044,6 @@ public class StreamingApiHandler {
         if (pipeline != null) {
             if (delta.containsKey("rectifyStrength")) {
                 try {
-                    pipeline.setBlindSpotRectifyStrength((Integer) delta.get("rectifyStrength"));
                 } catch (Throwable t) {
                     CameraDaemon.log("handleBsTweak fisheye push: " + t.getMessage());
                     pushFailed.add("fisheye");

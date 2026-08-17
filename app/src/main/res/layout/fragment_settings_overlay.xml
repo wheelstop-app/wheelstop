@@ -34,7 +34,7 @@
             android:layout_height="wrap_content"
             android:accessibilityHeading="true"
             android:text="@string/settings_section_overlay"
-            android:textAppearance="@style/TextAppearance.Overdrive.HeadlineSmall"
+            android:textAppearance="@style/TextAppearance.Wheelstop.HeadlineSmall"
             android:textColor="?attr/colorOnSurface"
             android:textStyle="bold" />
 

@@ -84,7 +84,6 @@
         <item name="materialAlertDialogTheme">@style/ThemeOverlay.Wheelstop.M3.MaterialAlertDialog</item>
         <item name="alertDialogTheme">@style/ThemeOverlay.Wheelstop.M3.MaterialAlertDialog</item>
 
-<<<<<<< HEAD:app/src/main/res/values/themes_wheelstop.xml
         <!-- Typography overrides: tighten the M3 expressive scale for a
              modern infotainment look. The default M3 type scale uses
              generous tracking and weights tuned for phones; on a 1920×1080
@@ -101,19 +100,6 @@
         <item name="textAppearanceTitleMedium">@style/TextAppearance.Wheelstop.TitleMedium</item>
         <item name="textAppearanceLabelLarge">@style/TextAppearance.Wheelstop.LabelLarge</item>
         <item name="textAppearanceLabelMedium">@style/TextAppearance.Wheelstop.LabelMedium</item>
-=======
-        <!-- App typography contract. Medium-weight display and label styles
-             improve scanability while zero tracking remains robust under font
-             scaling, long translations, and fallback fonts. -->
-        <item name="textAppearanceDisplaySmall">@style/TextAppearance.Overdrive.DisplaySmall</item>
-        <item name="textAppearanceHeadlineLarge">@style/TextAppearance.Overdrive.HeadlineLarge</item>
-        <item name="textAppearanceHeadlineMedium">@style/TextAppearance.Overdrive.HeadlineMedium</item>
-        <item name="textAppearanceHeadlineSmall">@style/TextAppearance.Overdrive.HeadlineSmall</item>
-        <item name="textAppearanceTitleLarge">@style/TextAppearance.Overdrive.TitleLarge</item>
-        <item name="textAppearanceTitleMedium">@style/TextAppearance.Overdrive.TitleMedium</item>
-        <item name="textAppearanceLabelLarge">@style/TextAppearance.Overdrive.LabelLarge</item>
-        <item name="textAppearanceLabelMedium">@style/TextAppearance.Overdrive.LabelMedium</item>
->>>>>>> vendor/upstream:app/src/main/res/values/themes_overdrive.xml
     </style>
 
     <!-- ============================================================== -->
@@ -121,16 +107,11 @@
     <!-- They reference attrs (?attr/colorSurface etc.) so they auto-flip-->
     <!-- ============================================================== -->
 
-<<<<<<< HEAD:app/src/main/res/values/themes_wheelstop.xml
     <!-- Cards: tonal containers, no elevation shadows (cleaner on dark).
          cardCornerRadius wired to @dimen/card_radius_standard so cards inheriting
          this style automatically pick up the canonical 20dp radius. Layouts may
          still override with @dimen/card_radius_hero (24dp) for hero cards. -->
     <style name="Widget.Wheelstop.M3.CardView" parent="Widget.Material3.CardView.Filled">
-=======
-    <!-- Cards: restrained tonal containers without elevation shadows. -->
-    <style name="Widget.Overdrive.M3.CardView" parent="Widget.Material3.CardView.Filled">
->>>>>>> vendor/upstream:app/src/main/res/values/themes_overdrive.xml
         <item name="cardBackgroundColor">?attr/colorSurfaceContainer</item>
         <item name="cardCornerRadius">@dimen/card_radius_standard</item>
         <item name="cardElevation">0dp</item>
@@ -142,14 +123,9 @@
         <item name="strokeWidth">1dp</item>
     </style>
 
-<<<<<<< HEAD:app/src/main/res/values/themes_wheelstop.xml
     <!-- Buttons. cornerRadius uses card_radius_accent (14dp) so pill buttons
          match the in-card accent corner system. -->
     <style name="Widget.Wheelstop.M3.Button" parent="Widget.Material3.Button">
-=======
-    <!-- Buttons share the 8dp component radius and a 48dp touch target. -->
-    <style name="Widget.Overdrive.M3.Button" parent="Widget.Material3.Button">
->>>>>>> vendor/upstream:app/src/main/res/values/themes_overdrive.xml
         <item name="cornerRadius">@dimen/card_radius_accent</item>
         <item name="android:minHeight">48dp</item>
         <item name="android:textAllCaps">false</item>
@@ -169,14 +145,8 @@
         <item name="android:textAllCaps">false</item>
     </style>
 
-<<<<<<< HEAD:app/src/main/res/values/themes_wheelstop.xml
     <style name="Widget.Wheelstop.M3.Button.Text" parent="Widget.Material3.Button.TextButton">
         <item name="cornerRadius">10dp</item>
-=======
-    <style name="Widget.Overdrive.M3.Button.Text" parent="Widget.Material3.Button.TextButton">
-        <item name="cornerRadius">@dimen/card_radius_accent</item>
-        <item name="android:minHeight">48dp</item>
->>>>>>> vendor/upstream:app/src/main/res/values/themes_overdrive.xml
         <item name="android:textAllCaps">false</item>
     </style>
 

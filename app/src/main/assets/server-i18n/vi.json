@@ -118,7 +118,8 @@
     "tyres_nothing_to_update": "Không có gì để cập nhật",
     "tyres_persist_failed": "Không thể lưu giới hạn áp suất lốp",
     "recordings_index_unavailable": "Không thể truy cập chỉ mục bản ghi",
-    "surveillance_all_classes_off": "Lần lưu này sẽ tắt tất cả lớp đối tượng, làm nhận diện AI tắt hoàn toàn. Xác nhận để tiếp tục."
+    "surveillance_all_classes_off": "Lần lưu này sẽ tắt tất cả lớp đối tượng, làm nhận diện AI tắt hoàn toàn. Xác nhận để tiếp tục.",
+    "vehicle_blocked_in_motion": "Thao tác này không khả dụng khi xe đang di chuyển"
   },
   "notifications": {
     "charging_started": "Sạc bắt đầu",

@@ -176,11 +176,7 @@
     max-width: 140px; text-overflow: ellipsis;
     min-height: 48px;
 }
-<<<<<<< HEAD
-.vc-model-select:focus { outline: none; border-color: rgba(var(--primary-rgb), 0.5); }
-=======
 .vc-model-select:focus { outline: 2px solid var(--primary); outline-offset: 2px; border-color: var(--primary); }
->>>>>>> vendor/upstream
 
 /* Stale indicator — most recent manifest refresh failed (network, GitHub, parse).
    The select itself stays fully usable; this dot just signals "newly released
@@ -208,13 +204,8 @@
     min-height: 48px;
     padding: 8px 22px;
     border-radius: 10px;
-<<<<<<< HEAD
     border: 1px solid rgba(var(--primary-rgb), 0.4);
     background: rgba(var(--primary-rgb), 0.08);
-=======
-    border: 1px solid rgba(0,212,170,0.4);
-    background: rgba(0,212,170,0.08);
->>>>>>> vendor/upstream
     color: var(--primary);
     font-size: 12px;
     font-weight: 600;
@@ -255,11 +246,7 @@
 .vc-3d-btn svg { width: 18px; height: 18px; }
 .vc-3d-btn span { font-size: 7px; font-weight: 700; text-transform: uppercase; margin-top: 1px; }
 .vc-3d-btn:hover { border-color: var(--primary); color: var(--primary); }
-<<<<<<< HEAD
 .vc-3d-btn.on { border-color: var(--primary); background: rgba(var(--primary-rgb), 0.15); color: var(--primary); box-shadow: 0 0 12px rgba(var(--primary-rgb), 0.3); }
-=======
-.vc-3d-btn.on { border-color: var(--primary); background: rgba(0,212,170,0.15); color: var(--primary); box-shadow: 0 0 12px rgba(0,212,170,0.3); }
->>>>>>> vendor/upstream
 
 /* ===== TYRE PRESSURE CALLOUTS =====
    Four floating cards, one per wheel, connected to the rendered car by SVG
@@ -341,11 +328,7 @@
     width: 8px; height: 8px;
     border-radius: 50%;
     background: var(--primary);
-<<<<<<< HEAD
     box-shadow: 0 0 7px rgba(var(--primary-rgb), 0.82);
-=======
-    box-shadow: 0 0 7px rgba(0,212,170,0.82);
->>>>>>> vendor/upstream
     -webkit-flex-shrink: 0; flex-shrink: 0;
     -webkit-transition: background .2s, box-shadow .2s;
     transition: background .2s, box-shadow .2s;
@@ -419,13 +402,8 @@
    attention states retain the familiar amber/red escalation. Both dot and PSI
    colour shift so a low-pressure tyre is unmistakable from across
    the cabin without reading the state label. */
-<<<<<<< HEAD
 .vc-tyre-callout[data-state="normal"]                   { border-color: rgba(var(--primary-rgb), 0.28); }
 .vc-tyre-callout[data-state="normal"]  .vc-tyre-dot     { background: var(--primary); box-shadow: 0 0 7px rgba(var(--primary-rgb), 0.82); }
-=======
-.vc-tyre-callout[data-state="normal"]                   { border-color: rgba(0, 212, 170, 0.28); }
-.vc-tyre-callout[data-state="normal"]  .vc-tyre-dot     { background: var(--primary); box-shadow: 0 0 7px rgba(0,212,170,0.82); }
->>>>>>> vendor/upstream
 .vc-tyre-callout[data-state="normal"]  .vc-tyre-state   { color: var(--primary); }
 .vc-tyre-callout[data-state="normal"]  .vc-tyre-psi-val { color: var(--primary); }
 
@@ -621,11 +599,7 @@
 }
 .vc-preset:hover { border-color: rgba(var(--primary-rgb), .3); color: var(--vc-text-primary); background: rgba(var(--primary-rgb), .06); }
 .vc-preset:active { -webkit-transform: scale(.9); transform: scale(.9); }
-<<<<<<< HEAD
 .vc-preset.active { border-color: var(--primary); background: rgba(var(--primary-rgb), .12); color: var(--primary); }
-=======
-.vc-preset.active { border-color: var(--primary); background: rgba(0,212,170,.12); color: var(--primary); }
->>>>>>> vendor/upstream
 .vc-preset.pending { opacity: .4; pointer-events: none; }
 
 /* Tab bar — always visible.
@@ -678,11 +652,7 @@
 .vc-tab svg { width: 20px; height: 20px; margin-bottom: 2px; }
 .vc-tab span { font-size: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: .3px; }
 .vc-tab:active { -webkit-transform: scale(.92); transform: scale(.92); }
-<<<<<<< HEAD
 .vc-tab.active { border-color: rgba(var(--primary-rgb), 0.4); background: rgba(var(--primary-rgb), 0.08); color: var(--primary); }
-=======
-.vc-tab.active { border-color: rgba(0,212,170,0.4); background: rgba(0,212,170,0.08); color: var(--primary); }
->>>>>>> vendor/upstream
 .vc-tab.has-active { color: var(--vc-text-secondary); }
 .vc-tab .tab-dot {
     position: absolute; top: 6px; right: 6px;
@@ -730,13 +700,8 @@
 .vc-tile span { font-size: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: .3px; color: inherit; }
 .vc-tile:hover { border-color: rgba(var(--primary-rgb), .3); color: var(--vc-text-primary); background: rgba(var(--primary-rgb), .06); }
 .vc-tile:active { -webkit-transform: scale(.9); transform: scale(.9); }
-<<<<<<< HEAD
 .vc-tile.on { border-color: var(--primary); background: rgba(var(--primary-rgb), .12); color: var(--primary); box-shadow: 0 0 12px rgba(var(--primary-rgb), .2); }
 .vc-tile.active { border-color: var(--primary); background: rgba(var(--primary-rgb), .10); color: var(--primary); }
-=======
-.vc-tile.on { border-color: var(--primary); background: rgba(0,212,170,.12); color: var(--primary); box-shadow: 0 0 12px rgba(0,212,170,.2); }
-.vc-tile.active { border-color: var(--primary); background: rgba(0,212,170,.10); color: var(--primary); }
->>>>>>> vendor/upstream
 /* Disable highlight stays readable: outline grey, not greyed-out invisible. */
 .vc-tile:disabled, .vc-tile[disabled] { color: var(--vc-text-muted); border-color: var(--vc-border-faint); background: var(--vc-tile-bg-disabled); cursor: not-allowed; }
 /* Cloud-only controls stay tappable so they can explain how to connect an
@@ -804,11 +769,7 @@
     -webkit-transition: height var(--vc-hold-ms, 650ms) linear;
     transition: height var(--vc-hold-ms, 650ms) linear;
 }
-<<<<<<< HEAD
 .vc-tile.memory.armed { border-color: var(--primary); color: var(--primary); box-shadow: 0 0 14px rgba(var(--primary-rgb), .35); }
-=======
-.vc-tile.memory.armed { border-color: var(--primary); color: var(--primary); box-shadow: 0 0 14px rgba(0,212,170,.35); }
->>>>>>> vendor/upstream
 .vc-tile.memory.armed::after { height: 0; }
 
 /* "Hold to save" helper line under the seat-memory tiles. */
@@ -1029,15 +990,9 @@
 }
 .vc-seg:hover { color: var(--vc-text-primary); }
 .vc-seg.on {
-<<<<<<< HEAD
     background: rgba(var(--primary-rgb), .16);
     color: var(--primary);
     box-shadow: inset 0 0 0 1px rgba(var(--primary-rgb), .35);
-=======
-    background: rgba(0,212,170,.16);
-    color: var(--primary);
-    box-shadow: inset 0 0 0 1px rgba(0,212,170,.35);
->>>>>>> vendor/upstream
 }
 .vc-seg:active { -webkit-transform: scale(.96); transform: scale(.96); }
 
@@ -1085,13 +1040,8 @@
     text-transform: uppercase; letter-spacing: .3px;
     cursor: pointer;
 }
-<<<<<<< HEAD
 .vc-day:hover { border-color: rgba(var(--primary-rgb), .3); color: var(--vc-text-primary); }
 .vc-day.on { border-color: var(--primary); background: rgba(var(--primary-rgb), .12); color: var(--primary); }
-=======
-.vc-day:hover { border-color: rgba(0,212,170,.3); color: var(--vc-text-primary); }
-.vc-day.on { border-color: var(--primary); background: rgba(0,212,170,.12); color: var(--primary); }
->>>>>>> vendor/upstream
 .vc-day:active { -webkit-transform: scale(.92); transform: scale(.92); }
 
 /* Reuse .vc-pill as a clickable chip in the schedule row.
@@ -1102,15 +1052,9 @@ button.vc-pill {
     background: var(--vc-tile-bg);
 }
 /* Inside the schedule bar, match the row's 34px baseline. */
-<<<<<<< HEAD
-.vc-schedule-bar button.vc-pill { height: 34px; padding: 0 12px; }
-button.vc-pill:hover { border-color: rgba(var(--primary-rgb), .3); color: var(--vc-text-primary); }
-button.vc-pill.on { border-color: var(--primary); background: rgba(var(--primary-rgb), .12); color: var(--primary); }
-=======
 .vc-schedule-bar button.vc-pill { height: 48px; min-height: 48px; padding: 0 12px; }
 button.vc-pill:hover { border-color: rgba(0,212,170,.3); color: var(--vc-text-primary); }
 button.vc-pill.on { border-color: var(--primary); background: rgba(0,212,170,.12); color: var(--primary); }
->>>>>>> vendor/upstream
 button.vc-pill:active { -webkit-transform: scale(.95); transform: scale(.95); }
 
 /* ===== MOBILE RESPONSIVE ===== */
@@ -1311,11 +1255,7 @@ button.vc-pill:active { -webkit-transform: scale(.95); transform: scale(.95); }
 }
 .vc-modal-btn:hover {
     border-color: var(--primary);
-<<<<<<< HEAD
     background: rgba(var(--primary-rgb), 0.08);
-=======
-    background: rgba(0,212,170,0.08);
->>>>>>> vendor/upstream
     color: var(--primary);
 }
 .vc-modal-btn:active {

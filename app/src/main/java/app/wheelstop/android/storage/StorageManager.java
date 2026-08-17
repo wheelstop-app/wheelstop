@@ -2723,9 +2723,6 @@ public class StorageManager {
      * directories (idempotent, harmless) and its result is discarded.
      */
     private File[] initVolumeDirectories(String volumePath, String label) {
-<<<<<<< HEAD
-        File base = new File(volumePath, "Wheelstop");
-=======
         final File[][] result = new File[1][];
         Thread worker = new Thread(() -> {
             result[0] = initVolumeDirectoriesUnbounded(volumePath, label);
@@ -2747,8 +2744,7 @@ public class StorageManager {
     }
 
     private File[] initVolumeDirectoriesUnbounded(String volumePath, String label) {
-        File base = new File(volumePath, "Overdrive");
->>>>>>> vendor/upstream
+        File base = new File(volumePath, "Wheelstop");
         boolean baseCreated = base.mkdirs();
         if (!base.exists()) {
             logError("Failed to create " + label + " base directory: " + base.getAbsolutePath());

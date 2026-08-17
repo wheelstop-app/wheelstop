@@ -621,15 +621,11 @@ object UnifiedConfigManager {
         // ACC-OFF cycle to save the 12 V battery. Does NOT affect the cameras — the
         // camera/AVM/ISP power keep-alives are unconditional in AccSentryDaemon.
         if (!surveillance.has("keepUsbPowerOnAccOff")) surveillance.put("keepUsbPowerOnAccOff", true)
-<<<<<<< HEAD
-        // Operating mode: WHICH lifecycle phases Wheelstop is active for.
-=======
         // Parked cellular keep-alive. DEFAULT FALSE (opt-in): only needed on models
         // whose data module sleeps a while after ACC OFF; elsewhere holding the bearer
         // up just costs battery and data. Read by AccSentryDaemon's keep-alive loop.
         if (!surveillance.has("mobileDataKeepAlive")) surveillance.put("mobileDataKeepAlive", false)
-        // Operating mode: WHICH lifecycle phases OverDrive is active for.
->>>>>>> vendor/upstream
+        // Operating mode: WHICH lifecycle phases Wheelstop is active for.
         //   "onAndOff" — full current behaviour: after the vehicle powers off the
         //                daemon keeps the head unit awake (MCU/USB/AP wake, keep-alive
         //                loop, voltage/SoC monitors) AND runs post-OFF surveillance /

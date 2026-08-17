@@ -81,27 +81,12 @@ BYD.roadSense = {
         bsProjExp: 1.0,
         bsRearRoll: 0.0,
         bsRearPitch: 0.0,
-<<<<<<< HEAD
         // Blind-spot card clarity (views 7/8 stitched output, applied inside
         // odBlend): contrast pivot around mid-grey (1.0 = neutral/identity) and
         // unsharp-mask amount (0.0 = off). Safety-clamped 0.5..2.0 / 0.0..1.0,
         // same range enforced server-side by UnifiedConfigManager.
         bsContrast: 1.0,
         bsSharpen: 0.0,
-=======
-        // Fisheye / lens dewarp strength (0..100) for the SINGLE-CAMERA views
-        // (side/rear). Separate from the recording pipeline's dewarp; 0 = off.
-        // Ignored for the merged 'both' view.
-        bsRectifyStrength: 0,
-        // Conditional display: the card only appears while the vehicle speed is
-        // inside [bsMinSpeedKmh, bsMaxSpeedKmh] and, optionally, not in reverse.
-        // 0 means "no bound on that end", so 0/0 = any speed (the shipping
-        // behaviour). Always km/h on the wire — the daemon gate compares in km/h;
-        // the UI only converts for the mph hint. bsSuppressReverse defaults false.
-        bsMinSpeedKmh: 0,
-        bsMaxSpeedKmh: 0,
-        bsSuppressReverse: false,
->>>>>>> vendor/upstream
         // On-screen card size (% of panel width) + corner. Persisted as a preset
         // (not absolute px) so it stays correct across portrait/landscape rotation.
         // PER-TARGET: the head-unit set (bsSizePct/bsCorner) and the cluster set
@@ -276,41 +261,8 @@ BYD.roadSense = {
                 if (typeof bs.projExp === 'number') c.bsProjExp = this._clamp(bs.projExp, 0.4, 1.6);
                 if (typeof bs.rearRoll === 'number') c.bsRearRoll = this._clamp(bs.rearRoll, -0.4, 0.4);
                 if (typeof bs.rearPitch === 'number') c.bsRearPitch = this._clamp(bs.rearPitch, -0.4, 0.4);
-<<<<<<< HEAD
                 if (typeof bs.contrast === 'number') c.bsContrast = this._clamp(bs.contrast, 0.5, 2.0);
                 if (typeof bs.sharpen === 'number')  c.bsSharpen  = this._clamp(bs.sharpen, 0.0, 1.0);
-=======
-                if (typeof bs.rectifyStrength === 'number') c.bsRectifyStrength = this._clamp(bs.rectifyStrength, 0, 100);
-                // Conditional display. Anything outside 1..BS_SPEED_MAX collapses to 0
-                // ("any") — the same normalisation the daemon gate applies, so the UI
-                // can never display a bound the daemon quietly ignores.
-                c.bsMinSpeedKmh = this._bsNormSpeed(bs.minSpeedKmh);
-                c.bsMaxSpeedKmh = this._bsNormSpeed(bs.maxSpeedKmh);
-                // An INVERTED stored pair is unsatisfiable, so the daemon gate ignores
-                // it entirely (shows at any speed). Paths that bypass the POST validator
-                // can still produce one — a hand-edited config backup restore, chiefly —
-                // so mirror the gate here rather than painting a window that isn't in
-                // force. Displaying 0/0 tells the truth: the gate is disarmed.
-                if (c.bsMinSpeedKmh > 0 && c.bsMaxSpeedKmh > 0
-                        && c.bsMinSpeedKmh > c.bsMaxSpeedKmh) {
-                    c.bsMinSpeedKmh = 0;
-                    c.bsMaxSpeedKmh = 0;
-                }
-                // Mirror org.json optBoolean, which the daemon reads this with: it also
-                // accepts the STRINGS "true"/"false" (case-insensitive). A typeof-only
-                // check would render the toggle OFF while the gate was actually armed —
-                // reachable via a hand-edited config or a restored backup.
-                // NO trim(): org.json compares with equalsIgnoreCase and does NOT trim,
-                // so " true" is FALSE to the daemon. Trimming here would show the toggle
-                // ON for a disarmed gate — re-creating the very mismatch this closes.
-                if (typeof bs.suppressInReverse === 'boolean') {
-                    c.bsSuppressReverse = bs.suppressInReverse;
-                } else if (typeof bs.suppressInReverse === 'string') {
-                    var sir = bs.suppressInReverse.toLowerCase();
-                    if (sir === 'true') c.bsSuppressReverse = true;
-                    else if (sir === 'false') c.bsSuppressReverse = false;
-                }
->>>>>>> vendor/upstream
                 // Display target ('head_unit' default | 'cluster').
                 if (bs.target === 'cluster' || bs.target === 'head_unit') c.bsTarget = bs.target;
                 // Cluster layout (size profile opcode 29/30/31).

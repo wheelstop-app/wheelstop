@@ -57,7 +57,7 @@
                 android:layout_height="wrap_content"
                 android:accessibilityHeading="true"
                 android:text="@string/diagnostics_hero_title"
-                android:textAppearance="@style/TextAppearance.Overdrive.HeadlineSmall"
+                android:textAppearance="@style/TextAppearance.Wheelstop.HeadlineSmall"
                 android:textColor="?attr/colorOnSurface"
                 android:textStyle="bold" />
 
@@ -164,7 +164,7 @@
                             android:ellipsize="end"
                             android:maxLines="1"
                             android:text="@string/diagnostics_metric_online"
-                            android:textAppearance="@style/TextAppearance.Overdrive.HeadlineSmall"
+                            android:textAppearance="@style/TextAppearance.Wheelstop.HeadlineSmall"
                             android:textColor="?attr/colorOnSurface"
                             android:textStyle="bold" />
 
@@ -246,7 +246,7 @@
                             android:ellipsize="end"
                             android:maxLines="1"
                             android:text="@string/diagnostics_metric_pending"
-                            android:textAppearance="@style/TextAppearance.Overdrive.HeadlineSmall"
+                            android:textAppearance="@style/TextAppearance.Wheelstop.HeadlineSmall"
                             android:textColor="?attr/colorOnSurface"
                             android:textStyle="bold" />
 
@@ -335,7 +335,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="2dp"
                             android:text="@string/diagnostics_metric_pending"
-                            android:textAppearance="@style/TextAppearance.Overdrive.HeadlineSmall"
+                            android:textAppearance="@style/TextAppearance.Wheelstop.HeadlineSmall"
                             android:textColor="?attr/colorOnSurfaceVariant"
                             android:textStyle="bold" />
                     </LinearLayout>
@@ -415,7 +415,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="2dp"
                             android:text="@string/diagnostics_metric_pending"
-                            android:textAppearance="@style/TextAppearance.Overdrive.HeadlineSmall"
+                            android:textAppearance="@style/TextAppearance.Wheelstop.HeadlineSmall"
                             android:textColor="?attr/colorOnSurfaceVariant"
                             android:textStyle="bold" />
                     </LinearLayout>

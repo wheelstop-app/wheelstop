@@ -398,12 +398,8 @@ public final class MediaPlaybackService extends Service {
             int ttsStream = streamForChannel(channel);
             if (isOemExtendedStream(ttsStream)) ttsStream = AudioManager.STREAM_MUSIC;
             params.putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, ttsStream);
-<<<<<<< HEAD
-            String uttId = "wheelstop-tts";
-=======
             params.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f);
             String uttId = playbackSession.nextTtsUtteranceId();
->>>>>>> vendor/upstream
             tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
                 @Override public void onStart(String id) {}
                 @Override public void onDone(String id) {

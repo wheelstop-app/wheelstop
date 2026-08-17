@@ -959,7 +959,6 @@ public class AppUpdater {
                     return;
                 }
 
-<<<<<<< HEAD
                 // Step 2b: Verify the APK digest against the release's published
                 // SHA256SUMS before we hand off to `pm install`. This is
                 // defense-in-depth: `pm install -r` already rejects any APK not
@@ -979,7 +978,7 @@ public class AppUpdater {
                     }
                     Log.i(TAG, "APK digest verdict: " + verdict);
                 }
-=======
+
                 // The updater terminates CameraDaemon with SIGKILL below. Its
                 // shutdown hook cannot protect an active trip in that case, so
                 // require the daemon's restart contract to durably checkpoint
@@ -1006,7 +1005,6 @@ public class AppUpdater {
                     return;
                 }
                 cameraRestartPrepared = true;
->>>>>>> vendor/upstream
 
                 // Step 3: Save update info BEFORE we touch any daemon (the daemon
                 // process — if we're running inside it — is about to die, and the

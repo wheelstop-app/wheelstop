@@ -12,13 +12,8 @@
     <color name="white">#FFFFFFFF</color>
 
     <!-- Brand -->
-<<<<<<< HEAD
-    <color name="brand_primary">#FFBD58</color>
-    <color name="brand_secondary">#F5BB23</color>
-=======
     <color name="brand_primary">@color/md_sys_color_primary</color>
     <color name="brand_secondary">@color/md_sys_color_tertiary</color>
->>>>>>> vendor/upstream
     <color name="brand_cyan">@color/brand_primary</color>
     <color name="brand_cyan_glow">#33FFBD58</color>
 

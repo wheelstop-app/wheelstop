@@ -26,7 +26,7 @@
         android:layout_height="wrap_content"
         android:accessibilityHeading="true"
         android:text="@string/adb_console_hero_title"
-        android:textAppearance="@style/TextAppearance.Overdrive.HeadlineSmall"
+        android:textAppearance="@style/TextAppearance.Wheelstop.HeadlineSmall"
         android:textColor="?attr/colorOnSurface"
         android:textStyle="bold" />
 

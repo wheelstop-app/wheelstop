@@ -369,7 +369,7 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/navigationResetButton"
-                    style="@style/Widget.Overdrive.M3.Button.Text"
+                    style="@style/Widget.Wheelstop.M3.Button.Text"
                     android:layout_width="wrap_content"
                     android:layout_height="48dp"
                     android:layout_gravity="end"

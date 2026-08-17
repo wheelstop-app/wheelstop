@@ -325,7 +325,7 @@ class DaemonsFragment : Fragment() {
             return
         }
 
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(context, R.style.Theme_Overdrive_M3_Dialog)
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(context, R.style.Theme_Wheelstop_M3_Dialog)
             .setIcon(R.drawable.ic_warning)
             .setTitle(getString(R.string.dialog_tailscale_adb_enable_title))
             .setMessage(getString(R.string.dialog_tailscale_adb_enable_message))

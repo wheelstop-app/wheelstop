@@ -4991,70 +4991,12 @@ public class GpuSurveillancePipeline {
                 // Merge mode (both/side/rear) — re-applied here so it survives an
                 // enable or a side switch, same lifecycle as the stitch calibration.
                 s.setBlindSpotMergeMode(bsMergeModeCode(bs.optString("mergeMode", "both")));
-<<<<<<< HEAD
                 // Card clarity (contrast/sharpen) — same lifecycle as the stitch
                 // calibration/merge mode above: re-applied on every enable/resync/
                 // side switch so a config change lands without an ACC cycle.
                 s.setBlindSpotClarity(
                     app.wheelstop.android.config.UnifiedConfigManager.getBlindSpotContrast(),
                     app.wheelstop.android.config.UnifiedConfigManager.getBlindSpotSharpen());
-=======
-                // Fisheye/lens dewarp for the single-camera views (side/rear). Separate
-                // knob from recording.rectifyStrength; the shader applies it ONLY in the
-                // merge 1/2 passthrough (identity at 0, and never touches 'both'). The
-                // BS card buffer is 4:3 (1280×960) → aspect 0.75, same as a camera tile.
-                s.setBlindSpotRectifyStrength((float) bs.optInt("rectifyStrength", 0));
-                s.setBlindSpotRectifyAspect((float) BS_HEIGHT / (float) BS_WIDTH);
-                // On-screen card rotation is done in the GL vertex shader (output
-                // geometry), NOT via the SurfaceControl layer transform — this
-                // firmware's compositor drops a 90/270 layer transform → blank card
-                // (issue #164). resolveBsRotation already gates rotation to the
-                // single-view side/rear modes and reads AUTO/gear; re-apply it here so
-                // it survives enable/side-switch, same lifecycle as the calibration.
-                // PER-SIDE: pass the current view (7=left/8=right) so a side switch
-                // re-resolves to that camera's own rotation. Keep bsRotationDeg in sync
-                // with what we just pushed, so the 250ms turn-tick change-detector
-                // (wantRot != bsRotationDeg) doesn't see a stale angle after a side
-                // switch and either miss a needed re-apply or churn a redundant one.
-                int rot = resolveBsRotation(bs, viewMode);
-                // Only mirror into bsRotationDeg when this is the CARD's own render, not a
-                // composite camera view's — a camview angle must not become the card's
-                // change-detector baseline (the turn tick would then skip a needed re-apply).
-                // Keyed on the caller's forCamView, not on `viewMode == bsViewMode`: the latter is
-                // the inferred discriminator that broke the alignment below, and it compares equal
-                // whenever a camview happens to show the card's current side. Harmless today
-                // (resolveBsRotation returns the same angle for the same view), but the two must
-                // not disagree about whose render this is.
-                if (!forCamView) bsRotationDeg = rot;
-                // Align the rotated card to the CURRENT side's corner edge. Resolve the
-                // corner from this same config object (not the bsCorner field, which the
-                // reposition step updates only AFTER this call) so a 90/270 card hugs the
-                // right/left edge matching where it's anchored, per side.
-                //
-                // A COMPOSITE CAMERA VIEW is anchored by its OWN camview geometry, so a
-                // rotated one must pillarbox against camViewCorner — using the card's
-                // corner would flush the picture to the opposite edge of its rect.
-                int alignX;
-                // Which feature's corner does the rect belong to? The caller knows, so it TELLS us
-                // via forCamView — do not infer it here:
-                //  - `viewMode != bsViewMode` was wrong because bsViewMode defaults to 7, so a
-                //    camera view showing the LEFT composite (view 7) compared equal and aligned
-                //    against the blind-spot corner;
-                //  - `laneProgram == PROG_CAMVIEW` is wrong too: the camview call site sits INSIDE
-                //    its own `laneProgram != PROG_CAMVIEW` transition block, so the flag is not yet
-                //    set when this runs, and the blind-spot takeback call site still sees
-                //    PROG_CAMVIEW. Both readings are false at exactly the wrong moment.
-                if (forCamView && (viewMode == 7 || viewMode == 8)) {
-                    // Camera-view lane: pass ITS default ("center"), the same one
-                    // camViewPresetRect uses, so rect and alignment agree on any token.
-                    alignX = bsCornerAlignX(camViewCorner, "center");
-                } else {
-                    String geomKey = isClusterTarget() ? "geometryCluster" : "geometry";
-                    org.json.JSONObject g = bs.optJSONObject(geomKey);
-                    alignX = bsCornerAlignX(resolveBsCorner(g));
-                }
-                s.setContentRotation(rot, alignX);
->>>>>>> vendor/upstream
             }
         } catch (Throwable t) {
             logger.warn("blindspot calib apply failed: " + t.getMessage());

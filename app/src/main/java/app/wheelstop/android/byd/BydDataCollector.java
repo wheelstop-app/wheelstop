@@ -14790,7 +14790,6 @@ public class BydDataCollector {
             }
         }
 
-<<<<<<< HEAD
         // 4) Deliberately NO carsettings-provider tier. The provider key "power_management"
         //    (BydCarSettings, labelled "Drive Mode") looks like the missing NORMAL lever, but
         //    neither the key's identity nor its value order is evidenced anywhere — the label is
@@ -14807,21 +14806,6 @@ public class BydDataCollector {
         //    better: setOperationMode/setRoadSurfaceMode count a void return as success, so a
         //    false success would also freeze MQTT/HA/automation on a wrong "normal".
 
-        if (normalFiredWithoutSignal) {
-            // setDriveConfig(1) went through and returned nothing to contradict it, and no
-            // other tier accepted. Report it as sent — same "no better evidence for a void
-            // API" rule setMirrorsFolded uses — but say plainly that it is unconfirmed, so a
-            // device log distinguishes this from a genuine accept.
-            logger.info("setDriveConfigMode(NORMAL): reporting success on the void "
-                    + "setDriveConfig(apiMode=" + apiMode + ") call (no accept/refuse signal, and "
-                    + "no target-mode feature-id accepted) — actuation UNVERIFIED");
-            return true;
-        }
-=======
-        // Deliberately no CarSettings-provider tier. This unit defines power_management, but its
-        // row remained 1 while the live HAL reported Sport, so it is preference storage rather
-        // than reliable actuation/readback for this command.
->>>>>>> vendor/upstream
 
         logger.warn("setDriveConfigMode(" + configMode + ", apiMode=" + apiMode + "): no working "
                 + "drive-config path on this build (setDriveConfig + target-mode feature-ids rejected"

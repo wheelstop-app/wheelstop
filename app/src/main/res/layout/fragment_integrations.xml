@@ -49,7 +49,7 @@
                     android:layout_height="wrap_content"
                     android:accessibilityHeading="true"
                     android:text="@string/integrations_hero_title"
-                    android:textAppearance="@style/TextAppearance.Overdrive.HeadlineSmall"
+                    android:textAppearance="@style/TextAppearance.Wheelstop.HeadlineSmall"
                     android:textColor="?attr/colorOnSurface"
                     android:textStyle="bold" />
 
@@ -136,7 +136,7 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:text="@string/nav_page_telegram"
-                        android:textAppearance="@style/TextAppearance.Overdrive.HeadlineSmall"
+                        android:textAppearance="@style/TextAppearance.Wheelstop.HeadlineSmall"
                         android:textColor="?attr/colorOnSurface"
                         android:textStyle="bold" />
 
@@ -223,7 +223,7 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:text="@string/nav_page_abrp"
-                        android:textAppearance="@style/TextAppearance.Overdrive.HeadlineSmall"
+                        android:textAppearance="@style/TextAppearance.Wheelstop.HeadlineSmall"
                         android:textColor="?attr/colorOnSurface"
                         android:textStyle="bold" />
 
@@ -310,7 +310,7 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:text="@string/nav_page_mqtt"
-                        android:textAppearance="@style/TextAppearance.Overdrive.HeadlineSmall"
+                        android:textAppearance="@style/TextAppearance.Wheelstop.HeadlineSmall"
                         android:textColor="?attr/colorOnSurface"
                         android:textStyle="bold" />
 
@@ -396,7 +396,7 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:text="@string/nav_page_byd_cloud"
-                        android:textAppearance="@style/TextAppearance.Overdrive.HeadlineSmall"
+                        android:textAppearance="@style/TextAppearance.Wheelstop.HeadlineSmall"
                         android:textColor="?attr/colorOnSurface"
                         android:textStyle="bold" />
 
