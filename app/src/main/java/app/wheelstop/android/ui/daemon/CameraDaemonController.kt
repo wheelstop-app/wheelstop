@@ -1,5 +1,6 @@
 package app.wheelstop.android.ui.daemon
 
+import app.wheelstop.android.launcher.DaemonLauncher
 import android.content.Context
 import app.wheelstop.android.launcher.AdbDaemonLauncher
 import app.wheelstop.android.ui.model.DaemonStatus
@@ -88,9 +89,9 @@ class CameraDaemonController(
                 append("echo \"disabled by ui at \$(date)\" > /data/local/tmp/camera_daemon.disabled\n")
                 append("chmod 666 /data/local/tmp/camera_daemon.disabled 2>/dev/null\n")
                 append("rm -f /data/local/tmp/start_cam_daemon.sh /data/local/tmp/cam_watchdog.pid 2>/dev/null\n")
-                append(app.wheelstop.android.launcher.DaemonLauncher.psAwkKillLine("cam_daemon"))
+                append(DaemonLauncher.psAwkKillLine("cam_daemon"))
                 RELATED_PROCESSES.forEach { proc ->
-                    append(app.wheelstop.android.launcher.DaemonLauncher.psAwkKillLine(proc))
+                    append(DaemonLauncher.psAwkKillLine(proc))
                     append("killall -9 $proc 2>/dev/null\n")
                 }
                 // Sleep so SIGKILL'd daemon releases its lockfile, then rm it.
@@ -147,9 +148,9 @@ class CameraDaemonController(
         // is exiting the app, not telling the daemon to stay dead.
         val killScript = buildString {
             append("rm -f /data/local/tmp/start_cam_daemon.sh /data/local/tmp/cam_watchdog.pid 2>/dev/null\n")
-            append(app.wheelstop.android.launcher.DaemonLauncher.psAwkKillLine("cam_daemon"))
+            append(DaemonLauncher.psAwkKillLine("cam_daemon"))
             RELATED_PROCESSES.forEach { proc ->
-                append(app.wheelstop.android.launcher.DaemonLauncher.psAwkKillLine(proc))
+                append(DaemonLauncher.psAwkKillLine(proc))
                 append("killall -9 $proc 2>/dev/null\n")
             }
             append("sleep 1\n")

@@ -364,21 +364,6 @@ public class TcpCommandServer {
                         response.put("path", storageManager.getRecordingsPath());
                         response.put("message", "Recordings storage set to " + recStorageTypeValue);
                         CameraDaemon.log("Recordings storage type set to " + recStorageTypeValue + " via TCP IPC");
-                        // Re-arm FileObservers + reconcile the index against
-                        // the new active dir. Refresh alone wouldn't pull in
-                        // pre-existing files on the new volume.
-                        try {
-                            app.wheelstop.android.daemon.RecordingsIndexFileWatcher.getInstance().refresh();
-                        } catch (Throwable t) {
-                            CameraDaemon.log("RecordingsIndexFileWatcher refresh failed: " + t.getMessage());
-                        }
-                        new Thread(() -> {
-                            try {
-                                app.wheelstop.android.server.RecordingsIndex.getInstance().reconcile();
-                            } catch (Throwable t) {
-                                CameraDaemon.log("Post-storage-switch reconcile failed: " + t.getMessage());
-                            }
-                        }, "RecordingsIndexStorageSwitchReconcile").start();
                     } else {
                         response.put("status", "error");
                         response.put("message", recType.name() + " not available");

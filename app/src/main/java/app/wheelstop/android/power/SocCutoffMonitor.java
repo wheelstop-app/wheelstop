@@ -1,4 +1,5 @@
 package app.wheelstop.android.power;
+import app.wheelstop.android.monitor.BatterySocMonitor;
 
 import android.content.Context;
 import android.os.Build;
@@ -54,7 +55,7 @@ public final class SocCutoffMonitor {
      * also wired but only fires there — this in-process boot is what gives
      * acc_sentry-process callbacks.
      */
-    private static app.wheelstop.android.monitor.BatterySocMonitor socMonitor;
+    private static BatterySocMonitor socMonitor;
 
     private SocCutoffMonitor() {}
 
@@ -93,7 +94,7 @@ public final class SocCutoffMonitor {
             return;
         }
         try {
-            socMonitor = new app.wheelstop.android.monitor.BatterySocMonitor();
+            socMonitor = new BatterySocMonitor();
             socMonitor.init(appContext);
             socMonitor.start();
             logger.info("In-process BatterySocMonitor started — callbacks fan out via the listener");

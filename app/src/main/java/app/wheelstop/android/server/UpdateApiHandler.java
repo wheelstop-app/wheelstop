@@ -1,4 +1,5 @@
 package app.wheelstop.android.server;
+import app.wheelstop.android.config.UnifiedConfigManager;
 
 import android.content.Context;
 
@@ -101,13 +102,13 @@ public class UpdateApiHandler {
             return;
         }
 
-        final String channel = app.wheelstop.android.config.UnifiedConfigManager.getUpdateChannel();
+        final String channel = UnifiedConfigManager.getUpdateChannel();
 
         // Alpha is a browse-and-pick archive — there is no single "the update"
         // to push. Tell the client to open the catalog instead of an install
         // prompt. (forceReload first so a freshly-toggled channel is seen.)
         if (AppUpdater.CHANNEL_ALPHA.equals(channel)) {
-            app.wheelstop.android.config.UnifiedConfigManager.forceReload();
+            UnifiedConfigManager.forceReload();
             JSONObject r = new JSONObject();
             r.put("available", false);
             r.put("channel", channel);
@@ -199,8 +200,8 @@ public class UpdateApiHandler {
     /** Return the resolved update channel. Read-only; allowed in PUBLIC mode. */
     private static void handleGetChannel(OutputStream out) throws Exception {
         try {
-            app.wheelstop.android.config.UnifiedConfigManager.forceReload();
-            String channel = app.wheelstop.android.config.UnifiedConfigManager.getUpdateChannel();
+            UnifiedConfigManager.forceReload();
+            String channel = UnifiedConfigManager.getUpdateChannel();
             JSONObject r = new JSONObject();
             r.put("channel", channel);
             HttpResponse.sendJson(out, r.toString());
@@ -230,12 +231,12 @@ public class UpdateApiHandler {
         // Daemon HTTP worker thread (not the looper) — a full-JSON rewrite
         // here is fine. setUpdateChannel writes locally + atomically in the
         // daemon process.
-        boolean ok = app.wheelstop.android.config.UnifiedConfigManager.setUpdateChannel(value);
+        boolean ok = UnifiedConfigManager.setUpdateChannel(value);
         if (!ok) {
             HttpResponse.sendJsonError(out, Messages.get("errors.update_channel_write_failed"));
             return;
         }
-        app.wheelstop.android.config.UnifiedConfigManager.forceReload();
+        UnifiedConfigManager.forceReload();
         JSONObject r = new JSONObject();
         r.put("channel", value);
         HttpResponse.sendJson(out, r.toString());
@@ -258,8 +259,8 @@ public class UpdateApiHandler {
                 HttpResponse.sendJsonError(out, Messages.get("errors.update_app_context_not_ready"));
                 return;
             }
-            app.wheelstop.android.config.UnifiedConfigManager.forceReload();
-            final String channel = app.wheelstop.android.config.UnifiedConfigManager.getUpdateChannel();
+            UnifiedConfigManager.forceReload();
+            final String channel = UnifiedConfigManager.getUpdateChannel();
 
             final Object lock = new Object();
             final boolean[] done = {false};
@@ -508,8 +509,8 @@ public class UpdateApiHandler {
             // alpha APK can't be installed on a braveheart device and silently
             // corrupt the braveheart per-channel baseline. Resolve fresh (the
             // toggle may have just changed it).
-            app.wheelstop.android.config.UnifiedConfigManager.forceReload();
-            String activeChannel = app.wheelstop.android.config.UnifiedConfigManager.getUpdateChannel();
+            UnifiedConfigManager.forceReload();
+            String activeChannel = UnifiedConfigManager.getUpdateChannel();
             // Strict tag validation (not a loose prefix) — rejects a crafted
             // tag before it can reach prepareInstall / the shell-interpolated
             // install script. The only supported targeted tags are alpha /

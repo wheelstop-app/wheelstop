@@ -1,5 +1,6 @@
 package app.wheelstop.android.config
 
+import app.wheelstop.android.ui.model.DaemonStatus
 import android.content.Context
 import androidx.fragment.app.FragmentActivity
 import android.view.LayoutInflater
@@ -192,8 +193,8 @@ object CloudflaredPaidConfig {
 
                             // RESTART tunnel if it was running to apply changes immediately
                             daemonsViewModel.getState(DaemonType.CLOUDFLARED_TUNNEL)?.let { state ->
-                                if (state.status == app.wheelstop.android.ui.model.DaemonStatus.RUNNING ||
-                                    state.status == app.wheelstop.android.ui.model.DaemonStatus.STARTING) {
+                                if (state.status == DaemonStatus.RUNNING ||
+                                    state.status == DaemonStatus.STARTING) {
                                     // Stop then start to force new URL extraction
                                     daemonsViewModel.stopDaemon(DaemonType.CLOUDFLARED_TUNNEL)
                                     Thread.sleep(500)

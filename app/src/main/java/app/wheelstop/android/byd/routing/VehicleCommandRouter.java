@@ -1,4 +1,8 @@
 package app.wheelstop.android.byd.routing;
+import app.wheelstop.android.byd.AcAutoOffTimer;
+import app.wheelstop.android.byd.BydCarSettings;
+import app.wheelstop.android.monitor.AccMonitor;
+import app.wheelstop.android.server.Messages;
 
 import app.wheelstop.android.byd.BydDataCollector;
 import app.wheelstop.android.byd.BydVehicleData;
@@ -537,7 +541,7 @@ public final class VehicleCommandRouter {
     public static final class ClimateStepTempCommand extends VehicleCommand {
         public final int zone, area, delta;
         /** The setpoint actually written, or UNAVAILABLE when the step didn't happen. */
-        public volatile int resultSetpoint = app.wheelstop.android.byd.BydVehicleData.UNAVAILABLE;
+        public volatile int resultSetpoint = BydVehicleData.UNAVAILABLE;
         public ClimateStepTempCommand(int zone, int area, int delta) {
             this.zone = zone; this.area = area; this.delta = delta;
         }
@@ -547,7 +551,7 @@ public final class VehicleCommandRouter {
         public boolean executeViaSdk(BydDataCollector c) {
             int result = c.stepAcTemperature(zone, area, delta);
             resultSetpoint = result;
-            return result != app.wheelstop.android.byd.BydVehicleData.UNAVAILABLE;
+            return result != BydVehicleData.UNAVAILABLE;
         }
     }
 
@@ -1093,7 +1097,7 @@ public final class VehicleCommandRouter {
         public Capability sdkCapability() { return Capability.REQUIRED; }
         public RoutePreference defaultPreference() { return RoutePreference.SDK_ONLY; }
         public boolean executeViaSdk(BydDataCollector c) {
-            return app.wheelstop.android.byd.BydCarSettings.getInstance().writeInt(key, value);
+            return BydCarSettings.getInstance().writeInt(key, value);
         }
     }
 
@@ -1233,7 +1237,7 @@ public final class VehicleCommandRouter {
         if (!(cmd instanceof ClimateOffCommand)) return;
         if (result == null || result.outcome != Outcome.SUCCESS) return;
         try {
-            app.wheelstop.android.byd.AcAutoOffTimer.cancel();
+            AcAutoOffTimer.cancel();
         } catch (Throwable t) {
             // Never let timer bookkeeping affect the command's own reported outcome.
         }
@@ -1627,8 +1631,8 @@ public final class VehicleCommandRouter {
     private boolean isVehicleOccupiedOrAwake() {
         if (isVehicleAwake()) return true;
         try {
-            return app.wheelstop.android.monitor.AccMonitor.isAccStateAuthoritative()
-                    && app.wheelstop.android.monitor.AccMonitor.isAccOn();
+            return AccMonitor.isAccStateAuthoritative()
+                    && AccMonitor.isAccOn();
         } catch (Throwable t) {
             return false;
         }
@@ -1654,6 +1658,6 @@ public final class VehicleCommandRouter {
     // ── i18n key resolution ─────────────────────────────────────────────
 
     private static String msg(String key) {
-        return app.wheelstop.android.server.Messages.get("vehicle_control." + key);
+        return Messages.get("vehicle_control." + key);
     }
 }

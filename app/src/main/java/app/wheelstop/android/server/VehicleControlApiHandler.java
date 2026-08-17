@@ -1,4 +1,22 @@
 package app.wheelstop.android.server;
+import app.wheelstop.android.BuildConfig;
+import app.wheelstop.android.byd.AcAutoOffTimer;
+import app.wheelstop.android.byd.AudioPlaybackController;
+import app.wheelstop.android.byd.BydDeviceHelper;
+import app.wheelstop.android.byd.MessageOverlayController;
+import app.wheelstop.android.byd.cloud.BydCloudClient;
+import app.wheelstop.android.byd.cloud.BydCloudDataProvider;
+import app.wheelstop.android.byd.cloud.SmartChargeCache;
+import app.wheelstop.android.byd.cloud.VehicleCloudSnapshot;
+import app.wheelstop.android.config.UnifiedConfigManager;
+import app.wheelstop.android.daemon.CameraDaemon;
+import app.wheelstop.android.launcher.AppLauncher;
+import app.wheelstop.android.launcher.ClusterCast;
+import app.wheelstop.android.surveillance.BsNativeLayer;
+import app.wheelstop.android.surveillance.ClusterInputRelay;
+import app.wheelstop.android.surveillance.ClusterMirrorController;
+import app.wheelstop.android.surveillance.ClusterViewMirrorService;
+import app.wheelstop.android.surveillance.DisplayScreenshot;
 
 import app.wheelstop.android.byd.BydDataCollector;
 import app.wheelstop.android.byd.BydVehicleData;
@@ -150,7 +168,7 @@ public class VehicleControlApiHandler {
             return true;
         }
         if (cleanPath.equals("/api/vehicle/stop-audio") && method.equals("POST")) {
-            app.wheelstop.android.byd.AudioPlaybackController.stop();
+            AudioPlaybackController.stop();
             JSONObject r = new JSONObject();
             r.put("success", true);
             HttpResponse.sendJson(out, r.toString());
@@ -288,8 +306,8 @@ public class VehicleControlApiHandler {
     private static void handleClusterApps(OutputStream out) throws Exception {
         JSONObject response = new JSONObject();
         try {
-            JSONArray all = app.wheelstop.android.launcher.AppLauncher.listLaunchableApps();
-            String self = app.wheelstop.android.BuildConfig.APPLICATION_ID;
+            JSONArray all = AppLauncher.listLaunchableApps();
+            String self = BuildConfig.APPLICATION_ID;
             JSONArray apps = new JSONArray();
             for (int i = 0; i < all.length(); i++) {
                 JSONObject app = all.optJSONObject(i);
@@ -316,8 +334,8 @@ public class VehicleControlApiHandler {
             String pkg = req.optString("package", "");
             // Distinguish "app no longer installed" (so the UI can say so + refresh the
             // picker) from a generic failure, before attempting the cast.
-            boolean installed = app.wheelstop.android.launcher.AppLauncher.isLaunchable(pkg);
-            boolean ok = installed && app.wheelstop.android.launcher.ClusterCast.start(pkg);
+            boolean installed = AppLauncher.isLaunchable(pkg);
+            boolean ok = installed && ClusterCast.start(pkg);
             response.put("success", ok);
             if (!ok) {
                 response.put("reason", installed ? "cast_failed" : "not_installed");
@@ -338,8 +356,8 @@ public class VehicleControlApiHandler {
     private static void handleClusterStop(OutputStream out) throws Exception {
         JSONObject response = new JSONObject();
         try {
-            app.wheelstop.android.surveillance.ClusterMirrorController.getInstance().stop();
-            app.wheelstop.android.launcher.ClusterCast.stop();
+            ClusterMirrorController.getInstance().stop();
+            ClusterCast.stop();
             response.put("success", true);
         } catch (Exception e) {
             logger.warn("cluster-stop failed: " + e.getMessage());
@@ -364,7 +382,7 @@ public class VehicleControlApiHandler {
             int l = req.optInt("l", 0), t = req.optInt("t", 0);
             int r = req.optInt("r", 0), b = req.optInt("b", 0);
             boolean commit = req.optBoolean("commit", true);
-            boolean applied = app.wheelstop.android.launcher.ClusterCast.resize(l, t, r, b, commit);
+            boolean applied = ClusterCast.resize(l, t, r, b, commit);
             response.put("success", true);
             response.put("applied", applied);
         } catch (Exception e) {
@@ -384,7 +402,7 @@ public class VehicleControlApiHandler {
         try {
             JSONObject req = (body == null || body.isEmpty()) ? new JSONObject() : new JSONObject(body);
             String pkg = req.optString("package", "");
-            boolean saved = app.wheelstop.android.launcher.ClusterCast.saveWindowFractions(
+            boolean saved = ClusterCast.saveWindowFractions(
                     pkg, req.optDouble("l", Double.NaN), req.optDouble("t", Double.NaN),
                     req.optDouble("r", Double.NaN), req.optDouble("b", Double.NaN));
             response.put("success", true);
@@ -404,13 +422,13 @@ public class VehicleControlApiHandler {
         try {
             JSONObject req = (body == null || body.isEmpty()) ? new JSONObject() : new JSONObject(body);
             String action = req.optString("action", "start");
-            app.wheelstop.android.surveillance.ClusterMirrorController ctl =
-                    app.wheelstop.android.surveillance.ClusterMirrorController.getInstance();
+            ClusterMirrorController ctl =
+                    ClusterMirrorController.getInstance();
             // Optional scaling mode (fit=0 default / fill=1 / zoom=2), sent on start/rect and
             // also settable on its own via action=mode. Absent → FIT (unchanged behaviour).
             boolean hasMode = req.has("mode");
             int scaleMode = req.optInt("mode",
-                    app.wheelstop.android.surveillance.ClusterMirrorController.SCALE_FIT);
+                    ClusterMirrorController.SCALE_FIT);
             if ("stop".equals(action)) {
                 ctl.stop();
             } else if ("diag".equals(action)) {
@@ -451,30 +469,30 @@ public class VehicleControlApiHandler {
         JSONObject response = new JSONObject();
         try {
             response.put("success", true);
-            response.put("casting", app.wheelstop.android.launcher.ClusterCast.isActive());
+            response.put("casting", ClusterCast.isActive());
             // WHICH package is on the cluster. The UI needs this because the resize box acts on the
             // CAST app, while the spinner reflects the user's next PICK — the two diverge as soon as
             // the user browses the list during a live cast. Without it the UI would key its geometry
             // (and its restore-on-select) to the spinner and reshape the cast app to another app's
             // remembered rect. Empty string when nothing is cast.
-            String castPkg = app.wheelstop.android.launcher.ClusterCast.getCastPackage();
+            String castPkg = ClusterCast.getCastPackage();
             response.put("castPackage", castPkg != null ? castPkg : "");
             // Real cluster panel size: prefer the live view-mirror's resolved value, else
             // resolve it directly (so the box aspect-locks correctly even before the first
             // mirror attach).
             int pw = 0, ph = 0;
             try {
-                app.wheelstop.android.surveillance.ClusterViewMirrorService vm =
-                        app.wheelstop.android.surveillance.ClusterViewMirrorService.getInstance();
+                ClusterViewMirrorService vm =
+                        ClusterViewMirrorService.getInstance();
                 pw = vm.currentClusterW();
                 ph = vm.currentClusterH();
             } catch (Throwable ignored) {}
             if (pw <= 1 || ph <= 1) {
                 try {
-                    android.content.Context ctx = app.wheelstop.android.daemon.CameraDaemon.getAppContext();
+                    android.content.Context ctx = CameraDaemon.getAppContext();
                     if (ctx != null) {
                         android.graphics.Point p =
-                                app.wheelstop.android.surveillance.BsNativeLayer.clusterDisplaySize(ctx);
+                                BsNativeLayer.clusterDisplaySize(ctx);
                         pw = p.x; ph = p.y;
                     }
                 } catch (Throwable ignored) {}
@@ -500,12 +518,12 @@ public class VehicleControlApiHandler {
             // live view-mirror projection mapping to cluster px.
             boolean ok;
             if ("swipe".equals(type)) {
-                ok = app.wheelstop.android.surveillance.ClusterInputRelay.swipe(
+                ok = ClusterInputRelay.swipe(
                         req.optDouble("sx", 0), req.optDouble("sy", 0),
                         req.optDouble("sx2", 0), req.optDouble("sy2", 0),
                         req.optInt("ms", 0));
             } else {
-                ok = app.wheelstop.android.surveillance.ClusterInputRelay.tap(
+                ok = ClusterInputRelay.tap(
                         req.optDouble("sx", 0), req.optDouble("sy", 0));
             }
             response.put("success", ok);
@@ -594,12 +612,12 @@ public class VehicleControlApiHandler {
         // Layer 1: OTA LF fast-path. Reads via the same readLfLockStateFromOta
         // contract used by the lock-gate poller — see CameraDaemon.readDoorLockStatus.
         try {
-            android.content.Context ctx = app.wheelstop.android.daemon.CameraDaemon.getAppContext();
+            android.content.Context ctx = CameraDaemon.getAppContext();
             if (ctx != null) {
-                Object otaDevice = app.wheelstop.android.byd.BydDeviceHelper.getDevice(
+                Object otaDevice = BydDeviceHelper.getDevice(
                     "android.hardware.bydauto.ota.BYDAutoOtaDevice", ctx);
                 if (otaDevice != null) {
-                    Object v = app.wheelstop.android.byd.BydDeviceHelper.callGetter(
+                    Object v = BydDeviceHelper.callGetter(
                         otaDevice, "getLFDoorLockState");
                     if (v instanceof Number) {
                         int sdkState = ((Number) v).intValue();
@@ -615,14 +633,14 @@ public class VehicleControlApiHandler {
 
         // Layer 2: cloud overlay (full 4-door).
         try {
-            app.wheelstop.android.byd.cloud.BydCloudDataProvider provider =
-                    app.wheelstop.android.byd.cloud.BydCloudDataProvider.getInstance();
+            BydCloudDataProvider provider =
+                    BydCloudDataProvider.getInstance();
             // Trigger an on-demand REST refresh if our cached snapshot is
             // stale. The call is internally rate-limited (30s cooldown) and
             // runs asynchronously; the *current* snapshot is used to render
             // this response, but the next request will see fresh data.
             new Thread(provider::refreshLockStateIfStale, "CloudLockRefresh").start();
-            app.wheelstop.android.byd.cloud.VehicleCloudSnapshot cs = provider.getSnapshot();
+            VehicleCloudSnapshot cs = provider.getSnapshot();
             if (cs != null && cs.hasValidLockState()) {
                 cloudAvailable = true;
                 int lf = cloudLockToApi(cs.leftFrontDoorLock);
@@ -834,7 +852,7 @@ public class VehicleControlApiHandler {
         // legend regardless. kPa, already clamped + invariant-checked.
         try {
             tyres.put("limits",
-                    app.wheelstop.android.config.UnifiedConfigManager.getTyreThresholds());
+                    UnifiedConfigManager.getTyreThresholds());
         } catch (Throwable ignored) {
             // Non-fatal: the client falls back to its built-in defaults.
         }
@@ -871,8 +889,8 @@ public class VehicleControlApiHandler {
      * The refresh is rate-limited inside the provider to protect BYD's API.
      */
     private static void handleCloudLock(OutputStream out) throws Exception {
-        app.wheelstop.android.byd.cloud.BydCloudDataProvider provider =
-                app.wheelstop.android.byd.cloud.BydCloudDataProvider.getInstance();
+        BydCloudDataProvider provider =
+                BydCloudDataProvider.getInstance();
 
         // Kick off the refresh in the background — don't block the HTTP
         // response on a BYD round-trip (REST + login can take seconds).
@@ -1050,7 +1068,7 @@ public class VehicleControlApiHandler {
                 // cancels. See AcAutoOffTimer for the single-timer / last-write-wins rules.
                 case "auto_off_timer": {
                     int minutes = req.optInt("autoOffMinutes", 0);
-                    boolean armed = app.wheelstop.android.byd.AcAutoOffTimer.arm(minutes);
+                    boolean armed = AcAutoOffTimer.arm(minutes);
                     // Log like every other climate action — this branch returns early and so
                     // never reaches the shared log line below, which previously left a
                     // "cancel when nothing was armed" call with no record at all.
@@ -1063,7 +1081,7 @@ public class VehicleControlApiHandler {
                     // can never contradict each other (a failed arm used to be able to answer
                     // armed=false alongside a positive secondsRemaining).
                     timerResp.put("secondsRemaining",
-                            armed ? app.wheelstop.android.byd.AcAutoOffTimer.secondsRemaining() : -1);
+                            armed ? AcAutoOffTimer.secondsRemaining() : -1);
                     HttpResponse.sendJson(out, timerResp.toString());
                     return;
                 }
@@ -1082,12 +1100,12 @@ public class VehicleControlApiHandler {
                     // turns that into "AC set to minimum, success". Comparisons alone cannot
                     // catch this; only isNaN can.
                     if (Double.isNaN(t)
-                            || t < app.wheelstop.android.byd.BydDataCollector.AC_SETPOINT_MIN_C
-                            || t > app.wheelstop.android.byd.BydDataCollector.AC_SETPOINT_MAX_C) {
+                            || t < BydDataCollector.AC_SETPOINT_MIN_C
+                            || t > BydDataCollector.AC_SETPOINT_MAX_C) {
                         response.put("success", false);
                         response.put("error", "temp out of range ("
-                                + app.wheelstop.android.byd.BydDataCollector.AC_SETPOINT_MIN_C + ".."
-                                + app.wheelstop.android.byd.BydDataCollector.AC_SETPOINT_MAX_C + " C)");
+                                + BydDataCollector.AC_SETPOINT_MIN_C + ".."
+                                + BydDataCollector.AC_SETPOINT_MAX_C + " C)");
                         HttpResponse.sendJson(out, response.toString());
                         return;
                     }
@@ -1100,7 +1118,7 @@ public class VehicleControlApiHandler {
                 // write target (0 = both dials, matching DiPlus's own step).
                 case "step_temp": {
                     int zone = req.optInt("zone", 0);
-                    int area = req.optInt("area", app.wheelstop.android.byd.BydDataCollector.AC_TEMP_AREA_DRIVER);
+                    int area = req.optInt("area", BydDataCollector.AC_TEMP_AREA_DRIVER);
                     int delta = req.optInt("delta", 0);
                     if (delta == 0) {
                         response.put("success", false);
@@ -1112,8 +1130,8 @@ public class VehicleControlApiHandler {
                     // in a single call. Derived from the WIDER band (Fahrenheit spans 27 notches,
                     // 64..91, vs Celsius' 16) so the limit doesn't silently truncate a legitimate
                     // full-range step on a °F car; the clamp still stops it at the real end.
-                    final int maxDelta = app.wheelstop.android.byd.BydDataCollector.AC_SETPOINT_MAX_F
-                            - app.wheelstop.android.byd.BydDataCollector.AC_SETPOINT_MIN_F;
+                    final int maxDelta = BydDataCollector.AC_SETPOINT_MAX_F
+                            - BydDataCollector.AC_SETPOINT_MIN_F;
                     if (delta < -maxDelta || delta > maxDelta) {
                         response.put("success", false);
                         response.put("error", "delta out of range (-" + maxDelta + ".." + maxDelta + ")");
@@ -1126,7 +1144,7 @@ public class VehicleControlApiHandler {
                     logger.info("Climate: action=step_temp delta=" + delta + " " + sr.outcome
                             + " path=" + sr.path + " setpoint=" + step.resultSetpoint);
                     JSONObject stepResp = routedResponse(sr, "climate");
-                    if (step.resultSetpoint != app.wheelstop.android.byd.BydVehicleData.UNAVAILABLE) {
+                    if (step.resultSetpoint != BydVehicleData.UNAVAILABLE) {
                         stepResp.put("setpoint", step.resultSetpoint);
                     }
                     HttpResponse.sendJson(out, stepResp.toString());
@@ -1175,7 +1193,7 @@ public class VehicleControlApiHandler {
                     // "this row defaulted to 0" — both arrive as 0. Use the dedicated
                     // AC Switch-off Timer action (or auto_off_timer with 0) to cancel.
                     int minutes = req.optInt("autoOffMinutes", 0);
-                    if (minutes > 0) app.wheelstop.android.byd.AcAutoOffTimer.arm(minutes);
+                    if (minutes > 0) AcAutoOffTimer.arm(minutes);
                 }
                 // NOTE: power_off does NOT need to cancel the window here — VehicleCommandRouter
                 // retires it centrally on any successful ClimateOffCommand, so every surface (this
@@ -1531,7 +1549,7 @@ public class VehicleControlApiHandler {
                 HttpResponse.sendJson(out, response.toString());
                 return;
             }
-            boolean ok = app.wheelstop.android.byd.AudioPlaybackController.speak(text, channel);
+            boolean ok = AudioPlaybackController.speak(text, channel);
             response.put("success", ok);
             HttpResponse.sendJson(out, response.toString());
         } catch (Exception e) {
@@ -1559,14 +1577,14 @@ public class VehicleControlApiHandler {
             String severity = req.optString("severity", "info");
             boolean ok;
             if ("dialog".equalsIgnoreCase(kind)) {
-                ok = app.wheelstop.android.byd.MessageOverlayController.showDialog(
+                ok = MessageOverlayController.showDialog(
                         req.optString("title", ""),
                         message,
                         req.optString("button", "OK"),
                         severity,
                         req.optInt("timeoutSec", 0));
             } else {
-                ok = app.wheelstop.android.byd.MessageOverlayController.showToast(
+                ok = MessageOverlayController.showToast(
                         message,
                         req.optString("duration", "short"),
                         req.optString("position", "bottom"),
@@ -1615,11 +1633,11 @@ public class VehicleControlApiHandler {
                     int display = req.optInt("display", 0);
                     java.io.File shot = new java.io.File(SCREENSHOT_DIR,
                             "shot_" + android.os.SystemClock.uptimeMillis() + ".png");
-                    android.content.Context ctx = app.wheelstop.android.daemon.CameraDaemon.getAppContext();
-                    app.wheelstop.android.surveillance.DisplayScreenshot.Result shotResult =
+                    android.content.Context ctx = CameraDaemon.getAppContext();
+                    DisplayScreenshot.Result shotResult =
                             (display == 1)
-                                    ? app.wheelstop.android.surveillance.DisplayScreenshot.captureCluster(ctx, shot)
-                                    : app.wheelstop.android.surveillance.DisplayScreenshot.captureHeadUnit(ctx, shot);
+                                    ? DisplayScreenshot.captureCluster(ctx, shot)
+                                    : DisplayScreenshot.captureHeadUnit(ctx, shot);
                     response.put("success", shotResult.ok);
                     response.put("target", target);
                     if (shotResult.ok) {
@@ -1644,7 +1662,7 @@ public class VehicleControlApiHandler {
                         // a blind --display 1). Route through ClusterCast, which acquires
                         // the projection, resolves the real fission id, launches fullscreen,
                         // and holds the projection open (gauges restore on stop / ACC-off).
-                        moved = app.wheelstop.android.launcher.ClusterCast.start(pkg);
+                        moved = ClusterCast.start(pkg);
                     } else {
                         // Head unit: a normal launch. If an app was cast to the cluster,
                         // moving back to the head unit releases that hold so the gauges
@@ -1652,8 +1670,8 @@ public class VehicleControlApiHandler {
                         // stop(true): reparent the cast task to display 0 WHILE the fission
                         // display is still live (before releaseSustained closes it), so the
                         // app isn't orphaned on a torn-down display.
-                        app.wheelstop.android.launcher.ClusterCast.stop(true);
-                        moved = app.wheelstop.android.launcher.AppLauncher.launchOnDisplay(pkg, display);
+                        ClusterCast.stop(true);
+                        moved = AppLauncher.launchOnDisplay(pkg, display);
                     }
                     response.put("success", moved);
                     response.put("target", target);
@@ -1665,7 +1683,7 @@ public class VehicleControlApiHandler {
                     // Stop casting any app to the driver cluster — releases the projection
                     // hold; the controller restores the gauges when no other consumer
                     // (map / blind-spot) still wants it. Idempotent.
-                    app.wheelstop.android.launcher.ClusterCast.stop();
+                    ClusterCast.stop();
                     response.put("success", true);
                     response.put("target", target);
                     HttpResponse.sendJson(out, response.toString());
@@ -1773,8 +1791,8 @@ public class VehicleControlApiHandler {
                 return;
             }
             boolean ok = onScreen
-                    ? app.wheelstop.android.byd.AudioPlaybackController.playVideoOnScreen(resolved, channel, loop)
-                    : app.wheelstop.android.byd.AudioPlaybackController.play(resolved, channel, loop);
+                    ? AudioPlaybackController.playVideoOnScreen(resolved, channel, loop)
+                    : AudioPlaybackController.play(resolved, channel, loop);
             response.put("success", ok);
             response.put("path", resolved);
             response.put("channel", channel);
@@ -1827,7 +1845,7 @@ public class VehicleControlApiHandler {
      */
     private static boolean setChannelVolumeIndex(String channel, int index) {
         try {
-            android.content.Context ctx = app.wheelstop.android.daemon.CameraDaemon.getAppContext();
+            android.content.Context ctx = CameraDaemon.getAppContext();
             if (ctx == null) {
                 logger.warn("setChannelVolumeIndex: no context available");
                 return false;
@@ -1890,7 +1908,7 @@ public class VehicleControlApiHandler {
      */
     private static boolean stepChannelVolume(String channel, int dir) {
         try {
-            android.content.Context ctx = app.wheelstop.android.daemon.CameraDaemon.getAppContext();
+            android.content.Context ctx = CameraDaemon.getAppContext();
             if (ctx == null) return false;
             android.media.AudioManager am = (android.media.AudioManager)
                     ctx.getSystemService(android.content.Context.AUDIO_SERVICE);
@@ -2027,8 +2045,8 @@ public class VehicleControlApiHandler {
                 HttpResponse.sendJson(out, resp.toString());
                 return;
             }
-            app.wheelstop.android.byd.cloud.BydCloudClient client =
-                    app.wheelstop.android.byd.cloud.BydCloudDataProvider.getInstance().getSharedClient();
+            BydCloudClient client =
+                    BydCloudDataProvider.getInstance().getSharedClient();
             if (client == null) {
                 resp.put("success", true);
                 resp.put("supported", false);
@@ -2036,10 +2054,10 @@ public class VehicleControlApiHandler {
                 HttpResponse.sendJson(out, resp.toString());
                 return;
             }
-            Boolean enabled = app.wheelstop.android.byd.cloud.SmartChargeCache.getEnabled();
-            String start = app.wheelstop.android.byd.cloud.SmartChargeCache.getStartChargeTime();
-            String end = app.wheelstop.android.byd.cloud.SmartChargeCache.getEndChargeTime();
-            String way = app.wheelstop.android.byd.cloud.SmartChargeCache.getChargeWay();
+            Boolean enabled = SmartChargeCache.getEnabled();
+            String start = SmartChargeCache.getStartChargeTime();
+            String end = SmartChargeCache.getEndChargeTime();
+            String way = SmartChargeCache.getChargeWay();
             resp.put("success", true);
             resp.put("supported", true);
             if (enabled == null) resp.put("enabled", JSONObject.NULL);

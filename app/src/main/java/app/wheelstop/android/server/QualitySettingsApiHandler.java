@@ -1,4 +1,16 @@
 package app.wheelstop.android.server;
+import app.wheelstop.android.camera.CameraConfigResolver;
+import app.wheelstop.android.camera.CameraRole;
+import app.wheelstop.android.camera.OemDashcamPipeline;
+import app.wheelstop.android.camera.ResolvedCameraConfig;
+import app.wheelstop.android.config.UnifiedConfigManager;
+import app.wheelstop.android.recording.RecordingModeManager;
+import app.wheelstop.android.surveillance.GpuPipelineConfig;
+import app.wheelstop.android.surveillance.GpuSurveillancePipeline;
+import app.wheelstop.android.surveillance.HardwareEventRecorderGpu;
+import app.wheelstop.android.telegram.config.UnifiedTelegramConfig;
+import app.wheelstop.android.telemetry.TelemetryFields;
+import app.wheelstop.android.util.Constants;
 
 import app.wheelstop.android.camera.CameraConfigResolver;
 import app.wheelstop.android.camera.CameraRole;
@@ -500,28 +512,6 @@ public class QualitySettingsApiHandler {
                 response.put("message", Messages.get("messages.quality_storage_settings_updated"));
             }
 
-            // Re-arm RecordingsIndex FileObservers against the new active dir
-            // set, AND walk the new active dir to populate the index. The
-            // refresh-only call would only catch live writes going forward —
-            // existing files on the new volume would be invisible to the
-            // index until the 1-hour periodic reconcile. Reconcile here fills
-            // them immediately. Run on a background thread so the HTTP
-            // response doesn't block on the FUSE walk.
-            if (storageTypeChanged) {
-                try {
-                    RecordingsIndexFileWatcher.getInstance().refresh();
-                } catch (Throwable t) {
-                    CameraDaemon.log("RecordingsIndexFileWatcher refresh failed: " + t.getMessage());
-                }
-                new Thread(() -> {
-                    try {
-                        RecordingsIndex.getInstance().reconcile();
-                    } catch (Throwable t) {
-                        CameraDaemon.log("Post-storage-switch reconcile failed: " + t.getMessage());
-                    }
-                }, "RecordingsIndexStorageSwitchReconcile").start();
-            }
-            
             HttpResponse.sendJson(out, response.toString());
             
         } catch (Exception e) {

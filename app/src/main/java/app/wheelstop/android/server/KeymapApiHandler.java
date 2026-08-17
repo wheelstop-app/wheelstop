@@ -1,4 +1,10 @@
 package app.wheelstop.android.server;
+import app.wheelstop.android.automation.AutomationQueue;
+import app.wheelstop.android.automation.Automations;
+import app.wheelstop.android.byd.RadioControl;
+import app.wheelstop.android.config.UnifiedConfigManager;
+import app.wheelstop.android.launcher.AppLauncher;
+import app.wheelstop.android.services.KeepAliveAccessibilityService;
 
 import app.wheelstop.android.byd.BydDataCollector;
 import app.wheelstop.android.byd.BydVehicleData;
@@ -219,10 +225,10 @@ public final class KeymapApiHandler {
         // other subsystems that read wheelstop_config.json to re-parse from disk on
         // the next access. That defeated the very cache designed to prevent it and
         // is a real, self-inflicted periodic cost. Plain reads are correct and cheap.
-        boolean enabled = app.wheelstop.android.config.UnifiedConfigManager.isKeymapEnabled();
+        boolean enabled = UnifiedConfigManager.isKeymapEnabled();
         int bindingCount;
         try {
-            bindingCount = app.wheelstop.android.config.UnifiedConfigManager.getKeymapBindings().length();
+            bindingCount = UnifiedConfigManager.getKeymapBindings().length();
         } catch (Throwable t) {
             bindingCount = 0;
         }
@@ -388,8 +394,8 @@ public final class KeymapApiHandler {
      * or a prior POST may have written it under a different UID.
      */
     private static void handleGetConfig(OutputStream out) throws Exception {
-        app.wheelstop.android.config.UnifiedConfigManager.forceReload();
-        JSONObject section = app.wheelstop.android.config.UnifiedConfigManager.getKeymap();
+        UnifiedConfigManager.forceReload();
+        JSONObject section = UnifiedConfigManager.getKeymap();
         boolean enabled = section.optBoolean("enabled", false);
         boolean a11yOn = isAccessibilityServiceEnabled();
         // Distinct honest bind signal (see isAccessibilityServiceBound): a11yOn is
@@ -406,7 +412,7 @@ public final class KeymapApiHandler {
         resp.put("enabled", enabled);
         resp.put("allowAdvanced", section.optBoolean("allowAdvanced", false));
         resp.put("doubleTapWindowMs",
-                app.wheelstop.android.config.UnifiedConfigManager.getKeymapDoubleTapWindowMs());
+                UnifiedConfigManager.getKeymapDoubleTapWindowMs());
         resp.put("bindings", section.optJSONArray("bindings") != null
                 ? section.optJSONArray("bindings") : new org.json.JSONArray());
         resp.put("a11yEnabled", a11yOn);
@@ -511,7 +517,7 @@ public final class KeymapApiHandler {
         // consume its physical key while doing nothing.
         section.put("bindings", bindings);
 
-        boolean ok = app.wheelstop.android.config.UnifiedConfigManager.setKeymap(section);
+        boolean ok = UnifiedConfigManager.setKeymap(section);
         boolean restartRequired = false;
         if (ok) {
             restartRequired = ManualClipService.getInstance()
@@ -745,7 +751,7 @@ public final class KeymapApiHandler {
         try {
             // In-proc ground truth: a live bound instance can't lie, and its
             // presence already implies both Secure-settings conditions hold.
-            if (app.wheelstop.android.services.KeepAliveAccessibilityService.isRunning()) return true;
+            if (KeepAliveAccessibilityService.isRunning()) return true;
         } catch (Throwable ignored) { /* class may be absent in a stripped build */ }
         // Shell branch (the only one that fires in the UID-2000 daemon): report
         // enabled only when the service is BOTH listed AND the master flag is on —
@@ -784,7 +790,7 @@ public final class KeymapApiHandler {
         try {
             // In-proc ground truth: onServiceConnected sets the instance, onDestroy
             // clears it, so this is precisely "bound right now".
-            if (app.wheelstop.android.services.KeepAliveAccessibilityService.isRunning()) return true;
+            if (KeepAliveAccessibilityService.isRunning()) return true;
         } catch (Throwable ignored) { /* class may be absent in a stripped build */ }
         // Daemon path (UID 2000): an active ServiceRecord for the component proves
         // AMS has bound it. Mirrors ServiceLauncher.isLocationSidecarRunning's
@@ -1148,13 +1154,13 @@ public final class KeymapApiHandler {
             response.put("error", "Missing automation id");
             return response;
         }
-        if (!app.wheelstop.android.automation.Automations.automationExists(id)) {
+        if (!Automations.automationExists(id)) {
             response.put("success", false);
             response.put("error", "Unknown automation: " + id);
             return response;
         }
         // Enqueue with no delay — the worker checks conditions and records stats.
-        app.wheelstop.android.automation.AutomationQueue.addToQueue(id, 0);
+        AutomationQueue.addToQueue(id, 0);
         logger.info("Keymap automation enqueued: " + id);
         response.put("success", true);
         return response;
@@ -1170,8 +1176,8 @@ public final class KeymapApiHandler {
      */
     private static JSONObject runRadio(JSONObject req) throws org.json.JSONException {
         JSONObject response = new JSONObject();
-        app.wheelstop.android.byd.RadioControl.Radio radio =
-                app.wheelstop.android.byd.RadioControl.parse(req.optString("radio", ""));
+        RadioControl.Radio radio =
+                RadioControl.parse(req.optString("radio", ""));
         if (radio == null) {
             response.put("success", false);
             response.put("error", "Unknown or missing radio (expected wifi/bluetooth/data)");
@@ -1181,7 +1187,7 @@ public final class KeymapApiHandler {
         boolean enable = req.has("enable")
                 ? req.optBoolean("enable", false)
                 : "on".equalsIgnoreCase(req.optString("state", ""));
-        boolean ok = app.wheelstop.android.byd.RadioControl.set(radio, enable);
+        boolean ok = RadioControl.set(radio, enable);
         logger.info("Keymap radio '" + radio + "' " + (enable ? "on" : "off") + " -> " + (ok ? "SUCCESS" : "FAILED"));
         response.put("success", ok);
         if (!ok) response.put("error", "Radio toggle failed");
@@ -1202,7 +1208,7 @@ public final class KeymapApiHandler {
             return response;
         }
         boolean split = req.optBoolean("split", false);
-        boolean ok = app.wheelstop.android.launcher.AppLauncher.launch(pkg, split);
+        boolean ok = AppLauncher.launch(pkg, split);
         logger.info("Keymap openApp '" + pkg + "'" + (split ? " [split]" : "") + " -> " + (ok ? "SUCCESS" : "FAILED"));
         response.put("success", ok);
         if (!ok) response.put("error", "Could not launch " + pkg);
@@ -1231,7 +1237,7 @@ public final class KeymapApiHandler {
      */
     private static JSONObject runShell(JSONObject req) throws org.json.JSONException {
         JSONObject response = new JSONObject();
-        if (!app.wheelstop.android.config.UnifiedConfigManager.isKeymapAdvancedAllowed()) {
+        if (!UnifiedConfigManager.isKeymapAdvancedAllowed()) {
             // Signal a 403 to the single-fire caller; runSequence strips this and
             // just treats the step as failed. Never executes when the gate is off.
             response.put("success", false);

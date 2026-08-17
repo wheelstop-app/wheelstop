@@ -1,4 +1,6 @@
 package app.wheelstop.android.camera;
+import app.wheelstop.android.config.UnifiedConfigManager;
+import app.wheelstop.android.streaming.GpuStreamScaler;
 
 import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
@@ -105,7 +107,7 @@ public class PanoramicCameraGpu {
 
     private static boolean resolveCameraModeFromConfig() {
         try {
-            org.json.JSONObject cam = app.wheelstop.android.config.UnifiedConfigManager
+            org.json.JSONObject cam = UnifiedConfigManager
                 .loadConfig().optJSONObject("camera");
             if (cam == null) return false;
             String mode = cam.optString("cameraMode", "default");
@@ -271,14 +273,14 @@ public class PanoramicCameraGpu {
     // volatile, the GL thread can cache a stale ref past the disable
     // and call drawFrame on a released scaler (EGL surface destroyed,
     // program deleted) — undefined behaviour on Adreno.
-    private volatile app.wheelstop.android.streaming.GpuStreamScaler streamScaler;  // Stream scaler (optional)
+    private volatile GpuStreamScaler streamScaler;  // Stream scaler (optional)
     private volatile HardwareEventRecorderGpu streamEncoder;  // Stream encoder (optional)
     // Dedicated blind-spot lane (views 7/8). A SECOND independent scaler+encoder
     // fed from the SAME camera texture each render-loop iteration (read-only
     // fan-out, exactly like the stream lane). Kept fully separate from the stream
     // lane so the blind-spot overlay never contends with / hijacks the live-view
     // stream's view mode, quality, or WS. Null until setBsStreamingComponents().
-    private volatile app.wheelstop.android.streaming.GpuStreamScaler bsStreamScaler;
+    private volatile GpuStreamScaler bsStreamScaler;
     private volatile HardwareEventRecorderGpu bsStreamEncoder;
     private volatile boolean bsLayerVisible = false;
     // BS render diagnostics (throttled): counts PASS-1C drawFrame calls + records why
@@ -302,7 +304,7 @@ public class PanoramicCameraGpu {
     // pace and drops frames when busy. V2 motion's internal 100ms throttle
     // (MOTION_PROCESS_INTERVAL_MS) keeps actual processing at ~10 fps so
     // there's no need for a separate frame-skip counter on the GL side.
-    private app.wheelstop.android.camera.AiLaneWorker aiLaneWorker;
+    private AiLaneWorker aiLaneWorker;
     // Tier-1 SOTA fix: dedicated AI-lane GL thread on a shared EGL context.
     // The encoder GL thread now does ONLY consume→draw→swap; the readback
     // and foveated crops live here, on a separate hardware-queue submission
@@ -811,7 +813,7 @@ public class PanoramicCameraGpu {
         // back to the downscaler's buffer pool so dropped frames are returned
         // immediately (no leak under sustained submit-while-busy).
         if (this.aiLaneWorker == null) {
-            this.aiLaneWorker = new app.wheelstop.android.camera.AiLaneWorker(frame -> {
+            this.aiLaneWorker = new AiLaneWorker(frame -> {
                 GpuDownscaler ds = this.downscaler;
                 if (ds != null && frame != null) {
                     try {
@@ -1360,7 +1362,7 @@ public class PanoramicCameraGpu {
      * @param streamScaler GPU stream scaler to initialize
      * @param streamEncoder Hardware encoder for streaming
      */
-    public void initStreamScalerOnGlThread(app.wheelstop.android.streaming.GpuStreamScaler streamScaler,
+    public void initStreamScalerOnGlThread(GpuStreamScaler streamScaler,
                                           HardwareEventRecorderGpu streamEncoder) {
         if (glHandler == null) {
             logger.error("GL thread not started");
@@ -3555,7 +3557,7 @@ public class PanoramicCameraGpu {
                         logger.info("Frame 50 recheck: camera ID " + currentId + " confirmed working");
                         probeComplete = true;
                         try {
-                            org.json.JSONObject existingCam = app.wheelstop.android.config.UnifiedConfigManager
+                            org.json.JSONObject existingCam = UnifiedConfigManager
                                 .loadConfig().optJSONObject("camera");
                             boolean hasManualOverride = existingCam != null && existingCam.optBoolean("manualOverride", false);
                             int savedId = existingCam != null ? existingCam.optInt("probedCameraId", -1) : -1;
@@ -3567,7 +3569,7 @@ public class PanoramicCameraGpu {
                                 // writing `width, height` here is what made
                                 // probedWidth/Height self-confirming. -1 when
                                 // unobserved leaves the stored values alone.
-                                app.wheelstop.android.camera.CameraConfigResolver.persistPanoramicProbe(
+                                CameraConfigResolver.persistPanoramicProbe(
                                     currentId,
                                     cameraSurfaceMode,
                                     getObservedProducerWidth(),
@@ -3777,7 +3779,7 @@ public class PanoramicCameraGpu {
             // to avoid wasted GPU raster + encode. Same pattern as PASS 1A's
             // recorderFrameStride.
             // Capture local refs to avoid NPE from concurrent pipeline shutdown
-            app.wheelstop.android.streaming.GpuStreamScaler localStreamScaler = streamScaler;
+            GpuStreamScaler localStreamScaler = streamScaler;
             HardwareEventRecorderGpu localStreamEncoder = streamEncoder;
             if (localStreamScaler != null && localStreamEncoder != null) {
                 // Client-presence gate: with no viewer connected the encoded bytes
@@ -3849,7 +3851,7 @@ public class PanoramicCameraGpu {
             // reduces the "enabled but idle" cost to zero; the very next frame after
             // the turn trigger sets bsLayerVisible=true picks up rendering (~66ms
             // worst-case latency, imperceptible).
-            app.wheelstop.android.streaming.GpuStreamScaler localBsScaler = bsStreamScaler;
+            GpuStreamScaler localBsScaler = bsStreamScaler;
             if (localBsScaler != null && bsLayerVisible) {
                 if (USE_ESCO_SURFACE_TEXTURE_PATH && localBsScaler == bsStreamScaler) {
                     localBsScaler.setTextureMatrix(currentTexMatrix);
@@ -4180,7 +4182,7 @@ public class PanoramicCameraGpu {
                 // Persist this as a fallback so next restart doesn't re-probe
                 try {
                     // OBSERVED dims only (see persistPanoramicProbe javadoc).
-                    app.wheelstop.android.camera.CameraConfigResolver.persistPanoramicProbe(
+                    CameraConfigResolver.persistPanoramicProbe(
                         lastDataCameraId,
                         0,
                         getObservedProducerWidth(),
@@ -5805,7 +5807,7 @@ public class PanoramicCameraGpu {
      * @param streamScaler GPU stream scaler
      * @param streamEncoder Stream encoder
      */
-    public void setStreamingComponents(app.wheelstop.android.streaming.GpuStreamScaler streamScaler,
+    public void setStreamingComponents(GpuStreamScaler streamScaler,
                                       HardwareEventRecorderGpu streamEncoder) {
         this.streamScaler = streamScaler;
         this.streamEncoder = streamEncoder;
@@ -5844,7 +5846,7 @@ public class PanoramicCameraGpu {
      * scaler's fully-constructed GL state. If we're already on the GL thread
      * (or the handler is gone during teardown), write directly.
      */
-    public void setBsStreamingComponents(app.wheelstop.android.streaming.GpuStreamScaler scaler,
+    public void setBsStreamingComponents(GpuStreamScaler scaler,
                                          HardwareEventRecorderGpu encoder) {
         final Handler h = glHandler;
         if (h == null || h.getLooper().getThread() == Thread.currentThread()) {
@@ -5867,7 +5869,7 @@ public class PanoramicCameraGpu {
     }
 
     /** @return the live blind-spot scaler, or null if the BS lane isn't active. */
-    public app.wheelstop.android.streaming.GpuStreamScaler getBsStreamScaler() { return bsStreamScaler; }
+    public GpuStreamScaler getBsStreamScaler() { return bsStreamScaler; }
 
     /** Called by GpuSurveillancePipeline when the blind-spot SurfaceControl layer
      *  transitions between shown (turn active / debug-preview) and hidden. PASS 1C
