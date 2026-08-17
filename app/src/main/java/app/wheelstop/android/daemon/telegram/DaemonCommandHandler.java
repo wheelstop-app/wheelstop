@@ -1,0 +1,1001 @@
+package app.wheelstop.android.daemon.telegram;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.util.Locale;
+import java.util.Properties;
+
+/**
+ * Handles /daemon commands for starting/stopping daemons.
+ * 
+ * Uses the same process names and kill approach as the UI daemon controllers.
+ * 
+ * Writes daemon state to /data/local/tmp/daemon_telegram_state.properties
+ * so health checks can honor Telegram-initiated stops.
+ */
+public class DaemonCommandHandler implements TelegramCommandHandler {
+    
+    private static final String TAG = "DaemonCmd";
+    private static final String STATE_FILE = "/data/local/tmp/daemon_telegram_state.properties";
+    
+    // Debounce duplicate commands
+    private long lastCommandTime = 0;
+    private String lastCommandKey = "";
+    private static final long DEBOUNCE_MS = 3000;
+    
+    // Daemon definitions: name -> [processName, className, displayNameKey, startable]
+    // startable: "yes" if can be started via app_process or shell, "no" if can't be started remotely
+    private static final String[][] DAEMONS = {
+        {"camera", "byd_cam_daemon", "CameraDaemon", "daemon_names.camera", "yes"},
+        {"acc", "acc_sentry_daemon", "AccSentryDaemon", "daemon_names.acc_sentry", "yes"},
+        {"sentry", "sentry_daemon", "SentryDaemon", "daemon_names.sentry", "yes"},
+        {"telegram", "telegram_bot_daemon", "TelegramBotDaemon", "daemon_names.telegram", "yes"},
+        {"cloudflared", "cloudflared", "shell", "daemon_names.cloudflare_tunnel", "yes"},
+        {"zrok", "zrok", "shell", "daemon_names.zrok_tunnel", "yes"},
+        {"tailscale", "tailscaled", "shell", "daemon_names.tailscale_tunnel", "yes"},
+        {"singbox", "sing-box", "shell", "daemon_names.sing_box", "yes"},
+    };
+    
+    private static final String AVAILABLE_DAEMONS = "camera, acc, sentry, cloudflared, zrok, tailscale, singbox";
+    
+    @Override
+    public boolean canHandle(String command) {
+        return "/daemon".equals(command);
+    }
+    
+    @Override
+    public void handle(long chatId, String[] args, CommandContext ctx) {
+        if (args.length < 3) {
+            ctx.sendMessage(chatId, ctx.tr("daemon.usage", AVAILABLE_DAEMONS));
+            return;
+        }
+        
+        String name = args[1].toLowerCase(Locale.ROOT);
+        String action = args[2].toLowerCase(Locale.ROOT);
+        
+        // Debounce
+        String cmdKey = name + ":" + action;
+        long now = System.currentTimeMillis();
+        if (cmdKey.equals(lastCommandKey) && (now - lastCommandTime) < DEBOUNCE_MS) {
+            ctx.log("Ignoring duplicate command: " + cmdKey);
+            return;
+        }
+        lastCommandKey = cmdKey;
+        lastCommandTime = now;
+        
+        // Find daemon
+        String[] daemon = findDaemon(name);
+        if (daemon == null) {
+            ctx.sendMessage(chatId, ctx.tr("daemon.unknown", name, AVAILABLE_DAEMONS));
+            return;
+        }
+        
+        String processName = daemon[1];
+        String displayName = ctx.tr(daemon[3]);
+        boolean isStartable = "yes".equals(daemon[4]);
+        
+        // Can't control telegram from telegram
+        if ("telegram".equals(name)) {
+            ctx.sendMessage(chatId, ctx.tr("daemon.cannot_control_telegram"));
+            return;
+        }
+        
+        ctx.log("Daemon command: " + displayName + " (" + processName + ") action=" + action);
+        
+        boolean isRunning = isDaemonRunning(processName, ctx);
+        
+        switch (action) {
+            case "start":
+                if (isRunning) {
+                    ctx.sendMessage(chatId, ctx.tr("daemon.already_running", displayName));
+                } else if (!isStartable) {
+                    ctx.sendMessage(chatId, ctx.tr("daemon.must_start_from_app", displayName));
+                } else {
+                    // Clear the durable disable sentinel — user is explicitly
+                    // starting this daemon, so the watchdog + app health-check
+                    // should be free to keep it alive again. The cam/acc start
+                    // flows rm their own sentinel inside the watchdog deploy and
+                    // zrok start rm's it too, but sentry/cloudflared/tailscale/
+                    // singbox don't — clear generically here so all are covered.
+                    String startSentinel = sentinelForProcess(processName);
+                    if (startSentinel != null) {
+                        ctx.execShell("rm -f " + startSentinel + " 2>/dev/null");
+                    }
+
+                    // Cloudflared and Zrok are mutually exclusive. This is an
+                    // automatic, NON-user stop of the OTHER tunnel — mirror the
+                    // app's stopDaemonSilent contract: kill it WITHOUT planting a
+                    // durable disable sentinel, otherwise the dead tunnel's
+                    // crash-recovery (app health-check + watchdog) would be
+                    // permanently disarmed for a daemon the user never stopped.
+                    if ("cloudflared".equals(name)) {
+                        if (isDaemonRunning("zrok", ctx)) {
+                            ctx.log("Stopping Zrok (mutually exclusive with Cloudflared)");
+                            stopDaemon("zrok", ctx, false /* writeSentinel */);
+                            saveDaemonState("zrok", false, ctx); // Mark zrok as stopped
+                            try { Thread.sleep(500); } catch (InterruptedException ignored) {}
+                        }
+                    } else if ("zrok".equals(name)) {
+                        if (isDaemonRunning("cloudflared", ctx)) {
+                            ctx.log("Stopping Cloudflared (mutually exclusive with Zrok)");
+                            stopDaemon("cloudflared", ctx, false /* writeSentinel */);
+                            saveDaemonState("cloudflared", false, ctx); // Mark cloudflared as stopped
+                            try { Thread.sleep(500); } catch (InterruptedException ignored) {}
+                        }
+                    }
+                    
+                    boolean ok;
+                    if ("shell".equals(daemon[2])) {
+                        // External binary - start via shell command
+                        ok = startShellDaemon(name, ctx);
+                    } else {
+                        // Java daemon - start via app_process
+                        ok = startDaemon(daemon[2], ctx);
+                    }
+                    
+                    if (ok) {
+                        // Clear stopped state - daemon was started via Telegram
+                        saveDaemonState(name, true, ctx);
+                    }
+                    ctx.sendMessage(chatId, ctx.tr(ok ? "daemon.started" : "daemon.start_failed", displayName));
+                }
+                break;
+                
+            case "stop":
+                if (!isRunning) {
+                    ctx.sendMessage(chatId, ctx.tr("daemon.not_running", displayName));
+                } else {
+                    // Real user stop — plant the durable disable sentinel so the
+                    // watchdog + app health-check honor it across restarts.
+                    boolean ok = stopDaemon(processName, ctx, true /* writeSentinel */);
+                    if (ok) {
+                        // Mark as stopped via Telegram - health check should NOT auto-restart
+                        saveDaemonState(name, false, ctx);
+                    }
+                    ctx.sendMessage(chatId, ctx.tr(ok ? "daemon.stopped" : "daemon.stop_failed", displayName));
+                }
+                break;
+                
+            case "status":
+                ctx.sendMessage(chatId, ctx.tr(
+                        isRunning ? "daemon.status_running" : "daemon.status_stopped",
+                        displayName));
+                break;
+                
+            default:
+                ctx.sendMessage(chatId, ctx.tr("daemon.action_usage", name));
+        }
+    }
+    
+    private String[] findDaemon(String name) {
+        for (String[] d : DAEMONS) {
+            if (d[0].equals(name)) return d;
+        }
+        return null;
+    }
+
+    /**
+     * Map a daemon process name to its durable "user stopped it" sentinel
+     * path. Mirrors DaemonType.sentinelPath on the app side (filenames are
+     * historical and don't all match the process name). This is the ONE
+     * cross-UID signal honored by both the watchdog scripts and the app's
+     * health-check; the legacy daemon_telegram_state.properties file is
+     * written 0600 by this UID-2000 process and the app simply cannot read
+     * it, so the sentinel is what actually prevents auto-restart.
+     *
+     * @return the sentinel path, or null for daemons we don't gate this way.
+     */
+    private static String sentinelForProcess(String processName) {
+        switch (processName) {
+            case "byd_cam_daemon":     return "/data/local/tmp/camera_daemon.disabled";
+            case "sentry_daemon":      return "/data/local/tmp/sentry_daemon.disabled";
+            case "acc_sentry_daemon":  return "/data/local/tmp/acc_sentry_daemon.disabled";
+            case "sing-box":           return "/data/local/tmp/singbox.disabled";
+            case "cloudflared":        return "/data/local/tmp/cloudflared.disabled";
+            case "zrok":               return "/data/local/tmp/zrok.disabled";
+            case "tailscaled":         return "/data/local/tmp/tailscale.disabled";
+            case "telegram_bot_daemon": return "/data/local/tmp/telegram_bot_daemon.disabled";
+            default:                   return null;
+        }
+    }
+    
+    /**
+     * Check if daemon is running using process name.
+     * Same approach as AccSentryDaemonController.
+     */
+    private boolean isDaemonRunning(String processName, CommandContext ctx) {
+        // Use grep -F for fixed string matching (handles hyphens in process names like sing-box)
+        String output = ctx.execShell("ps -A | grep -F '" + processName + "' | grep -v grep");
+        return output != null && !output.trim().isEmpty();
+    }
+    
+    /**
+     * Stop daemon using killall -9.
+     * Same approach as AccSentryDaemonController.
+     */
+    private boolean stopDaemon(String processName, CommandContext ctx, boolean writeSentinel) {
+        ctx.log("Stopping daemon: " + processName + (writeSentinel ? "" : " (silent, no sentinel)"));
+
+        // Plant the durable, cross-UID disable sentinel for EVERY daemon up
+        // front (chmod 666 so the app's health-check probe can read it). The
+        // cam/acc/zrok cases below also write their own sentinel as part of
+        // their watchdog-kill handshake — this is idempotent and additionally
+        // covers sentry / cloudflared / tailscale / singbox, which previously
+        // wrote NO sentinel and so were resurrected by the app health-check
+        // within 30s of a Telegram stop. See sentinelForProcess.
+        //
+        // writeSentinel is FALSE only for the tunnel mutual-exclusion auto-stop
+        // (mirrors the app's stopDaemonSilent contract): an automatic stop must
+        // NOT plant a durable sentinel, or it would permanently disarm the
+        // other tunnel's crash-recovery for a daemon the user never stopped.
+        String sentinel = sentinelForProcess(processName);
+        if (writeSentinel && sentinel != null) {
+            ctx.execShell("echo \"disabled by telegram at $(date)\" > " + sentinel
+                + "; chmod 666 " + sentinel + " 2>/dev/null");
+        }
+
+        // For camera daemon, also kill the restart wrapper script and delete it
+        if ("byd_cam_daemon".equals(processName)) {
+            // Write disable sentinel FIRST — prevents watchdog from restarting
+            if (writeSentinel) {
+                ctx.execShell("echo \"disabled by telegram at $(date)\" > /data/local/tmp/camera_daemon.disabled; chmod 666 /data/local/tmp/camera_daemon.disabled 2>/dev/null");
+            }
+            // Kill watchdog FIRST so it doesn't respawn the daemon.
+            //
+            // pkill -f matches FULL argv (including any variable-assignment
+            // text). execShell wraps the command in `sh -c "<cmd>"`, so even
+            // the `P=start_cam_daemon` form puts the literal pattern in the
+            // wrapper's argv → pkill self-matches and SIGKILLs its parent.
+            // ps+awk+kill filters by PID list and excludes the calling
+            // shell's own PID — same pattern used by
+            // TelegramBotDaemon.killOldInstances.
+            ctx.execShell(
+                "MY_PID=$$; ps -A -o PID,ARGS | grep -F start_cam_daemon "
+                + "| grep -v grep | awk '{print $1}' | while read pid; do "
+                + "if [ \"$pid\" != \"$MY_PID\" ]; then kill -9 $pid 2>/dev/null; fi; done"
+            );
+            // Also kill via PID file
+            ctx.execShell("if [ -f /data/local/tmp/cam_watchdog.pid ]; then kill -9 $(cat /data/local/tmp/cam_watchdog.pid) 2>/dev/null; fi");
+            ctx.execShell("rm -f /data/local/tmp/start_cam_daemon.sh 2>/dev/null");
+            ctx.execShell("rm -f /data/local/tmp/cam_watchdog.pid 2>/dev/null");
+            // Wait for watchdog to fully die before killing daemon
+            try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
+            ctx.execShell("rm -f /data/local/tmp/camera_daemon.lock 2>/dev/null");
+        }
+
+        // For acc sentry daemon, also kill the watchdog script and plant
+        // the disable sentinel so the watchdog (if it survives the pkill)
+        // exits cleanly on its next loop iteration.
+        if ("acc_sentry_daemon".equals(processName)) {
+            if (writeSentinel) {
+                ctx.execShell("echo \"disabled by telegram at $(date)\" > /data/local/tmp/acc_sentry_daemon.disabled; chmod 666 /data/local/tmp/acc_sentry_daemon.disabled 2>/dev/null");
+            }
+            // ps+awk+kill — see cam case above for why pkill -f / variable
+            // hop is not self-match safe.
+            ctx.execShell(
+                "MY_PID=$$; ps -A -o PID,ARGS | grep -F start_acc_sentry "
+                + "| grep -v grep | awk '{print $1}' | while read pid; do "
+                + "if [ \"$pid\" != \"$MY_PID\" ]; then kill -9 $pid 2>/dev/null; fi; done"
+            );
+            ctx.execShell("rm -f /data/local/tmp/start_acc_sentry.sh 2>/dev/null");
+            ctx.execShell("rm -f /data/local/tmp/acc_sentry_daemon.lock 2>/dev/null");
+        }
+
+        // For zrok, also plant the disable sentinel + nuke the watchdog
+        // script so start_zrok.sh exits and stays gone. `pkill -f 'zrok'`
+        // below catches both start_zrok.sh and the zrok share binary, but
+        // without the sentinel the watchdog can re-exec the share between
+        // our pkill and the next health-check tick. Mirrors the cam_daemon
+        // sentinel handshake.
+        if ("zrok".equals(processName)) {
+            if (writeSentinel) {
+                ctx.execShell("echo \"disabled by telegram at $(date)\" > /data/local/tmp/zrok.disabled; chmod 666 /data/local/tmp/zrok.disabled 2>/dev/null");
+            }
+            ctx.execShell("rm -f /data/local/tmp/start_zrok.sh 2>/dev/null");
+        }
+
+        // For any tunnel stop, clear the daemon-side notify-tunnel throttle
+        // stamp. The throttle exists to suppress cloudflared restart-loop
+        // spam — but a user-initiated stop+start should always re-notify.
+        if ("cloudflared".equals(processName)
+                || "zrok".equals(processName)
+                || "tailscale".equals(processName)) {
+            ctx.execShell("rm -f /data/local/tmp/.tunnel_last_notified 2>/dev/null");
+        }
+        
+        // Kill via ps+awk+kill rather than pkill -f. pkill -f matches the
+        // FULL argv (including any "P=…" variable assignment text), and
+        // execShell wraps in `sh -c "<cmd>"` whose argv contains the
+        // literal processName. Even the variable-hop trick lets pkill
+        // self-match the assignment text → calling shell exits with 137,
+        // not 0. ps+awk+kill filters by PID and excludes $$ → no
+        // self-match.
+        ctx.execShell(
+            "MY_PID=$$; ps -A -o PID,ARGS | grep -F " + processName + " | grep -v grep "
+            + "| awk '{print $1}' | while read pid; do "
+            + "if [ \"$pid\" != \"$MY_PID\" ]; then kill -9 $pid 2>/dev/null; fi; done"
+        );
+        
+        // Clean up lock file for daemons that use processName-based lock files
+        if (!"byd_cam_daemon".equals(processName) && !"acc_sentry_daemon".equals(processName)) {
+            ctx.execShell("rm -f /data/local/tmp/" + processName + ".lock 2>/dev/null");
+        }
+        
+        // Wait and verify
+        try { Thread.sleep(500); } catch (InterruptedException ignored) {}
+        
+        boolean stopped = !isDaemonRunning(processName, ctx);
+        ctx.log("Daemon " + (stopped ? "stopped" : "STILL RUNNING") + ": " + processName);
+        
+        if (!stopped) {
+            // Retry with killall as fallback
+            ctx.execShell("killall -9 " + processName + " 2>/dev/null");
+            try { Thread.sleep(500); } catch (InterruptedException ignored) {}
+            stopped = !isDaemonRunning(processName, ctx);
+        }
+        
+        return stopped;
+    }
+    
+    /**
+     * Start daemon using the same flow as DaemonLauncher.kt.
+     * For CameraDaemon: deploys watchdog script with bmmcamera.jar, native libs, proxy args.
+     * For other daemons: uses the appropriate launch pattern.
+     */
+    private boolean startDaemon(String className, CommandContext ctx) {
+        ctx.log("Starting daemon: " + className);
+        
+        // Get APK path
+        String apkPath = ctx.execShell("pm path app.wheelstop.android | head -1 | cut -d: -f2");
+        if (apkPath == null || apkPath.trim().isEmpty()) {
+            ctx.log("Cannot find APK path");
+            return false;
+        }
+        apkPath = apkPath.trim();
+        
+        if ("CameraDaemon".equals(className)) {
+            return startCameraDaemonWithWatchdog(apkPath, ctx);
+        } else if ("AccSentryDaemon".equals(className)) {
+            return startAccSentryDaemonWithWatchdog(apkPath, ctx);
+        } else {
+            // Generic daemon launch (SentryDaemon etc.).
+            // spawnDetached, NOT execShell — execShell would drain stdout
+            // until the grandchild app_process exits (i.e. forever) and
+            // freeze the polling thread.
+            String fullClass = "app.wheelstop.android.daemon." + className;
+            String cmd = String.format(
+                "CLASSPATH=%s app_process /system/bin --nice-name=%s %s >> /data/local/tmp/%s.log 2>&1",
+                apkPath, className.toLowerCase(), fullClass, className.toLowerCase());
+            ctx.spawnDetached(cmd);
+            try { Thread.sleep(1500); } catch (InterruptedException ignored) {}
+            return true;
+        }
+    }
+    
+    /**
+     * Replicates DaemonLauncher.launchCameraDaemonInternal() exactly.
+     * Step 1: Kill old processes and clean up
+     * Step 2: Write watchdog script with bmmcamera.jar, native libs, proxy args
+     * Step 3: Launch watchdog script
+     * Step 4: Verify daemon is running
+     */
+    private boolean startCameraDaemonWithWatchdog(String apkPath, CommandContext ctx) {
+        String scriptPath = "/data/local/tmp/start_cam_daemon.sh";
+        String logFile = "/data/local/tmp/cam_daemon.log";
+        String processName = "byd_cam_daemon";
+        String outputDir = "/sdcard/DCIM/BYDCam";
+        
+        // Detect native lib directory from APK path
+        String nativeLibDir = apkPath.replace("/base.apk", "/lib/arm64");
+        String libCheck = ctx.execShell("test -d '" + nativeLibDir + "' && echo yes || echo no");
+        if (libCheck == null || !libCheck.trim().equals("yes")) {
+            // Try common fallback paths
+            String[] fallbacks = {
+                "/data/app/~~*/app.wheelstop.android-*/lib/arm64",
+                "/data/app/app.wheelstop.android-1/lib/arm64",
+                "/data/app/app.wheelstop.android-2/lib/arm64"
+            };
+            for (String fb : fallbacks) {
+                String found = ctx.execShell("ls -d " + fb + " 2>/dev/null | head -1");
+                if (found != null && !found.trim().isEmpty()) {
+                    nativeLibDir = found.trim();
+                    break;
+                }
+            }
+        }
+        ctx.log("Native lib dir: " + nativeLibDir);
+        
+        // Detect proxy (same as DaemonLauncher.getProxyArgs())
+        String proxyArgs = "";
+        String proxyCheck = ctx.execShell("settings get global http_proxy 2>/dev/null");
+        if (proxyCheck != null && !proxyCheck.trim().isEmpty() && !"null".equals(proxyCheck.trim())) {
+            String[] parts = proxyCheck.trim().split(":");
+            if (parts.length >= 1) {
+                String host = parts[0];
+                String port = parts.length > 1 ? parts[1] : "8080";
+                proxyArgs = "-Dhttp.proxyHost=" + host + " " +
+                           "-Dhttp.proxyPort=" + port + " " +
+                           "-Dhttps.proxyHost=" + host + " " +
+                           "-Dhttps.proxyPort=" + port + " " +
+                           "-Dhttp.nonProxyHosts=\"localhost|127.*|[::1]\" ";
+                ctx.log("Proxy: " + host + ":" + port);
+            }
+        }
+        
+        // Step 1: Kill old processes and clean up. Combine into ONE shell
+        // round-trip via spawnDetached + a wait-for-death loop, instead of
+        // 6+ separate execShell forks (each ~30-50ms on 6125f). This
+        // saves ~250ms of bot polling-thread blockage and — critically —
+        // moves lock-rm AFTER the daemon dies so the daemon can't write
+        // its PID back into the lockfile after we rm it (the
+        // "lockfile resurrection" race A2 fixes for UI/update paths).
+        //
+        // NOTE: this multi-command payload contains "cam_daemon" literally,
+        // so a `sh -c "..."` form would self-suicide on the first pkill.
+        // ctx.execShell uses Runtime.exec with String[] argv so the
+        // calling shell's argv[2] does contain the pattern — same self-
+        // match risk. Workaround: write to a tmp file via heredoc, then
+        // run from the file. The script's argv when executed is
+        // `sh /data/local/tmp/.cam_kill.sh` — pattern not visible.
+        ctx.log("Cleaning up old processes (single round-trip)...");
+        String cleanupScript =
+            "#!/system/bin/sh\n" +
+            "# Telegram-side cam_daemon stop sequence\n" +
+            "rm -f /data/local/tmp/camera_daemon.disabled 2>/dev/null\n" +
+            "rm -f " + scriptPath + " /data/local/tmp/cam_watchdog.pid 2>/dev/null\n" +
+            "if [ -f /data/local/tmp/cam_watchdog.pid ]; then kill -9 $(cat /data/local/tmp/cam_watchdog.pid) 2>/dev/null; fi\n" +
+            "MY_PID=$$; ps -A -o PID,ARGS | grep -F 'cam_daemon' | grep -v grep "
+                + "| awk '{print $1}' | while read pid; do "
+                + "if [ \"$pid\" != \"$MY_PID\" ]; then kill -9 $pid 2>/dev/null; fi; done\n" +
+            "killall -9 " + processName + " 2>/dev/null\n" +
+            // Wait-for-death: poll up to 5s for the daemon to actually
+            // exit. Without this, lock-rm runs before SIGKILL is fully
+            // processed and the daemon can rewrite the lockfile post-rm.
+            "for i in 1 2 3 4 5; do\n" +
+            "  if ! ps -A | grep -F '" + processName + "' | grep -v grep > /dev/null; then break; fi\n" +
+            "  sleep 1\n" +
+            "  MY_PID=$$; ps -A -o PID,ARGS | grep -F '" + processName + "' | grep -v grep "
+                + "| awk '{print $1}' | while read pid; do "
+                + "if [ \"$pid\" != \"$MY_PID\" ]; then kill -9 $pid 2>/dev/null; fi; done\n" +
+            "done\n" +
+            // Now safe to rm the lock — daemon is gone.
+            "rm -f /data/local/tmp/camera_daemon.lock 2>/dev/null\n" +
+            "echo done\n";
+        // Write via heredoc — body comes from stdin not argv, no
+        // self-match. Then exec the file (argv = `sh <path>` only).
+        String cleanupTmpPath = "/data/local/tmp/.tg_cam_kill_" + System.nanoTime() + ".sh";
+        ctx.execShell(
+            "cat > " + cleanupTmpPath + " <<'__TG_CAM_KILL_EOF__'\n" +
+            cleanupScript +
+            "__TG_CAM_KILL_EOF__\n" +
+            "chmod 755 " + cleanupTmpPath
+        );
+        ctx.execShell("sh " + cleanupTmpPath);
+        ctx.execShell("rm -f " + cleanupTmpPath);
+
+        boolean stillRunning = isDaemonRunning(processName, ctx);
+        if (stillRunning) {
+            ctx.log("WARNING: Daemon still running after kill+wait — proceeding anyway");
+        }
+        
+        // Step 2: Write the SAME watchdog script the UI deploys, by calling
+        // DaemonLauncher.buildCamDaemonWatchdogScript (single source of truth).
+        // Use a single heredoc instead of 50+ separate `echo "..." >> path`
+        // execShell calls. On Snapdragon 6125f cold-fork is ~30-50ms per
+        // execShell, so the per-line approach was burning ~2s of bot
+        // polling-thread time per cam deploy. Heredoc form is one fork.
+        ctx.log("Writing watchdog script (shared with UI flow, single fork)...");
+        java.util.List<String> camLines =
+            app.wheelstop.android.launcher.DaemonLauncher.Companion.buildCamDaemonWatchdogScript(
+                apkPath, nativeLibDir, outputDir, proxyArgs);
+        StringBuilder camBody = new StringBuilder();
+        for (String line : camLines) {
+            camBody.append(line).append('\n');
+        }
+        // Heredoc body comes from stdin not argv — no self-match risk
+        // even though watchdog body contains daemon patterns. The
+        // delimiter is a unique marker that must not appear in the body.
+        ctx.execShell(
+            "cat > " + scriptPath + " <<'__CAM_WATCHDOG_EOF__'\n" +
+            camBody.toString() +
+            "__CAM_WATCHDOG_EOF__\n" +
+            "chmod 755 " + scriptPath
+        );
+        
+        // Verify script exists
+        String verify = ctx.execShell("test -f " + scriptPath + " && wc -l < " + scriptPath);
+        if (verify == null || verify.trim().isEmpty() || "0".equals(verify.trim())) {
+            ctx.log("Failed to write watchdog script");
+            return false;
+        }
+        ctx.log("Script written (" + verify.trim() + " lines)");
+        
+        // Step 3: Launch watchdog script (same as DaemonLauncher.launchCamDaemonScript).
+        // spawnDetached — the watchdog re-spawns the daemon forever, so its
+        // stdio never EOFs. Using execShell here would freeze the polling
+        // thread for the lifetime of the watchdog (i.e. until reboot).
+        ctx.log("Launching watchdog...");
+        ctx.spawnDetached("sh " + scriptPath);
+
+        // Step 4: Verify daemon is running
+        try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
+        boolean running = isDaemonRunning(processName, ctx);
+        ctx.log("CameraDaemon " + (running ? "started with watchdog ✓" : "FAILED to start"));
+        return running;
+    }
+    
+    /**
+     * Replicates DaemonLauncher.launchAccSentryDaemon() flow.
+     */
+    private boolean startAccSentryDaemonWithWatchdog(String apkPath, CommandContext ctx) {
+        String scriptPath = "/data/local/tmp/start_acc_sentry.sh";
+        String processName = "acc_sentry_daemon";
+
+        // Step 1: Kill old processes via tmpfile script (no self-match
+        // risk) + wait-for-death + post-pkill lock-rm. Same pattern as
+        // cam-daemon stop above. One round-trip instead of 4 forks.
+        ctx.log("Cleaning up old processes (single round-trip)...");
+        String accCleanupScript =
+            "#!/system/bin/sh\n" +
+            "# Telegram-side acc_sentry_daemon stop sequence\n" +
+            "rm -f /data/local/tmp/acc_sentry_daemon.disabled 2>/dev/null\n" +
+            "rm -f " + scriptPath + " 2>/dev/null\n" +
+            "MY_PID=$$; ps -A -o PID,ARGS | grep -F 'acc_sentry' | grep -v grep "
+                + "| awk '{print $1}' | while read pid; do "
+                + "if [ \"$pid\" != \"$MY_PID\" ]; then kill -9 $pid 2>/dev/null; fi; done\n" +
+            "for i in 1 2 3 4 5; do\n" +
+            "  if ! ps -A | grep -F '" + processName + "' | grep -v grep > /dev/null; then break; fi\n" +
+            "  sleep 1\n" +
+            "  MY_PID=$$; ps -A -o PID,ARGS | grep -F '" + processName + "' | grep -v grep "
+                + "| awk '{print $1}' | while read pid; do "
+                + "if [ \"$pid\" != \"$MY_PID\" ]; then kill -9 $pid 2>/dev/null; fi; done\n" +
+            "done\n" +
+            "rm -f /data/local/tmp/acc_sentry_daemon.lock 2>/dev/null\n" +
+            "echo done\n";
+        String accCleanupTmpPath = "/data/local/tmp/.tg_acc_kill_" + System.nanoTime() + ".sh";
+        ctx.execShell(
+            "cat > " + accCleanupTmpPath + " <<'__TG_ACC_KILL_EOF__'\n" +
+            accCleanupScript +
+            "__TG_ACC_KILL_EOF__\n" +
+            "chmod 755 " + accCleanupTmpPath
+        );
+        ctx.execShell("sh " + accCleanupTmpPath);
+        ctx.execShell("rm -f " + accCleanupTmpPath);
+
+        // Step 2: Write the SAME watchdog the UI uses (sentinel-gated,
+        // uncapped — see [[feedback_acc_sentry_uncapped_immortal]]). Single
+        // source: DaemonLauncher.buildAccSentryWatchdogScript. Heredoc
+        // form = one fork instead of N (one per script line).
+        ctx.log("Writing watchdog script (shared with UI flow, single fork)...");
+        java.util.List<String> accLines =
+            app.wheelstop.android.launcher.DaemonLauncher.Companion.buildAccSentryWatchdogScript(apkPath, "");
+        StringBuilder accBody = new StringBuilder();
+        for (String line : accLines) {
+            accBody.append(line).append('\n');
+        }
+        ctx.execShell(
+            "cat > " + scriptPath + " <<'__ACC_WATCHDOG_EOF__'\n" +
+            accBody.toString() +
+            "__ACC_WATCHDOG_EOF__\n" +
+            "chmod 755 " + scriptPath
+        );
+        
+        // Step 3: Launch — spawnDetached, see CameraDaemon launch above for why.
+        ctx.log("Launching watchdog...");
+        ctx.spawnDetached("sh " + scriptPath);
+
+        // Step 4: Verify
+        try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
+        boolean running = isDaemonRunning(processName, ctx);
+        ctx.log("AccSentryDaemon " + (running ? "started with watchdog ✓" : "FAILED to start"));
+        return running;
+    }
+    
+    /**
+     * Start external binary daemon via shell command.
+     */
+    private boolean startShellDaemon(String name, CommandContext ctx) {
+        ctx.log("Starting shell daemon: " + name);
+        
+        String cmd;
+        String processName;
+
+        // Check if sing-box proxy is running
+        String singboxCheck = ctx.execShell("pgrep -f sing-box");
+        boolean useProxy = singboxCheck != null && !singboxCheck.trim().isEmpty();
+        switch (name) {
+            case "cloudflared":
+                // Cloudflared tunnel - match UI version (TunnelLauncher.kt)
+                StringBuilder cfCmd = new StringBuilder();
+                cfCmd.append("nohup sh -c '");
+                
+                if (useProxy) {
+                    ctx.log("Using sing-box proxy for cloudflared...");
+                    String proxyUrl = "http://127.0.0.1:8119";
+                    cfCmd.append("export http_proxy=").append(proxyUrl).append(" && ");
+                    cfCmd.append("export https_proxy=").append(proxyUrl).append(" && ");
+                    cfCmd.append("export HTTP_PROXY=").append(proxyUrl).append(" && ");
+                    cfCmd.append("export HTTPS_PROXY=").append(proxyUrl).append(" && ");
+                    cfCmd.append("export no_proxy=\"localhost,127.0.0.1,::1\" && ");
+                    cfCmd.append("export NO_PROXY=\"localhost,127.0.0.1,::1\" && ");
+                } else {
+                    ctx.log("Direct connection (no proxy)...");
+                }
+                
+                // Same flags as UI version
+                cfCmd.append("/data/local/tmp/cloudflared ").append(app.wheelstop.android.config.CloudflaredPaidConfig.getArgs());
+                cfCmd.append("' > /data/local/tmp/cloudflared.log 2>&1 &");
+                
+                cmd = cfCmd.toString();
+                processName = "cloudflared";
+                break;
+                
+            case "zrok":
+                // Clear the disable sentinel — user is explicitly starting
+                // the tunnel via Telegram. Without this, /daemon zrok stop
+                // followed by /daemon zrok start would silently no-op
+                // because the (still-running watchdog from the prior
+                // start) sees the sentinel and exits, and our spawn below
+                // bypasses the watchdog entirely. Note: this Telegram
+                // path launches zrok bare, not under the start_zrok.sh
+                // watchdog. A subsequent UI start will re-deploy the
+                // watchdog properly; until then the tunnel runs without
+                // a supervisor.
+                ctx.execShell("rm -f /data/local/tmp/zrok.disabled 2>/dev/null");
+
+                // Zrok tunnel — use RESERVED mode with saved token (same as app UI)
+                // Falls back to public mode only if no reserved token exists
+                String identityCheck = ctx.execShell("test -f /data/local/tmp/.zrok/environment.json && echo yes || echo no");
+                if (identityCheck == null || !identityCheck.trim().equals("yes")) {
+                    // Need to enable — read token from saved file (set via app UI).
+                    // The file is encrypted at rest (CredentialCipher) since it's
+                    // written by ZrokLauncher.saveEnableToken(); decrypt() passes
+                    // plaintext through unchanged for tokens saved before that.
+                    String enableToken = ctx.execShell("cat /data/local/tmp/.zrok/enable_token 2>/dev/null");
+                    if (enableToken == null || enableToken.trim().isEmpty() || enableToken.contains("No such file")) {
+                        ctx.log("❌ No zrok enable token found. Set it from the app UI first.");
+                        return false;
+                    }
+                    enableToken = app.wheelstop.android.byd.cloud.crypto.CredentialCipher.decrypt(enableToken.trim());
+                    if (enableToken.isEmpty()) {
+                        ctx.log("❌ Zrok enable token could not be decrypted. Re-set it from the app UI.");
+                        return false;
+                    }
+                    ctx.log("⚠️ Device not enabled. Registering now (uses 1 of 5 slots)...");
+                    String enableCmd = "HOME=/data/local/tmp " +
+                        "ALL_PROXY=socks5://127.0.0.1:8119 " +
+                        "HTTP_PROXY=socks5://127.0.0.1:8119 " +
+                        "HTTPS_PROXY=socks5://127.0.0.1:8119 " +
+                        "NO_PROXY=localhost,127.0.0.1 " +
+                        "/data/local/tmp/zrok enable " + enableToken + " --headless 2>&1";
+                    String enableResult = ctx.execShell(enableCmd);
+                    ctx.log("Enable result: " + enableResult);
+                    try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
+                } else {
+                    ctx.log("✅ Device already enabled.");
+                }
+                
+                // Check for saved reserved token (from app UI's zrok reserve).
+                // Encrypted at rest by ZrokLauncher.saveReservedToken(); decrypt()
+                // passes plaintext through unchanged for pre-existing tokens.
+                String reservedToken = null;
+                String tokenRead = ctx.execShell("cat /data/local/tmp/.zrok/reserved_token 2>/dev/null");
+                if (tokenRead != null && !tokenRead.trim().isEmpty() && !tokenRead.contains("No such file")) {
+                    String decrypted = app.wheelstop.android.byd.cloud.crypto.CredentialCipher.decrypt(tokenRead.trim());
+                    if (!decrypted.isEmpty()) {
+                        reservedToken = decrypted;
+                    }
+                }
+                
+                // Also read saved unique name for logging
+                String savedName = null;
+                String nameRead = ctx.execShell("cat /data/local/tmp/.zrok/unique_name 2>/dev/null");
+                if (nameRead != null && !nameRead.trim().isEmpty() && !nameRead.contains("No such file")) {
+                    savedName = nameRead.trim();
+                }
+                
+                // Deploy the SAME watchdog script (start_zrok.sh) the UI uses,
+                // not a bare `nohup zrok share`. Without the watchdog, the
+                // share crashes once and the tunnel dies forever — and the
+                // health-check sees `daemon_telegram_state.properties=running`
+                // so it skips relaunch. Mirrors writeAndLaunchWatchdog in
+                // ZrokLauncher.kt; script body comes from
+                // ZrokLauncher.buildZrokWatchdogScriptStatic.
+                boolean reservedMode = (reservedToken != null);
+                String tokenForScript = reservedMode ? reservedToken : "";
+                if (reservedMode) {
+                    ctx.log("Using reserved token: " + reservedToken);
+                    if (savedName != null) {
+                        ctx.log("Permanent URL: https://" + savedName + ".share.zrok.io");
+                    }
+                } else {
+                    ctx.log("⚠️ No reserved token found — using public mode (random URL)");
+                }
+                java.util.List<String> watchdogLines =
+                    app.wheelstop.android.launcher.ZrokLauncher.Companion.buildZrokWatchdogScriptStatic(
+                        reservedMode, tokenForScript, useProxy);
+                String zrokScriptPath = "/data/local/tmp/start_zrok.sh";
+                // Heredoc-based write: one fork instead of N (where N is the
+                // number of script lines). Heredoc body comes from stdin so
+                // the daemon-pattern in the body never enters argv → no
+                // pkill self-match risk.
+                StringBuilder zrokBody = new StringBuilder();
+                for (String line : watchdogLines) {
+                    zrokBody.append(line).append('\n');
+                }
+                ctx.execShell(
+                    "cat > " + zrokScriptPath + " <<'__ZROK_WATCHDOG_EOF__'\n" +
+                    zrokBody.toString() +
+                    "__ZROK_WATCHDOG_EOF__\n" +
+                    "chmod 755 " + zrokScriptPath
+                );
+                cmd = "nohup sh " + zrokScriptPath + " > /dev/null 2>&1 &";
+                processName = "zrok";
+                break;
+
+            case "tailscale":
+                // Tailscale tunnel - match UI version (TailscaleLauncher.kt)
+                // Check if tailscale proxy should be enabled
+                String proxyEnabledCheck = ctx.execShell("cat /data/local/tmp/.tailscale/proxy_enabled");
+                boolean enableProxy = proxyEnabledCheck != null && proxyEnabledCheck.trim().equals("true");
+
+                StringBuilder tailscaleCmd = new StringBuilder();
+                tailscaleCmd.append("nohup sh -c '");
+
+                if (useProxy) {
+                    ctx.log("Using sing-box proxy for tailscale...");
+                    String proxyUrl = "http://127.0.0.1:8119";
+                    tailscaleCmd.append("export http_proxy=").append(proxyUrl).append(" && ");
+                    tailscaleCmd.append("export https_proxy=").append(proxyUrl).append(" && ");
+                    tailscaleCmd.append("export HTTP_PROXY=").append(proxyUrl).append(" && ");
+                    tailscaleCmd.append("export HTTPS_PROXY=").append(proxyUrl).append(" && ");
+                    tailscaleCmd.append("export no_proxy=\"localhost,127.0.0.1,::1\" && ");
+                    tailscaleCmd.append("export NO_PROXY=\"localhost,127.0.0.1,::1\" && ");
+                } else {
+                    ctx.log("Direct connection (no proxy)...");
+                }
+
+                // Same flags as UI version
+                tailscaleCmd.append("/data/local/tmp/.tailscale/tailscaled --tun userspace-networking ");
+                tailscaleCmd.append("--statedir /data/local/tmp/.tailscale ");
+                if (enableProxy) {
+                    tailscaleCmd.append("--socks5-server 127.0.0.1:8539 ");
+                }
+                tailscaleCmd.append("--socket 127.0.0.1:8532");
+                tailscaleCmd.append("' > /data/local/tmp/.tailscale/tailscaled.log 2>&1 &");
+
+                cmd = tailscaleCmd.toString();
+                processName = "tailscaled";
+                break;
+
+            case "singbox":
+                // Sing-box proxy
+                cmd = "nohup /data/local/tmp/sing-box run -c /data/local/tmp/singbox_config.json " +
+                      "> /data/local/tmp/singbox.log 2>&1 &";
+                processName = "sing-box";
+                break;
+
+            default:
+                ctx.log("Unknown shell daemon: " + name);
+                return false;
+        }
+
+        // Each per-daemon `cmd` above is shaped as `nohup … > log 2>&1 &`.
+        // spawnDetached wraps in `(<inner> </dev/null &)`, so we strip the
+        // outer `nohup` prefix and trailing ` &` to avoid double-backgrounding
+        // syntax noise. The `> log 2>&1` redirect stays — that's the
+        // daemon's own log file. Reparenting to init inside the (...&)
+        // wrapper handles SIGHUP, so dropping `nohup` is safe.
+        String inner = cmd.startsWith("nohup ") ? cmd.substring(6) : cmd;
+        if (inner.endsWith(" &")) inner = inner.substring(0, inner.length() - 2);
+        ctx.spawnDetached(inner);
+
+        // Wait and verify
+        try { Thread.sleep(1500); } catch (InterruptedException ignored) {}
+        
+        boolean started = isDaemonRunning(processName, ctx);
+        ctx.log("Shell daemon " + (started ? "started" : "FAILED") + ": " + name);
+        
+        // For cloudflared, wait longer and try to get the URL
+        if (started && "cloudflared".equals(name)) {
+            ctx.log("Waiting for tunnel URL...");
+            String tunnelUrl = null;
+            for (int i = 0; i < 15; i++) { // Wait up to 15 seconds
+                try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
+                // SOTA FIX: Use grep instead of cat to avoid loading entire log into memory
+                boolean isPaid = app.wheelstop.android.config.CloudflaredPaidConfig.isPaidVersion();
+                String token = app.wheelstop.android.config.CloudflaredPaidConfig.getToken();
+
+                if (isPaid && !token.isEmpty()) {
+                    String grepResult = ctx.execShell("grep -iE 'ingress|hostname' /data/local/tmp/cloudflared.log 2>/dev/null | grep -oE '[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}' | grep -vE '127\\.0\\.0\\.1' | tail -1");
+                    // execShell returns "" (not null) on no match — require a real host
+                    // (non-empty + contains a dot) so we never persist a bare "https://".
+                    if (grepResult != null && !grepResult.trim().isEmpty() && grepResult.contains(".")) {
+                        tunnelUrl = "https://" + grepResult.trim();
+                        ctx.log("Tunnel URL (Paid): " + tunnelUrl);
+                        // Save URL to file for /url command
+                        saveTunnelUrl(tunnelUrl, ctx);
+                        break;
+                    }
+                } else {
+                    String grepResult = ctx.execShell("grep -o 'https://[a-z0-9-]*\\.trycloudflare\\.com' /data/local/tmp/cloudflared.log 2>/dev/null | grep -v 'api\\.' | head -1");
+                    if (grepResult != null && grepResult.startsWith("https://") && grepResult.contains("-")) {
+                        tunnelUrl = grepResult.trim();
+                        ctx.log("Tunnel URL (Free): " + tunnelUrl);
+                        // Save URL to file for /url command
+                        saveTunnelUrl(tunnelUrl, ctx);
+                        break;
+                    }
+                }
+                // Check for errors (only read last few lines)
+                String tailLog = ctx.execShell("tail -5 /data/local/tmp/cloudflared.log 2>/dev/null");
+                if (tailLog != null) {
+                    if (tailLog.contains("proxyconnect") || 
+                        (tailLog.contains("proxy") && tailLog.contains("refused"))) {
+                        ctx.log("Proxy error - is sing-box running?");
+                        return false;
+                    }
+                }
+            }
+            if (tunnelUrl == null) {
+                // Check if process is still running
+                if (!isDaemonRunning(processName, ctx)) {
+                    ctx.log("Cloudflared exited - check /data/local/tmp/cloudflared.log");
+                    return false;
+                }
+                ctx.log("Tunnel started but URL not yet available");
+            }
+        }
+        
+        // For zrok, wait and try to get the URL (similar to cloudflared)
+        if (started && "zrok".equals(name)) {
+            ctx.log("Waiting for Zrok URL...");
+            String zrokUrl = null;
+            for (int i = 0; i < 15; i++) { // Wait up to 15 seconds
+                try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
+                // SOTA FIX: Use grep instead of cat to avoid loading entire log into memory
+                String grepResult = ctx.execShell("grep -o 'https://[a-z0-9]*\\.share\\.zrok\\.io' /data/local/tmp/zrok.log 2>/dev/null | head -1");
+                if (grepResult != null && grepResult.startsWith("https://")) {
+                    zrokUrl = grepResult.trim();
+                    ctx.log("Zrok URL: " + zrokUrl);
+                    // Save URL to file for /url command and send notification
+                    saveTunnelUrl(zrokUrl, ctx);
+                    break;
+                }
+                // Check for errors (only read last few lines)
+                String tailLog = ctx.execShell("tail -5 /data/local/tmp/zrok.log 2>/dev/null");
+                if (tailLog != null && (tailLog.contains("error") || tailLog.contains("failed"))) {
+                    ctx.log("Zrok error detected in log");
+                    // Don't return false - zrok might still be starting
+                }
+            }
+            if (zrokUrl == null) {
+                // Check if process is still running
+                if (!isDaemonRunning("zrok", ctx)) {
+                    ctx.log("Zrok exited - check /data/local/tmp/zrok.log");
+                    return false;
+                }
+                ctx.log("Zrok started but URL not yet available");
+            }
+        }
+
+        // For tailscale get the URL
+        if (started && "tailscale".equals(name)) {
+            String getIpResult = ctx.execShell("/data/local/tmp/.tailscale/tailscale --socket 127.0.0.1:8532 ip --1");
+            if (getIpResult != null) {
+                String tailscaleUrl = "http://" + getIpResult.trim() + ":8080";
+                ctx.log("Tailscale URL: " + tailscaleUrl);
+                saveTunnelUrl(tailscaleUrl, ctx);
+            }
+        }
+        
+        return started;
+    }
+    
+    /**
+     * Save tunnel URL to file for /url command and send notification message.
+     */
+    private void saveTunnelUrl(String url, CommandContext ctx) {
+        try {
+            // Save to file for /url command
+            ctx.execShell("echo '" + url + "' > /data/local/tmp/tunnel_url.txt");
+            ctx.log("Tunnel URL saved to file");
+            
+            // Send notification message to owner — read from the unified
+            // config (single source of truth shared with the app).
+            long ownerChatId = app.wheelstop.android.telegram.config.UnifiedTelegramConfig.getOwnerChatId();
+            if (ownerChatId > 0) {
+                ctx.sendMessage(ownerChatId, ctx.tr("daemon.tunnel_url", url));
+                ctx.log("Tunnel URL notification sent to owner");
+            }
+        } catch (Exception e) {
+            ctx.log("Error saving tunnel URL: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Save daemon state to file so health checks can honor Telegram-initiated stops.
+     * 
+     * @param daemonName The daemon name (e.g., "cloudflared", "singbox")
+     * @param running true if daemon was started, false if stopped
+     * @param ctx Command context for logging
+     */
+    private void saveDaemonState(String daemonName, boolean running, CommandContext ctx) {
+        try {
+            File stateFile = new File(STATE_FILE);
+            Properties props = new Properties();
+            
+            // Load existing state
+            if (stateFile.exists()) {
+                try (FileInputStream fis = new FileInputStream(stateFile)) {
+                    props.load(fis);
+                }
+            }
+            
+            // Update state for this daemon
+            // Format: daemon_name=running|stopped
+            props.setProperty(daemonName, running ? "running" : "stopped");
+            props.setProperty(daemonName + "_timestamp", String.valueOf(System.currentTimeMillis()));
+            
+            // Save state
+            try (FileOutputStream fos = new FileOutputStream(stateFile)) {
+                props.store(fos, "Daemon state from Telegram commands - DO NOT EDIT");
+            }
+            
+            ctx.log("Saved daemon state: " + daemonName + "=" + (running ? "running" : "stopped"));
+        } catch (Exception e) {
+            ctx.log("Error saving daemon state: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Check if a daemon was stopped via Telegram (should not be auto-restarted).
+     * This is a static method so health checks can call it.
+     * 
+     * @param daemonName The daemon name to check
+     * @return true if daemon was explicitly stopped via Telegram
+     */
+    public static boolean isDaemonStoppedViaTelegram(String daemonName) {
+        try {
+            File stateFile = new File(STATE_FILE);
+            if (!stateFile.exists()) return false;
+            
+            Properties props = new Properties();
+            try (FileInputStream fis = new FileInputStream(stateFile)) {
+                props.load(fis);
+            }
+            
+            String state = props.getProperty(daemonName, "");
+            return "stopped".equals(state);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    
+    /**
+     * Clear the stopped state for a daemon (e.g., when user starts it from UI).
+     * 
+     * @param daemonName The daemon name to clear
+     */
+    public static void clearDaemonStoppedState(String daemonName) {
+        try {
+            File stateFile = new File(STATE_FILE);
+            if (!stateFile.exists()) return;
+            
+            Properties props = new Properties();
+            try (FileInputStream fis = new FileInputStream(stateFile)) {
+                props.load(fis);
+            }
+            
+            props.remove(daemonName);
+            props.remove(daemonName + "_timestamp");
+            
+            try (FileOutputStream fos = new FileOutputStream(stateFile)) {
+                props.store(fos, "Daemon state from Telegram commands - DO NOT EDIT");
+            }
+        } catch (Exception e) {
+            // Ignore errors
+        }
+    }
+}
