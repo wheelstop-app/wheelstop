@@ -1,4 +1,5 @@
 package app.wheelstop.android.power;
+import app.wheelstop.android.monitor.AccMonitor;
 
 import android.content.Context;
 import android.os.IBinder;
@@ -351,7 +352,7 @@ public final class StealthPanel {
      */
     private static boolean isAccOnForSuppression() {
         try {
-            if (!app.wheelstop.android.monitor.AccMonitor.isAccOn()) return false;
+            if (!AccMonitor.isAccOn()) return false;
             long stamp = accOnObservedAtMs;
             if (stamp <= 0L) return false;   // never observed a real ACC-ON edge here
             long age = System.currentTimeMillis() - stamp;

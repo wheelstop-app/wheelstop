@@ -1,4 +1,6 @@
 package app.wheelstop.android.server;
+import app.wheelstop.android.abrp.SohEstimator;
+import app.wheelstop.android.monitor.SocHistoryDatabase;
 
 import app.wheelstop.android.config.UnifiedConfigManager;
 import app.wheelstop.android.config.VehicleModelSelection;
@@ -359,14 +361,14 @@ public class ModelsApiHandler {
         // Skipped when only color changed — that has no SOH bearing.
         if (modelSelectionChanged) {
             try {
-                app.wheelstop.android.monitor.SocHistoryDatabase socDb =
-                    app.wheelstop.android.monitor.SocHistoryDatabase.getInstance();
-                app.wheelstop.android.abrp.SohEstimator sohEst =
+                SocHistoryDatabase socDb =
+                    SocHistoryDatabase.getInstance();
+                SohEstimator sohEst =
                     socDb != null ? socDb.getSohEstimator() : null;
                 if (sohEst != null) {
                     sohEst.reset();
                     android.content.Context appCtx =
-                        app.wheelstop.android.daemon.CameraDaemon.getAppContext();
+                        CameraDaemon.getAppContext();
                     sohEst.autoDetectCarModel(appCtx);
                     sohEst.seedInitialEstimate();
                 }

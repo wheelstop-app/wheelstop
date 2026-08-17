@@ -1,5 +1,7 @@
 package app.wheelstop.android.config
 
+import app.wheelstop.android.byd.cloud.crypto.CredentialCipher
+import app.wheelstop.android.daemon.CameraDaemon
 import android.util.Log
 import org.json.JSONObject
 import java.io.File
@@ -177,7 +179,7 @@ object ConfigBackupService {
         // manager/DB isn't up, the category is simply omitted.
         if (includeTrips) {
             try {
-                val tam = app.wheelstop.android.daemon.CameraDaemon.getTripAnalyticsManager()
+                val tam = CameraDaemon.getTripAnalyticsManager()
                 val db = tam?.database
                 if (db != null && db.isAvailable) {
                     val trips = db.exportTripsJson()
@@ -496,7 +498,7 @@ object ConfigBackupService {
         val tripsArr = bundle.optJSONArray("trips")
         if (tripsArr != null && tripsArr.length() > 0) {
             try {
-                val tam = app.wheelstop.android.daemon.CameraDaemon.getTripAnalyticsManager()
+                val tam = CameraDaemon.getTripAnalyticsManager()
                 val db = tam?.database
                 if (db != null && db.isAvailable) {
                     val n = db.importTripsJson(tripsArr)
@@ -570,13 +572,13 @@ object ConfigBackupService {
         while (keys.hasNext()) {
             val v = obj.opt(keys.next())
             if (v is String &&
-                app.wheelstop.android.byd.cloud.crypto.CredentialCipher.isEncrypted(v)) {
+                CredentialCipher.isEncrypted(v)) {
                 val ok = try {
-                    val out = app.wheelstop.android.byd.cloud.crypto.CredentialCipher.decrypt(v)
+                    val out = CredentialCipher.decrypt(v)
                     // Success ONLY if we got real plaintext: non-empty, not the
                     // original blob echoed back, and no longer ENC:-tagged.
                     out.isNotEmpty() && out != v &&
-                        !app.wheelstop.android.byd.cloud.crypto.CredentialCipher.isEncrypted(out)
+                        !CredentialCipher.isEncrypted(out)
                 } catch (e: Exception) {
                     false
                 }

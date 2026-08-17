@@ -179,7 +179,7 @@
     <string name="setup_step_two_label">2</string>
     <string name="setup_step_three_label">3</string>
     <string name="setup_language_title">Vyberte si svůj jazyk</string>
-    <string name="setup_language_body">Výchozí nastavení je jazyk. Klepnutím vyberte jiný jazyk pro aplikaci OverDrive a webový tunel.</string>
+    <string name="setup_language_body">Výchozí nastavení je jazyk. Klepnutím vyberte jiný jazyk pro aplikaci Wheelstop a webový tunel.</string>
     <string name="setup_language_button">Vyberte jazyk</string>
     <string name="setup_autostart_title">Zakázat omezení automatického spuštění</string>
     <string name="setup_autostart_body">Klepnutím níže otevřete BYD Auto-Start. Najděte Překrytý disk v seznamu a zrušte zaškrtnutí políčka. BYD to vymaže při každé instalaci - po aktualizacích to znovu uděláte.</string>
@@ -583,7 +583,7 @@
     <!-- Setup guide — post-setup tips section -->
     <string name="setup_tips_header">Tipy &amp; řešení problémů</string>
     <string name="setup_traffic_title">Zakázat BYD Monitor provozu</string>
-    <string name="setup_traffic_body">BYD Traffic Monitor blokuje aplikace třetích stran v přístupu k internetu. Zakázání umožňuje OverDrive a všem dalším aplikacím, které skutečně instalujete, používat síť. Poté je nutný tvrdý restart.</string>
+    <string name="setup_traffic_body">BYD Traffic Monitor blokuje aplikace třetích stran v přístupu k internetu. Zakázání umožňuje Wheelstop a všem dalším aplikacím, které skutečně instalujete, používat síť. Poté je nutný tvrdý restart.</string>
     <string name="setup_traffic_button">Otevřít sledování provozu</string>
     <string name="setup_camera_fix_title">Kamera je černá nebo nesprávná?</string>
     <string name="setup_camera_fix_body">Otevřete Diagnostiku → Sonda kamery, nastavte ID kamery na 0, klepněte na Uložit, poté restartujte daemon. Pokud jsou zdroje stále špatné, opakujte s ID kamery 1. Nechte sekci mapování nedotčeno.</string>
@@ -610,7 +610,7 @@
     <string name="status_overlay_notif_title">Stav nadměrného disku</string>
     <string name="status_overlay_notif_text">Status overlay active</string>
     <!-- DaemonKeepaliveService persistent notification (foreground service)
-         and the group-summary row that collapses Overdrive's three FGS
+         and the group-summary row that collapses Wheelstop's three FGS
          notifications into one shade entry. The summary text is intentionally
          generic so it stays accurate whether all three services are running
          or only the keepalive survived an OOM respawn. -->
@@ -663,8 +663,8 @@
          personality without being corny — short, warm, specific. -->
     <string name="settings_about_support_section">Poháněn lidmi jako vy</string>
     <string name="settings_about_support_share_title">Řekněte kolegovi</string>
-    <string name="settings_about_support_share_value">Každý sdílený odkaz pomáhá jinému majiteli BYD objevit Overdrive.</string>
-    <string name="settings_about_support_share_message">Podívejte se na Overdrive — open-source sledování &amp; dashcam pro BYD: https://overdrive-5lc.pages.dev/</string>
+    <string name="settings_about_support_share_value">Každý sdílený odkaz pomáhá jinému majiteli BYD objevit Wheelstop.</string>
+    <string name="settings_about_support_share_message">Podívejte se na Wheelstop — open-source sledování &amp; dashcam pro BYD: https://overdrive-5lc.pages.dev/</string>
     <string name="settings_about_support_share_chooser">Sdílet přetažení</string>
     <string name="settings_about_open_link_failed">Nelze otevřít odkaz.</string>
     <string name="settings_about_open_link_copied">Nebyl nalezen žádný prohlížeč. URL zkopírováno: %1$s</string>
@@ -673,7 +673,7 @@
     <string name="settings_about_license_title">Licence</string>
     <string name="settings_about_license_value">MIT — open source. Klepnutím zobrazíte celý text.</string>
     <string name="settings_about_source_title">Zdrojový kód</string>
-    <string name="settings_about_source_value">github.com/yash-srivastava/Overdrive-release</string>
+    <string name="settings_about_source_value">github.com/yash-srivastava/Wheelstop-release</string>
     <string name="settings_about_star_title">Star us on GitHub</string>
     <string name="settings_about_star_value">Zabere vteřinu. Znamená hodně.</string>
     <string name="settings_about_thanks_title">Děkujeme</string>
@@ -743,7 +743,7 @@
     <string name="diagnostics_settings_subtitle">Nastavení aplikací, šablona a jazyk.</string>
     <!-- SOTA Integrations page -->
     <string name="integrations_hero_title">Integrace</string>
-    <string name="integrations_hero_subtitle">Připojit Overdrive ke svým službám.</string>
+    <string name="integrations_hero_subtitle">Připojit Wheelstop ke svým službám.</string>
     <string name="integrations_status_unknown">Klepnutím nastavíte</string>
     <string name="integrations_status_configured">Konfigurováno</string>
     <string name="integrations_status_not_set_up">Není nastaveno</string>
@@ -856,11 +856,11 @@
     <string name="settings_privacy_storage_count_format_plural">%1$d klipy</string>
     <string name="settings_privacy_reset_subtitle">Vyberte kategorie: nahrávky, události, démonové konfigurace, uložené telemetrie…</string>
     <!-- Settings → Security pane copy + PIN unlock screen.
-         The lock guards the OverDrive UI only. Cam daemon, AccSentry,
+         The lock guards the Wheelstop UI only. Cam daemon, AccSentry,
          surveillance, recording, Telegram alerts, status overlay, and the
          deterrent screen all run independently regardless of this state. -->
     <string name="settings_security_title">Zabezpečení</string>
-    <string name="settings_security_subtitle">Uzamkněte aplikaci OverDrive tak, aby ji cestující a valety nemohly otevřít bez vašeho PINu.</string>
+    <string name="settings_security_subtitle">Uzamkněte aplikaci Wheelstop tak, aby ji cestující a valety nemohly otevřít bez vašeho PINu.</string>
     <string name="settings_security_stance_title">Pouze UI zámek</string>
     <string name="settings_security_stance_body">Průzkum, nahrávání, odstrašování, upozornění a služby na pozadí stále běží, když je aplikace uzamčena. PIN brány přebytečného disku, nic jiného.</string>
     <string name="settings_security_overline_lock">Zámek aplikace</string>
@@ -949,7 +949,7 @@
          provider, so translators should keep numeric placeholders intact
          (do not spell out the digits). -->
     <!-- First-launch welcome — only shown on the very first dashboard visit. -->
-    <string name="dashboard_insight_welcome">Welcome — Overdrive je nyní váš druhý pár očí.</string>
+    <string name="dashboard_insight_welcome">Welcome — Wheelstop je nyní váš druhý pár očí.</string>
     <!-- Parking delta. %1$s = absolute SOC delta string ("8%"); %2$s = absolute kWh string ("4 kWh"). -->
     <string name="dashboard_insight_parked_charged_kwh">Vyzvednuto %1$s (&lt;unk&gt;%2$s) během zaparkování</string>
     <string name="dashboard_insight_parked_charged">Zvednuto %1$s během zaparkování</string>

@@ -1,4 +1,26 @@
 package app.wheelstop.android.byd;
+import app.wheelstop.android.abrp.SohEstimator;
+import app.wheelstop.android.automation.Automations;
+import app.wheelstop.android.automation.condition.BlindSpotEvent;
+import app.wheelstop.android.automation.condition.BydEvent;
+import app.wheelstop.android.automation.condition.EventData;
+import app.wheelstop.android.byd.bodywork.BodyworkConstants;
+import app.wheelstop.android.byd.cloud.BydCloudConfig;
+import app.wheelstop.android.byd.cloud.BydCloudDataProvider;
+import app.wheelstop.android.byd.cloud.VehicleCloudSnapshot;
+import app.wheelstop.android.config.UnifiedConfigManager;
+import app.wheelstop.android.monitor.ChargingDetector;
+import app.wheelstop.android.monitor.ChargingPowerEstimator;
+import app.wheelstop.android.monitor.GearMonitor;
+import app.wheelstop.android.monitor.SocHistoryDatabase;
+import app.wheelstop.android.notifications.ChargingEventNotifier;
+import app.wheelstop.android.notifications.DoorEventNotifier;
+import app.wheelstop.android.notifications.NotificationBus;
+import app.wheelstop.android.notifications.NotificationEvent;
+import app.wheelstop.android.power.BatteryVoltageMonitorV2;
+import app.wheelstop.android.power.SocCutoffMonitor;
+import app.wheelstop.android.power.StealthPanel;
+import app.wheelstop.android.trips.TripConfig;
 
 import android.content.Context;
 
@@ -290,7 +312,7 @@ public class BydDataCollector {
         // If auto-detection failed, fall back to user's persisted preference
         if (!unitDetected) {
             try {
-                app.wheelstop.android.trips.TripConfig tripConfig = new app.wheelstop.android.trips.TripConfig();
+                TripConfig tripConfig = new TripConfig();
                 tripConfig.load();
                 String savedUnit = tripConfig.getDistanceUnit();
                 if ("mi".equals(savedUnit)) {
@@ -350,8 +372,8 @@ public class BydDataCollector {
         // here — the door listener is only invoked once the bodywork HAL
         // fires onDoorStateChanged, which requires registerAllListeners to
         // have run first.
-        app.wheelstop.android.notifications.DoorEventNotifier.start();
-        app.wheelstop.android.notifications.ChargingEventNotifier.start();
+        DoorEventNotifier.start();
+        ChargingEventNotifier.start();
 
         // Start periodic polling to keep data fresh (listeners may not fire for all values)
         startPolling();
@@ -1011,8 +1033,8 @@ public class BydDataCollector {
             @Override
             public void onReceive(android.content.Context ctx, android.content.Intent intent) {
                 if (intent == null || intent.getAction() == null) return;
-                app.wheelstop.android.monitor.ChargingDetector det =
-                    app.wheelstop.android.monitor.ChargingDetector.getInstance();
+                ChargingDetector det =
+                    ChargingDetector.getInstance();
                 switch (intent.getAction()) {
                     case android.content.Intent.ACTION_POWER_CONNECTED:
                         det.onPowerConnected();
@@ -1318,7 +1340,7 @@ public class BydDataCollector {
         // Notify the fused charging detector first so it can invalidate
         // ACC-dependent signals (enginePowerKw goes stale once ACC is off
         // and must not be reused as charging evidence).
-        app.wheelstop.android.monitor.ChargingDetector.getInstance().updateAccState(isOn);
+        ChargingDetector.getInstance().updateAccState(isOn);
 
         // ACC just transitioned OFF: also clear the snapshot's enginePowerKw
         // so any consumer reading the snapshot directly (not through the
@@ -1394,10 +1416,10 @@ public class BydDataCollector {
     /** True if ANY of the given automation events is referenced by an enabled automation.
      *  Used to self-gate the display-only device polls below so they cost nothing (no SDK
      *  read) unless a rule actually keys off that signal. Never throws. */
-    private static boolean anyReferenced(app.wheelstop.android.automation.condition.EventData... keys) {
+    private static boolean anyReferenced(EventData... keys) {
         try {
-            for (app.wheelstop.android.automation.condition.EventData k : keys) {
-                if (app.wheelstop.android.automation.Automations.isEventReferenced(k)) return true;
+            for (EventData k : keys) {
+                if (Automations.isEventReferenced(k)) return true;
             }
         } catch (Throwable ignored) { }
         return false;
@@ -1528,15 +1550,15 @@ public class BydDataCollector {
         // OCCUPANT_DRIVER is named here too: it is inferred from the driver belt (plus the
         // reminder mask), so it needs this collector running for the same reason the belt
         // events do — otherwise a driver-occupancy rule alone would leave the belt unpolled.
-        if (anyReferenced(app.wheelstop.android.automation.condition.BydEvent.SEATBELT_DRIVER,
-                          app.wheelstop.android.automation.condition.BydEvent.SEATBELT_PASSENGER,
-                          app.wheelstop.android.automation.condition.BydEvent.OCCUPANT_PASSENGER,
-                          app.wheelstop.android.automation.condition.BydEvent.OCCUPANT_DRIVER)) {
+        if (anyReferenced(BydEvent.SEATBELT_DRIVER,
+                          BydEvent.SEATBELT_PASSENGER,
+                          BydEvent.OCCUPANT_PASSENGER,
+                          BydEvent.OCCUPANT_DRIVER)) {
             collectSafetyBelt(b);
         }
         // Drive mode + powertrain (EV/HEV) — energy/drive-config device.
-        if (anyReferenced(app.wheelstop.android.automation.condition.BydEvent.DRIVE_MODE,
-                          app.wheelstop.android.automation.condition.BydEvent.POWERTRAIN_MODE)) {
+        if (anyReferenced(BydEvent.DRIVE_MODE,
+                          BydEvent.POWERTRAIN_MODE)) {
             collectEnergy(b);
         }
         // Lights (hazard / high-beam / low-beam) + auto-lights — light device. The light
@@ -1552,10 +1574,10 @@ public class BydDataCollector {
         // toBuilder() — so the overlay's beam glyphs were frozen at their boot
         // state (the reported "headlight icons don't work") and MQTT/API reported a
         // stale value. Poll whenever an automation OR the overlay wants beams.
-        if (anyReferenced(app.wheelstop.android.automation.condition.BydEvent.LIGHTS_HAZARD,
-                          app.wheelstop.android.automation.condition.BydEvent.LIGHTS_HIGH_BEAM,
-                          app.wheelstop.android.automation.condition.BydEvent.LIGHTS_LOW_BEAM,
-                          app.wheelstop.android.automation.condition.BydEvent.AUTO_LIGHTS)
+        if (anyReferenced(BydEvent.LIGHTS_HAZARD,
+                          BydEvent.LIGHTS_HIGH_BEAM,
+                          BydEvent.LIGHTS_LOW_BEAM,
+                          BydEvent.AUTO_LIGHTS)
                 || overlayWantsBeams()) {
             collectLight(b);
         }
@@ -1574,7 +1596,7 @@ public class BydDataCollector {
         int ambientOn = getAmbientLightEnabled();
         if (ambientOn != BydVehicleData.UNAVAILABLE) b.ambientEnabled(ambientOn);
         // Slope (incline degrees) — sensor device.
-        if (anyReferenced(app.wheelstop.android.automation.condition.BydEvent.SLOPE)) {
+        if (anyReferenced(BydEvent.SLOPE)) {
             collectSensor(b);
         }
         // Central-lock state (locked/unlocked) — OTA rail (getLFDoorLockState). Published
@@ -1584,11 +1606,11 @@ public class BydDataCollector {
         // surveillance arm-gate AND early-returns while ACC is on — so the lock trigger was
         // dead outside that narrow window (the reported "lock trigger doesn't fire" bug).
         // Self-gated by anyReferenced so it costs nothing unless a rule keys off it.
-        if (anyReferenced(app.wheelstop.android.automation.condition.BydEvent.LOCK)) {
+        if (anyReferenced(BydEvent.LOCK)) {
             collectLockState();
         }
         // Nearest radar obstacle (cm) — radar/PDC device (parked-radar dependent).
-        if (anyReferenced(app.wheelstop.android.automation.condition.BydEvent.RADAR_NEAREST)) {
+        if (anyReferenced(BydEvent.RADAR_NEAREST)) {
             collectRadar(b);
         }
 
@@ -1686,17 +1708,17 @@ public class BydDataCollector {
         // that's always P. The detector uses gear==P as an L3 guard.
         int gearNow;
         try {
-            app.wheelstop.android.monitor.GearMonitor gm =
-                app.wheelstop.android.monitor.GearMonitor.getInstance();
+            GearMonitor gm =
+                GearMonitor.getInstance();
             gearNow = gm.getCurrentGear();
         } catch (Exception e) {
             gearNow = (built.gearMode != BydVehicleData.UNAVAILABLE)
                 ? built.gearMode
-                : app.wheelstop.android.monitor.GearMonitor.GEAR_P;
+                : GearMonitor.GEAR_P;
         }
-        app.wheelstop.android.monitor.ChargingDetector.getInstance()
+        ChargingDetector.getInstance()
             .updatePollEvidence(built, gearNow,
-                app.wheelstop.android.monitor.GearMonitor.GEAR_P);
+                GearMonitor.GEAR_P);
 
         // Feed the ring-buffer power estimator (FALLBACK power source for models
         // that report no direct/external charging power). It accumulates ONLY
@@ -1705,8 +1727,8 @@ public class BydDataCollector {
         // discharge can never produce a phantom reading. See ChargingPowerEstimator.
         try {
             boolean fusedCharging =
-                app.wheelstop.android.monitor.ChargingDetector.getInstance().isCharging();
-            boolean inPark = (gearNow == app.wheelstop.android.monitor.GearMonitor.GEAR_P);
+                ChargingDetector.getInstance().isCharging();
+            boolean inPark = (gearNow == GearMonitor.GEAR_P);
             // SOC-derived energy = SOC × nominal × SOH. The SOC gauge is the ONE
             // signal that reliably tracks charging on every drivetrain, and it's the
             // estimator's PREFERRED source now: on PHEV the hardware energy getters
@@ -1733,8 +1755,8 @@ public class BydDataCollector {
             // above, so the gate is free.
             if (fusedCharging && inPark && isPhev(built)) {
                 try {
-                    app.wheelstop.android.abrp.SohEstimator soh =
-                        app.wheelstop.android.monitor.SocHistoryDatabase.getInstance().getSohEstimator();
+                    SohEstimator soh =
+                        SocHistoryDatabase.getInstance().getSohEstimator();
                     double nominal = (soh != null) ? soh.getNominalCapacityKwh() : 0;
                     if (nominal > 0) {
                         // getDisplaySoh() ONCE. hasDisplaySoh() is literally
@@ -1748,7 +1770,7 @@ public class BydDataCollector {
                     }
                 } catch (Throwable ignored) { /* leave NaN → estimator uses remain/cap */ }
             }
-            app.wheelstop.android.monitor.ChargingPowerEstimator.getInstance().sample(
+            ChargingPowerEstimator.getInstance().sample(
                 System.currentTimeMillis(),
                 built.chargingCapacityKwh,
                 built.remainKwh,
@@ -1799,8 +1821,8 @@ public class BydDataCollector {
 
         double nominal = 0;
         try {
-            app.wheelstop.android.abrp.SohEstimator sohEst =
-                app.wheelstop.android.monitor.SocHistoryDatabase.getInstance().getSohEstimator();
+            SohEstimator sohEst =
+                SocHistoryDatabase.getInstance().getSohEstimator();
             if (sohEst != null) nominal = sohEst.getNominalCapacityKwh();
         } catch (Throwable ignored) { /* nominal stays 0 → ×2 fallback below */ }
 
@@ -2213,8 +2235,8 @@ public class BydDataCollector {
                         double socNow = b.socPercent;
                         double nominalNow = 0;
                         try {
-                            app.wheelstop.android.abrp.SohEstimator se =
-                                app.wheelstop.android.monitor.SocHistoryDatabase.getInstance().getSohEstimator();
+                            SohEstimator se =
+                                SocHistoryDatabase.getInstance().getSohEstimator();
                             if (se != null) nominalNow = se.getNominalCapacityKwh();
                         } catch (Throwable ignored) {}
                         logger.info("[phev-energy] SOC=" + String.format("%.1f", socNow)
@@ -2838,10 +2860,10 @@ public class BydDataCollector {
             if (!Double.isNaN(cellHi) && !Double.isNaN(cellLo)) {
                 int cellCount = 0;
                 try {
-                    app.wheelstop.android.abrp.SohEstimator soh =
-                        app.wheelstop.android.monitor.SocHistoryDatabase.getInstance().getSohEstimator();
+                    SohEstimator soh =
+                        SocHistoryDatabase.getInstance().getSohEstimator();
                     if (soh != null) {
-                        cellCount = app.wheelstop.android.abrp.SohEstimator
+                        cellCount = SohEstimator
                             .cellCountForCapacity(soh.getNominalCapacityKwh());
                     }
                 } catch (Throwable ignored) {}
@@ -3033,7 +3055,7 @@ public class BydDataCollector {
                     logger.debug("collectCharging Power.isCharging error: " + e.getMessage());
                 }
             }
-            app.wheelstop.android.monitor.ChargingDetector.getInstance()
+            ChargingDetector.getInstance()
                 .updatePowerIsCharging(powerIsCharging);
 
             // Feature ID for battery device state, fallback to named getter
@@ -3445,7 +3467,7 @@ public class BydDataCollector {
                         // exists to catch — still passes on its very first poll.
                         boolean sessionLive = false;
                         try {
-                            sessionLive = app.wheelstop.android.monitor.ChargingDetector
+                            sessionLive = ChargingDetector
                                     .getInstance().isCharging();
                         } catch (Throwable ignored) { /* detector not up yet → treat as idle */ }
                         // SECOND ADMISSION PATH — the detector is not the only proof of a live
@@ -3992,8 +4014,8 @@ public class BydDataCollector {
         // PHEV pack across the catalog.
         double knownNominal = 0;
         try {
-            app.wheelstop.android.abrp.SohEstimator sohEst =
-                app.wheelstop.android.monitor.SocHistoryDatabase.getInstance().getSohEstimator();
+            SohEstimator sohEst =
+                SocHistoryDatabase.getInstance().getSohEstimator();
             if (sohEst != null) knownNominal = sohEst.getNominalCapacityKwh();
         } catch (Exception ignored) {}
         if (knownNominal > 0 && knownNominal < 30.0) {
@@ -4793,11 +4815,11 @@ public class BydDataCollector {
     // These mirror the UnifiedConfigManager defaults and are the fallback used
     // when the config is unreadable.
     private static final int TYRE_LOW_DEFAULT_KPA =
-            app.wheelstop.android.config.UnifiedConfigManager.TYRE_LOW_DEFAULT_KPA;
+            UnifiedConfigManager.TYRE_LOW_DEFAULT_KPA;
     private static final int TYRE_HIGH_DEFAULT_KPA =
-            app.wheelstop.android.config.UnifiedConfigManager.TYRE_HIGH_DEFAULT_KPA;
+            UnifiedConfigManager.TYRE_HIGH_DEFAULT_KPA;
     private static final int TYRE_CRITICAL_LOW_DEFAULT_KPA =
-            app.wheelstop.android.config.UnifiedConfigManager.TYRE_CRITICAL_LOW_DEFAULT_KPA;
+            UnifiedConfigManager.TYRE_CRITICAL_LOW_DEFAULT_KPA;
     // Consecutive-read debounce so a single transient kPa sample (hard cornering,
     // temperature spike) can't fire, and a single blip can't re-arm.
     private static final int TYRE_ALARM_FIRE_STREAK = 2;
@@ -4930,7 +4952,7 @@ public class BydDataCollector {
         int criticalLow = TYRE_CRITICAL_LOW_DEFAULT_KPA;
         try {
             org.json.JSONObject th =
-                    app.wheelstop.android.config.UnifiedConfigManager.getTyreThresholds();
+                    UnifiedConfigManager.getTyreThresholds();
             lowFront = th.optInt("frontLow", lowFront);
             highFront = th.optInt("frontHigh", highFront);
             lowRear = th.optInt("rearLow", lowRear);
@@ -5080,17 +5102,17 @@ public class BydDataCollector {
                     : Messages.get(over
                             ? "notifications.tyre_overpressure"
                             : "notifications.tyre_underpressure");
-            app.wheelstop.android.notifications.NotificationEvent.Severity sev = fireLevel >= 2
-                    ? app.wheelstop.android.notifications.NotificationEvent.Severity.CRITICAL
-                    : app.wheelstop.android.notifications.NotificationEvent.Severity.WARN;
+            NotificationEvent.Severity sev = fireLevel >= 2
+                    ? NotificationEvent.Severity.CRITICAL
+                    : NotificationEvent.Severity.WARN;
             try {
                 org.json.JSONObject data = new org.json.JSONObject();
                 data.put("wheel", i);
                 if (kPaValid) data.put("kPa", kPa);
                 if (stateValid) data.put("state", pState);
                 data.put("level", fireLevel);
-                app.wheelstop.android.notifications.NotificationBus.get().publish(
-                        new app.wheelstop.android.notifications.NotificationEvent(
+                NotificationBus.get().publish(
+                        new NotificationEvent(
                                 "vehicle.health.tyre.pressure",
                                 sev,
                                 title,
@@ -5129,16 +5151,16 @@ public class BydDataCollector {
         if (leak > tyreLeakLatchedSeverity[i]) {
             tyreLeakLatchedSeverity[i] = leak;
             boolean kPaValid = kPa > 0 && kPa != BydVehicleData.UNAVAILABLE;
-            app.wheelstop.android.notifications.NotificationEvent.Severity sev = leak == 2
-                    ? app.wheelstop.android.notifications.NotificationEvent.Severity.CRITICAL
-                    : app.wheelstop.android.notifications.NotificationEvent.Severity.WARN;
+            NotificationEvent.Severity sev = leak == 2
+                    ? NotificationEvent.Severity.CRITICAL
+                    : NotificationEvent.Severity.WARN;
             try {
                 org.json.JSONObject data = new org.json.JSONObject();
                 data.put("wheel", i);
                 data.put("leakState", leak);
                 if (kPaValid) data.put("kPa", kPa);
-                app.wheelstop.android.notifications.NotificationBus.get().publish(
-                        new app.wheelstop.android.notifications.NotificationEvent(
+                NotificationBus.get().publish(
+                        new NotificationEvent(
                                 "vehicle.health.tyre.leak",
                                 sev,
                                 Messages.get(leak == 2
@@ -5531,8 +5553,8 @@ public class BydDataCollector {
                 int raw = (Integer) v;
                 // Only 0 (closed) / 1 (open) are meaningful; 255/-1 = unavailable → skip so
                 // an unreadable area never manufactures a spurious "closed" edge.
-                if (raw != app.wheelstop.android.byd.bodywork.BodyworkConstants.STATE_OPEN
-                        && raw != app.wheelstop.android.byd.bodywork.BodyworkConstants.STATE_CLOSED) continue;
+                if (raw != BodyworkConstants.STATE_OPEN
+                        && raw != BodyworkConstants.STATE_CLOSED) continue;
                 Integer prev = lastPolledDoorState.get(area);
                 if (prev != null && prev == raw) continue; // no change
                 lastPolledDoorState.put(area, raw);
@@ -5540,7 +5562,7 @@ public class BydDataCollector {
                 // "closed" — publishing a boot-time "closed" is a non-event and matches
                 // the callback path's transition semantics; a first-seen "open" IS worth
                 // delivering (a door left open while parked).
-                if (prev == null && raw == app.wheelstop.android.byd.bodywork.BodyworkConstants.STATE_CLOSED) continue;
+                if (prev == null && raw == BodyworkConstants.STATE_CLOSED) continue;
                 notifyDoorStateListeners(area, raw);
             } catch (Exception ignored) {
                 // Getter absent on this trim → nothing to poll; leave to the callback path.
@@ -6264,15 +6286,15 @@ public class BydDataCollector {
      */
     private void mergeCloudData(BydVehicleData.Builder b) {
         try {
-            app.wheelstop.android.byd.cloud.BydCloudConfig config =
-                    app.wheelstop.android.byd.cloud.BydCloudConfig.fromUnifiedConfig();
+            BydCloudConfig config =
+                    BydCloudConfig.fromUnifiedConfig();
             if (!config.cloudDataMerge) return;
 
-            app.wheelstop.android.byd.cloud.BydCloudDataProvider provider =
-                    app.wheelstop.android.byd.cloud.BydCloudDataProvider.getInstance();
+            BydCloudDataProvider provider =
+                    BydCloudDataProvider.getInstance();
             if (!provider.isTelemetryFresh()) return;
 
-            app.wheelstop.android.byd.cloud.VehicleCloudSnapshot cs = provider.getSnapshot();
+            VehicleCloudSnapshot cs = provider.getSnapshot();
             if (cs == null) return;
 
             // SOC — only if SDK didn't provide it
@@ -6622,7 +6644,7 @@ public class BydDataCollector {
                     // not running). Doesn't try to subclass the abstract
                     // listener separately — piggybacks on this hub.
                     try {
-                        app.wheelstop.android.power.SocCutoffMonitor.notifyElecPercentage(soc);
+                        SocCutoffMonitor.notifyElecPercentage(soc);
                     } catch (Throwable ignored) {}
                 }
             } catch (Exception e) { /* ignore */ }
@@ -6677,7 +6699,7 @@ public class BydDataCollector {
                     // Fan out — same rationale as onOtaCallback. Some BYD
                     // trims route OTA voltage through the generic hub instead.
                     try {
-                        app.wheelstop.android.power.BatteryVoltageMonitorV2
+                        BatteryVoltageMonitorV2
                                 .notifyBatteryPowerVoltage(voltage);
                     } catch (Throwable ignored) {}
                 }
@@ -6718,8 +6740,8 @@ public class BydDataCollector {
                     int iVal = BydDeviceHelper.getIntValue(args[1]);
                     if (iVal > 2000 && iVal < 9000) {       // decivolts: 200.0–900.0 V
                         double volts = iVal / 10.0;
-                        app.wheelstop.android.abrp.SohEstimator soh =
-                            app.wheelstop.android.monitor.SocHistoryDatabase.getInstance().getSohEstimator();
+                        SohEstimator soh =
+                            SocHistoryDatabase.getInstance().getSohEstimator();
                         if (soh != null && !(soh.getNominalCapacityKwh() > 0)) {
                             soh.autoDetectFromPackVoltage(volts, snapshot.get());
                         }
@@ -6784,7 +6806,7 @@ public class BydDataCollector {
                     }
                     // Push edge into fused detector regardless of whether the
                     // snapshot value moved (it may already match from a poll).
-                    app.wheelstop.android.monitor.ChargingDetector.getInstance().updateBmsState(state);
+                    ChargingDetector.getInstance().updateBmsState(state);
                 }
             } catch (Exception e) { /* ignore */ }
             return;
@@ -6852,7 +6874,7 @@ public class BydDataCollector {
                     // subclasses AbsBYDAutoOtaListener once and routes here;
                     // V2 piggybacks instead of trying its own registration.
                     try {
-                        app.wheelstop.android.power.BatteryVoltageMonitorV2
+                        BatteryVoltageMonitorV2
                                 .notifyBatteryPowerVoltage(voltage);
                     } catch (Throwable ignored) {}
                 }
@@ -6881,9 +6903,9 @@ public class BydDataCollector {
             // Gated on an enabled seatbelt automation so it stays zero-cost otherwise, mirroring
             // SeatbeltEvent.poll().
             try {
-                if (anyReferenced(app.wheelstop.android.automation.condition.BydEvent.SEATBELT_DRIVER,
-                                  app.wheelstop.android.automation.condition.BydEvent.SEATBELT_PASSENGER)) {
-                    app.wheelstop.android.automation.condition.BydEvent.pollSeatbelts();
+                if (anyReferenced(BydEvent.SEATBELT_DRIVER,
+                                  BydEvent.SEATBELT_PASSENGER)) {
+                    BydEvent.pollSeatbelts();
                 }
             } catch (Throwable t) {
                 logger.debug("onSafetyBeltStatusChanged re-sample error: " + t.getMessage());
@@ -7032,7 +7054,7 @@ public class BydDataCollector {
         // pulses, so treating a non-alerting event as "clear" would cancel a live
         // warning almost immediately.
         if (alerting) {
-            app.wheelstop.android.automation.condition.BlindSpotEvent.onAlert(left);
+            BlindSpotEvent.onAlert(left);
         }
     }
 
@@ -8060,8 +8082,8 @@ public class BydDataCollector {
             return; // INVALID/unreadable → no false edge, and don't disturb the streak
         }
         try {
-            app.wheelstop.android.automation.Automations.update(
-                    app.wheelstop.android.automation.condition.BydEvent.LOCK,
+            Automations.update(
+                    BydEvent.LOCK,
                     locked ? "locked" : "unlocked");
         } catch (Throwable t) {
             logger.debug("collectLockState publish failed: " + t.getMessage());
@@ -9810,7 +9832,7 @@ public class BydDataCollector {
         // for the rationale (some setting HALs only actuate from a normal app-process Context,
         // not the daemon's). Async; the app service (VehicleActuatorService) logs its own result.
         try {
-            app.wheelstop.android.byd.VehicleActuatorBridge.dispatchHud(level);
+            VehicleActuatorBridge.dispatchHud(level);
         } catch (Throwable t) {
             logger.debug("setHudBrightness app-process dispatch failed: " + t.getMessage());
         }
@@ -9837,7 +9859,7 @@ public class BydDataCollector {
         }
         // Load-bearing path: run the identical switch write from the REAL app process.
         try {
-            app.wheelstop.android.byd.VehicleActuatorBridge.dispatchHudPower(on);
+            VehicleActuatorBridge.dispatchHudPower(on);
         } catch (Throwable t) {
             logger.debug("setHudPower app-process dispatch failed: " + t.getMessage());
         }
@@ -9912,8 +9934,8 @@ public class BydDataCollector {
         // may not light it at all. Both are no-ops on legacy units.
         if (on) {
             try {
-                app.wheelstop.android.power.StealthPanel.requestUserOverride();
-                app.wheelstop.android.power.StealthPanel.turnOn(context);
+                StealthPanel.requestUserOverride();
+                StealthPanel.turnOn(context);
             } catch (Throwable t) {
                 logger.debug("setScreenPower: verified wake failed: " + t.getMessage());
             }
@@ -9923,7 +9945,7 @@ public class BydDataCollector {
             // getPowerScreenStatus(). Declare it so its latch doesn't later skip
             // a genuinely-needed write.
             try {
-                app.wheelstop.android.power.StealthPanel.notePanelStateChangedExternally();
+                StealthPanel.notePanelStateChangedExternally();
             } catch (Throwable ignored) {}
         }
         // Tier 1 + 2: PowerManager backlight reflection (the primary path).
@@ -10164,7 +10186,7 @@ public class BydDataCollector {
         // Exactly one dispatch per call (this is the only dispatch site; every accepting path
         // above returned before reaching it).
         try {
-            app.wheelstop.android.byd.VehicleActuatorBridge.dispatchMirror(folded);
+            VehicleActuatorBridge.dispatchMirror(folded);
         } catch (Throwable t) {
             logger.debug("setMirrorsFolded app-process dispatch failed: " + t.getMessage());
         }

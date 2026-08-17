@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">OverDrive</string>
-    <string name="accessibility_service_description">Overdrive holder kjøretøyet overvåket aktivt i bakgrunnen. Denne tjenesten leser ikke eller interagerer med skjerminnholdet.</string>
+    <string name="app_name">Wheelstop</string>
+    <string name="accessibility_service_description">Wheelstop holder kjøretøyet overvåket aktivt i bakgrunnen. Denne tjenesten leser ikke eller interagerer med skjerminnholdet.</string>
     <string name="action_cancel">Avbryt</string>
     <string name="action_clear_plain">Tøm</string>
     <string name="action_select_all">Velg alle</string>
@@ -98,7 +98,7 @@
     <string name="camera_option_5">Kamera 5</string>
     <string name="camera_selection_hint">Auto velger riktig kamera for din trim på hver boot. Kamera 1 = BYD Seal, Kamera 0 = Atto trimmer. Restart daemon etter å ha endret kamera-ID for innstillingen å komme i kraft.</string>
     <string name="camera_oem_dashcam_title">OEM Dashcam Kamera ID</string>
-    <string name="camera_oem_dashcam_hint">Velg AVMCamera-id-en som peker mot den fremre dashcam-sensoren. Dashcam er det motsatte av pano: Seal/Han pano = 1 → dashcam = 0; Atto / Tang pano = 0 → dashcam = 1. La stå på Auto for å la OverDrive velge.</string>
+    <string name="camera_oem_dashcam_hint">Velg AVMCamera-id-en som peker mot den fremre dashcam-sensoren. Dashcam er det motsatte av pano: Seal/Han pano = 1 → dashcam = 0; Atto / Tang pano = 0 → dashcam = 1. La stå på Auto for å la Wheelstop velge.</string>
     <string name="camera_oem_dashcam_auto_resolved">Auto  ved hjelp av id %1$d (pano er id %2$d)</string>
     <string name="camera_oem_dashcam_auto_unavailable">Auto  pano id er %1$d, kan ikke konkludere dashcam</string>
     <string name="camera_oem_dashcam_save">Lagre</string>
@@ -117,7 +117,7 @@
     <string name="camera_mapping_summary_probing">Panorama strøm: Legacy auto-detection / sondering</string>
     <string name="camera_mapping_current_format">Strømkartlegging: %1$s</string>
     <string name="camera_mapping_current_none">Aktuell kartlegging: Auto / standard</string>
-    <string name="camera_mapping_hint">OverDrive beholder den gamle oppstartsadfærd som standard, men lar deg nå kalibrere den sammenslåte panorama stripen riktig. Forutsetning hvert rå sammenslåte skive, kartlegge de logiske 360 rollene til skiven som faktisk viser foran / høyre / bak / venstre på kjøretøyet ditt, og daemonen vil gjenbruke det oppsettet for opptak, streaming og AI etter tilbakestilling.</string>
+    <string name="camera_mapping_hint">Wheelstop beholder den gamle oppstartsadfærd som standard, men lar deg nå kalibrere den sammenslåte panorama stripen riktig. Forutsetning hvert rå sammenslåte skive, kartlegge de logiske 360 rollene til skiven som faktisk viser foran / høyre / bak / venstre på kjøretøyet ditt, og daemonen vil gjenbruke det oppsettet for opptak, streaming og AI etter tilbakestilling.</string>
     <string name="dashboard_scan_to_connect">Scan for å koble</string>
     <string name="dashboard_qr_waiting">Ventet på tunnelen...</string>
     <string name="dashboard_daemons_running_default">0/5 Løper</string>
@@ -131,10 +131,10 @@
     <string name="setup_step_two_label">2</string>
     <string name="setup_step_three_label">3</string>
     <string name="setup_language_title">Velg ditt språk</string>
-    <string name="setup_language_body">Forutsetning til hovedenheten språk. Trykk for å velge en annen for OverDrive app og web tunnelen.</string>
+    <string name="setup_language_body">Forutsetning til hovedenheten språk. Trykk for å velge en annen for Wheelstop app og web tunnelen.</string>
     <string name="setup_language_button">Velg språk</string>
     <string name="setup_autostart_title">Inaktivere Auto-Start-begrensning</string>
-    <string name="setup_autostart_body">Trykk nedenfor for å åpne BYD Auto-Start. Finn OverDrive i listen og avmelde boksen. BYD sletter dette på hver installasjon  du vil gjøre det igjen etter oppdateringer.</string>
+    <string name="setup_autostart_body">Trykk nedenfor for å åpne BYD Auto-Start. Finn Wheelstop i listen og avmelde boksen. BYD sletter dette på hver installasjon  du vil gjøre det igjen etter oppdateringer.</string>
     <string name="setup_autostart_button">Åpne BYD Autostart</string>
     <string name="setup_overlay_title">Tillat visning over andre apper</string>
     <string name="setup_overlay_body">Aktiver dette for å vise en flytende statusindikator for opptak og reise sporing på toppen av andre apper.</string>
@@ -417,7 +417,7 @@
     <string name="setup_overlay_already_granted">Already Granted</string>
     <string name="setup_tips_header">Tips &amp; feilsøking</string>
     <string name="setup_traffic_title">Inaktivere BYD Trafikkovervåker</string>
-    <string name="setup_traffic_body">BYD Traffic Monitor blokkerer tredjepartsapper fra å nå Internett. Hvis du deaktiverer det, kan OverDrive og alle andre apper du installerer faktisk bruke nettverket.</string>
+    <string name="setup_traffic_body">BYD Traffic Monitor blokkerer tredjepartsapper fra å nå Internett. Hvis du deaktiverer det, kan Wheelstop og alle andre apper du installerer faktisk bruke nettverket.</string>
     <string name="setup_traffic_button">Åpen trafikkmonitor</string>
     <string name="setup_camera_fix_title">Kameraet gir svart eller feil?</string>
     <string name="setup_camera_fix_body">Åpne diagnostikk → Kamera-sonde, sette kamera-ID til 0, trykk på Lagre, og deretter starte kamera-demonen på nytt. Hvis innspillene fortsatt er feil, gjenta med kamera-ID 1.</string>
@@ -435,11 +435,11 @@
     <string name="nav_page_abrp">ABRP</string>
     <string name="nav_page_mqtt">MQTT</string>
     <string name="nav_page_byd_cloud">BYD Cloud</string>
-    <string name="status_overlay_notif_title">OverDrive Status</string>
+    <string name="status_overlay_notif_title">Wheelstop Status</string>
     <string name="status_overlay_notif_text">Status overlay aktiv</string>
-    <string name="daemon_keepalive_notif_title">Overdrive aktiv</string>
+    <string name="daemon_keepalive_notif_title">Wheelstop aktiv</string>
     <string name="daemon_keepalive_notif_text">Overvåking av kjøretøysystemer</string>
-    <string name="wheelstop_status_summary_title">Overdrive</string>
+    <string name="wheelstop_status_summary_title">Wheelstop</string>
     <string name="wheelstop_status_summary_text">Bakgrunnstjenester kjører</string>
     <string name="rail_dashboard">Dashboard</string>
     <string name="rail_live">Leve</string>
@@ -467,15 +467,15 @@
     <string name="cd_settings_subrail">Innstillings underbanen</string>
     <string name="settings_privacy_title">Personvern og data</string>
     <string name="settings_privacy_body">Reset rydder innspillingsindeksen, cached-opplysninger, daemon-tilstanden og preferanser på enheten. Handlingen kan ikke avvikles.</string>
-    <string name="settings_about_title">Om OverDrive</string>
+    <string name="settings_about_title">Om Wheelstop</string>
     <string name="settings_about_version_label">Versjon</string>
     <string name="settings_about_package_label">Bygg</string>
     <string name="settings_about_check_update_value">Sjekk den nyeste GitHub-utgivelsen og installer den hvis den er nyere.</string>
     <string name="settings_about_support_section">Styret av folk som deg</string>
     <string name="settings_about_support_share_title">Si ifra til en annen eier</string>
-    <string name="settings_about_support_share_value">Hver delte lenke hjelper en annen BYD eier oppdage Overdrive.</string>
-    <string name="settings_about_support_share_message">Sjekk Overdrive  åpen kildekode overvåking &amp; dashcam for BYD: https://overdrive-5lc.pages.dev/</string>
-    <string name="settings_about_support_share_chooser">Del Overdrive</string>
+    <string name="settings_about_support_share_value">Hver delte lenke hjelper en annen BYD eier oppdage Wheelstop.</string>
+    <string name="settings_about_support_share_message">Sjekk Wheelstop  åpen kildekode overvåking &amp; dashcam for BYD: https://overdrive-5lc.pages.dev/</string>
+    <string name="settings_about_support_share_chooser">Del Wheelstop</string>
     <string name="settings_about_open_link_failed">Jeg kunne ikke åpne lenken.</string>
     <string name="settings_about_open_link_copied">Ingen nettleser funnet. URL kopiert: %1$s</string>
     <string name="settings_about_support_kofi_title">Brensel til neste utgivelse</string>
@@ -484,12 +484,12 @@
     <string name="settings_about_license_title">Lisense</string>
     <string name="settings_about_license_value">MIT  åpen kildekode. Trykk for å se full tekst.</string>
     <string name="settings_about_source_title">Kildekode</string>
-    <string name="settings_about_source_value">github.com/yash-srivastava/Overdrive-release</string>
-    <string name="settings_about_license_url">HTTPS: http://github.com/yash-srivastava/Overdrive-release/blob/main/license</string>
-    <string name="settings_about_source_url">https://github.com/yash-srivastava/Overdrive-release</string>
+    <string name="settings_about_source_value">github.com/yash-srivastava/Wheelstop-release</string>
+    <string name="settings_about_license_url">HTTPS: http://github.com/yash-srivastava/Wheelstop-release/blob/main/license</string>
+    <string name="settings_about_source_url">https://github.com/yash-srivastava/Wheelstop-release</string>
     <string name="settings_about_star_title">Drop en på GitHub</string>
     <string name="settings_about_star_value">Det tar et øyeblikk, det betyr mye.</string>
-    <string name="settings_about_star_url">https://github.com/yash-srivastava/Overdrive-release</string>
+    <string name="settings_about_star_url">https://github.com/yash-srivastava/Wheelstop-release</string>
     <string name="settings_about_thanks_title">Takk</string>
     <string name="settings_about_thanks_subtitle">Bygget med hjelp fra bidragsytere og støttespillere.</string>
     <string name="settings_about_contributors_title">Bidragsytere</string>
@@ -542,7 +542,7 @@
     <string name="diagnostics_battery_subtitle">Sjekk celle SOH og pakke statistikk.</string>
     <string name="diagnostics_settings_subtitle">App-innstillinger, tema og språk.</string>
     <string name="integrations_hero_title">Integrasjoner</string>
-    <string name="integrations_hero_subtitle">Koble Overdrive til tjenestene dine.</string>
+    <string name="integrations_hero_subtitle">Koble Wheelstop til tjenestene dine.</string>
     <string name="integrations_status_unknown">Trykk for å konfigurere</string>
     <string name="integrations_status_configured">Konfigurert</string>
     <string name="integrations_status_not_set_up">Ikke installert</string>
@@ -553,7 +553,7 @@
     <string name="integrations_configure_button">Konfigurering</string>
     <string name="settings_action_check_update">Sjekk for oppdateringer</string>
     <string name="settings_action_reset_data">Reset data...</string>
-    <string name="cd_brand_logo">OverDrive</string>
+    <string name="cd_brand_logo">Wheelstop</string>
     <string name="dashboard_hero_headline">På vakt</string>
     <string name="dashboard_subtitle_all_systems">Alle systemer online</string>
     <string name="dashboard_subtitle_some_offline">%1$d av %2$d tjenester online</string>
@@ -602,10 +602,10 @@
     <string name="settings_section_recording_subtitle">Pre/post buffere, codec, lagringsgrenser.</string>
     <string name="settings_section_surveillance_subtitle">Oppdagelseszoner, tidsplan, bevegelsesfølsomhet.</string>
     <string name="settings_section_daemons_subtitle">Cloudflared, Zrok, Telegram, MQTT løpere.</string>
-    <string name="settings_about_row_title">Om OverDrive</string>
+    <string name="settings_about_row_title">Om Wheelstop</string>
     <string name="settings_about_row_subtitle">Versjon, lisens, støtteutvikling.</string>
     <string name="settings_reset_row_subtitle">Klar opptak, hendelser, eller alle cache.</string>
-    <string name="settings_footer_format">OverDrive %1$s · %2$s</string>
+    <string name="settings_footer_format">Wheelstop %1$s · %2$s</string>
     <string name="settings_appearance_subtitle">Tema, språk og visuelle preferanser.</string>
     <string name="settings_theme_active_auto_caption">Auto følger systemet tema.</string>
     <string name="settings_theme_active_light_caption">Lys tema er alltid på.</string>
@@ -613,7 +613,7 @@
     <string name="settings_language_count_format">%1$d av %2$d språk tilgjengelig</string>
     <string name="settings_language_card_title">Visningsspråk</string>
     <string name="settings_privacy_stance_title">På enheten som standard</string>
-    <string name="settings_privacy_stance_body">OverDrive kjører utelukkende på hovedenheten. Ingen telemetry forlater bilen din bortsett fra gjennom tunneler og integrasjoner du uttrykkelig konfigurerer.</string>
+    <string name="settings_privacy_stance_body">Wheelstop kjører utelukkende på hovedenheten. Ingen telemetry forlater bilen din bortsett fra gjennom tunneler og integrasjoner du uttrykkelig konfigurerer.</string>
     <string name="settings_privacy_overline_storage">Lokal lagring</string>
     <string name="settings_privacy_overline_reset">Data tilbakestilling</string>
     <string name="settings_privacy_storage_clips_label">Klipper på disk</string>
@@ -630,7 +630,7 @@
     <string name="diagnostics_battery_value_soh">%1$.0f%%</string>
     <string name="diagnostics_battery_value_pending">Ventelige data</string>
     <string name="dashboard_recordings_value_live">● %1$d</string>
-    <string name="dashboard_insight_welcome">Velkommen  Overdrive er nå ditt andre øyepar.</string>
+    <string name="dashboard_insight_welcome">Velkommen  Wheelstop er nå ditt andre øyepar.</string>
     <string name="dashboard_insight_parked_charged_kwh">Pakket opp %1$s (≈%2$s) mens parkeret</string>
     <string name="dashboard_insight_parked_charged">Pakket opp %1$s mens du parkerte</string>
     <string name="dashboard_insight_parked_drained_kwh">Brukt %1$s (≈%2$s) siden du parkerte</string>
@@ -646,12 +646,12 @@
         <item quantity="other">%1$d-klippene som er innspilt i dag</item>
     </plurals>
     <plurals name="dashboard_insight_uptime_days_hours">
-        <item quantity="one">Overdrive online for %1$d dag, %2$d timer</item>
-        <item quantity="other">Overdrive online i %1$d dager, %2$d hr</item>
+        <item quantity="one">Wheelstop online for %1$d dag, %2$d timer</item>
+        <item quantity="other">Wheelstop online i %1$d dager, %2$d hr</item>
     </plurals>
     <plurals name="dashboard_insight_uptime_hours">
-        <item quantity="one">Overdrive online for %1$d time</item>
-        <item quantity="other">Overdrive online i %1$d timer</item>
+        <item quantity="one">Wheelstop online for %1$d time</item>
+        <item quantity="other">Wheelstop online i %1$d timer</item>
     </plurals>
     <plurals name="dashboard_insight_minutes">
         <item quantity="one">%1$d min</item>
@@ -674,8 +674,8 @@
     <string name="roadsense_cal_partial">Bedring av kalibrering</string>
     <string name="roadsense_type_breaker">Hastighet ødelegger</string>
     <string name="roadsense_toggle_audio">Lyd</string>
-    <string name="settings_security_stance_body">Overvåkningskontroll, opptak, avskrekkende, varsler og bakgrunnstjenester fortsetter å kjøre mens appen er låst. PIN-koden gater OverDrive-grensesnittet, noe annet.</string>
-    <string name="settings_security_toggle_subtitle_off">Av – alle kan åpne OverDrive.</string>
+    <string name="settings_security_stance_body">Overvåkningskontroll, opptak, avskrekkende, varsler og bakgrunnstjenester fortsetter å kjøre mens appen er låst. PIN-koden gater Wheelstop-grensesnittet, noe annet.</string>
+    <string name="settings_security_toggle_subtitle_off">Av – alle kan åpne Wheelstop.</string>
     <string name="roadsense_dash_distance">—</string>
     <string name="roadsense_cd_cal_level">Rute kalibreringsnivå</string>
     <string name="settings_security_autolock_never">Aldri automatisk lås av tid</string>
@@ -716,11 +716,11 @@
     <string name="pin_lock_subtitle_wrong">Feil PIN. Prøv igjen.</string>
     <string name="settings_security_autolock_immediate">Lås umiddelbart</string>
     <string name="settings_security_title">Sikkerhet</string>
-    <string name="settings_security_toggle_subtitle_on">– PIN-kode kreves for å åpne OverDrive.</string>
+    <string name="settings_security_toggle_subtitle_on">– PIN-kode kreves for å åpne Wheelstop.</string>
     <string name="settings_security_stance_title">Kun UI lås</string>
     <string name="roadsense_cal_learning">Lærer kjøretøyet ditt</string>
     <string name="roadsense_sev_severe">Kraftig</string>
-    <string name="settings_security_subtitle">Lås OverDrive-appen slik at passasjerer og ventiler ikke kan åpne den uten PIN-koden.</string>
+    <string name="settings_security_subtitle">Lås Wheelstop-appen slik at passasjerer og ventiler ikke kan åpne den uten PIN-koden.</string>
     <string name="roadsense_unit_meters">min</string>
     <string name="roadsense_confirm_reject">Ikke en fare</string>
     <string name="settings_security_autolock_1min">Etter 1 minutt</string>
@@ -738,7 +738,7 @@
     <string name="blindspot_overlay_left">VENSTRE</string>
     <string name="pin_lock_recovery_hint_prefix">Glemt din PIN? Kjør fra en tilkoblet datamaskin:\n%1$s</string>
     <string name="roadsense_confirm_prompt">Var dette en fare?</string>
-    <string name="pin_lock_subtitle_default">Lås opp OverDrive for å fortsette.</string>
+    <string name="pin_lock_subtitle_default">Lås opp Wheelstop for å fortsette.</string>
     <string name="settings_security_error_locked_out">For mange forsøk. Prøv igjen om et øyeblikk.</string>
     <string name="settings_security_overline_lock">App lås</string>
     <string name="roadsense_sev_moderate">Moderat</string>

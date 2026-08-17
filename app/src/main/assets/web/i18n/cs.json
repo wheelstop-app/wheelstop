@@ -46,7 +46,7 @@
     "overview_group": "Přehled",
     "vehicle_group": "Vozidlo",
     "about_group": "O aplikaci",
-    "brand_home": "OverDrive – otevřený řídicí panel",
+    "brand_home": "Wheelstop – otevřený řídicí panel",
     "telegram": "Telegram",
     "road_sense": "Silnice"
   },
@@ -292,7 +292,7 @@
   "login": {
     "subtitle": "Pro přístup zadejte váš token zařízení",
     "device_id": "ID zařízení",
-    "find_hint": "Najděte to ve své aplikaci OverDrive → Nástěnka → Přístupový kód",
+    "find_hint": "Najděte to ve své aplikaci Wheelstop → Nástěnka → Přístupový kód",
     "login_btn": "Přihlásit se",
     "privacy": "Vaše data zůstávají na vašem zařízení."
   },
@@ -1611,7 +1611,7 @@
     "install_failed_start": "Instalace se nepodařilo spustit",
     "install_request_failed": "Požadavek na instalaci se nezdařil: {error}",
     "install_failed": "Instalace selhala: {error}",
-    "updating": "Aktualizace OverDrive",
+    "updating": "Aktualizace Wheelstop",
     "reconnecting": "Znovu se připojuji…",
     "headunit_installing": "Hlavička instaluje aktualizaci. Tato stránka se automaticky obnoví, jakmile bude nová verze online.",
     "phase_queued": "Ve frontě – příprava…",
@@ -1645,7 +1645,7 @@
     "report_github": "GitHub Issues",
     "report_whatsapp": "WhatsApp",
     "report_discord_url": "https://discord.gg/PZutk9fg4h",
-    "report_github_url": "https://github.com/yash-srivastava/Overdrive-release/issues",
+    "report_github_url": "https://github.com/yash-srivastava/Wheelstop-release/issues",
     "report_whatsapp_url": "https://chat.whatsapp.com/HChmriCWgr9KwAtE6OEkiM",
     "catalog_title": "Zvolte verzi",
     "catalog_empty": "Zatím nebyly zveřejněny žádné verze.",
@@ -1901,24 +1901,24 @@
     "auto": "Automaticky"
   },
   "about": {
-    "page_title": "O - OverDrive",
+    "page_title": "O - Wheelstop",
     "page_title_short": "O aplikaci",
     "contributors_title": "Přispěvatelé",
     "contributors_sub": "Lidé, kteří odeslali kód k přepsání.",
     "supporters_title": "Podporovatelé",
     "supporters_sub": "Lidé, kteří si udrželi pozdní noční commity zmatené.",
     "acknowledgements_title": "Poděkování",
-    "acknowledgements_sub": "Aktiva třetích stran používaná v OverDrive, s jejich licencemi.",
+    "acknowledgements_sub": "Aktiva třetích stran používaná v Wheelstop, s jejich licencemi.",
     "ack_chimes": "RoadSense varovný chimes – zvuky z Google Sound knihovny, licencované pod",
     "empty": "Seznam je populární, protože lidé jsou na hřišti.",
     "support": {
       "section": "Poháněn lidmi jako vy",
       "star_title": "Drop a ⭐ on GitHub",
       "star_value": "Zabere vteřinu. Znamená hodně.",
-      "star_url": "https://github.com/yash-srivastava/Overdrive-release",
+      "star_url": "https://github.com/yash-srivastava/Wheelstop-release",
       "share_title": "Řekněte kolegovi",
-      "share_value": "Každý sdílený odkaz pomáhá jinému majiteli BYD objevit Overdrive.",
-      "share_message": "Podívejte se na Overdrive — open-source sledování a dashcam pro BYD: https://overdrive-5lc.pages.dev/",
+      "share_value": "Každý sdílený odkaz pomáhá jinému majiteli BYD objevit Wheelstop.",
+      "share_message": "Podívejte se na Wheelstop — open-source sledování a dashcam pro BYD: https://overdrive-5lc.pages.dev/",
       "kofi_title": "Nastav další vydání ☕",
       "kofi_value": "The hotel is in the heart of Ko-fi.",
       "kofi_url": "https://ko-fi.com/E1E71XALHX"
@@ -1949,7 +1949,7 @@
     "recommend_step_5": "Vyberte dobu autorizace, která se shoduje s tím, jak dlouho chcete zůstat aktivní.",
     "recommend_step_6": "Odhlaste se z aplikace BYD, poté se zaregistrujte pomocí sekundárního e-mailu pomocí ověřovacího kódu a vytvořte heslo.",
     "recommend_step_7": "Klepněte na Zamknout nebo odemknout v BYD aplikaci - vyzve vás k nastavení ovládacího kódu.",
-    "recommend_step_8": "Zadejte sekundární e-mail, heslo a ovládání Pin zde v OverDrive."
+    "recommend_step_8": "Zadejte sekundární e-mail, heslo a ovládání Pin zde v Wheelstop."
   },
   "telegram": {
     "page_title": "Telegram",
@@ -1957,7 +1957,7 @@
     "tab_pair": "Pár",
     "tab_preferences": "Předvolby",
     "bot_title": "Bot Token",
-    "bot_hint": "Vytvořte bota přes @BotFotec na Telegramu, zkopírujte token zde a OverDrive jej potvrdí. Token je uložen pouze na tomto zařízení.",
+    "bot_hint": "Vytvořte bota přes @BotFotec na Telegramu, zkopírujte token zde a Wheelstop jej potvrdí. Token je uložen pouze na tomto zařízení.",
     "token": "Bot token",
     "token_supporting": "Format: 123456789:ABCdef-GHI…",
     "token_keep": "Ponechte prázdné pro zachování aktuálního",
@@ -2091,7 +2091,7 @@
     "mode_continuous": "Kontinuální",
     "mode_smart": "Chytré",
     "mode_off_desc_recording": "Ze senzoru OEM nezaznamenávat. Pano dashcam obvykle píše cam_*.mp4.",
-    "mode_continuous_desc_recording": "Vždy nahrávat dvr_*.mp4, zatímco OverDrive běží, bez ohledu na to, co pano dashcam dělá.",
+    "mode_continuous_desc_recording": "Vždy nahrávat dvr_*.mp4, zatímco Wheelstop běží, bez ohledu na to, co pano dashcam dělá.",
     "mode_smart_desc_recording": "Zrcadlete pano dashcam: když pano nahrává (režim běhu / Průběžný / blízkost požáry), nahrávejte také dvr_*.mp4. Pano zastaví, OEM zastaví.",
     "mode_off_desc_surveillance": "Nezaznamenávat ze senzoru OEM vpřed při dohledu. Pano sentry obvykle zapisuje událost_*.mp4.",
     "mode_continuous_desc_surveillance": "Vždy nahrávat dvr_*.mp4 celou dobu, kdy je auto zaparkováno bez ohledu na pohyb. Bude vypáleno nejrychleji.",

@@ -1,5 +1,6 @@
 package app.wheelstop.android.ui.viewmodel
 
+import app.wheelstop.android.config.CloudflaredPaidConfig
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
@@ -353,7 +354,7 @@ class DaemonsViewModel(app: Application) : AndroidViewModel(app) {
             }
             return
         } else if (type == DaemonType.CLOUDFLARED_TUNNEL) {
-            if (!app.wheelstop.android.config.CloudflaredPaidConfig.isConfigured()) {
+            if (!CloudflaredPaidConfig.isConfigured()) {
                 updateCloudflaredNeedsConfig("Paid version requires a token. Tap to set up.")
                 if (logResult) {
                     LogManager.getInstance().debug("Daemons", "${type.name}: Paid version requires a token")

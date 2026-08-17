@@ -1,4 +1,5 @@
 package app.wheelstop.android.monitor;
+import app.wheelstop.android.config.UnifiedConfigManager;
 
 import android.content.Context;
 
@@ -173,8 +174,8 @@ public class DataUsageMonitor {
     public void startIfEnabled() {
         boolean enabled;
         try {
-            app.wheelstop.android.config.UnifiedConfigManager.INSTANCE.forceReload();
-            enabled = app.wheelstop.android.config.UnifiedConfigManager.isDataUsageEnabled();
+            UnifiedConfigManager.INSTANCE.forceReload();
+            enabled = UnifiedConfigManager.isDataUsageEnabled();
         } catch (Throwable t) {
             enabled = false;
         }
@@ -619,7 +620,7 @@ public class DataUsageMonitor {
     public JSONObject getUsage(int days) {
         JSONObject out = new JSONObject();
         try {
-            boolean enabled = app.wheelstop.android.config.UnifiedConfigManager.isDataUsageEnabled();
+            boolean enabled = UnifiedConfigManager.isDataUsageEnabled();
             out.put("enabled", enabled);
             // available flips true once any backend yields a reading. When the
             // feature was just enabled and no tick has run yet, report true

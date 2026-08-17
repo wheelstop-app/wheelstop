@@ -1,4 +1,16 @@
 package app.wheelstop.android.server;
+import app.wheelstop.android.camera.CameraConfigResolver;
+import app.wheelstop.android.camera.CameraRole;
+import app.wheelstop.android.camera.OemDashcamPipeline;
+import app.wheelstop.android.camera.ResolvedCameraConfig;
+import app.wheelstop.android.config.UnifiedConfigManager;
+import app.wheelstop.android.recording.RecordingModeManager;
+import app.wheelstop.android.surveillance.GpuPipelineConfig;
+import app.wheelstop.android.surveillance.GpuSurveillancePipeline;
+import app.wheelstop.android.surveillance.HardwareEventRecorderGpu;
+import app.wheelstop.android.telegram.config.UnifiedTelegramConfig;
+import app.wheelstop.android.telemetry.TelemetryFields;
+import app.wheelstop.android.util.Constants;
 
 import app.wheelstop.android.daemon.CameraDaemon;
 import app.wheelstop.android.storage.StorageManager;
@@ -149,9 +161,9 @@ public class QualitySettingsApiHandler {
         boolean configured = false;
         boolean paired = false;
         try {
-            configured = app.wheelstop.android.telegram.config.UnifiedTelegramConfig.hasBotToken();
+            configured = UnifiedTelegramConfig.hasBotToken();
             paired = configured
-                    && app.wheelstop.android.telegram.config.UnifiedTelegramConfig.getOwnerChatId() > 0;
+                    && UnifiedTelegramConfig.getOwnerChatId() > 0;
         } catch (Exception e) {
             // Treat any read failure as "not configured" — the UI will
             // grey out the toggles and the runtime gate (NotificationGate
@@ -179,7 +191,7 @@ public class QualitySettingsApiHandler {
      * picking Hindi on the tunnel from also flipping the in-car app.
      */
     private static void sendAppearance(OutputStream out) throws Exception {
-        JSONObject app = app.wheelstop.android.config.UnifiedConfigManager.getAppearance();
+        JSONObject app = UnifiedConfigManager.getAppearance();
         JSONObject response = new JSONObject();
         response.put("success", true);
         response.put("theme", app.optString("theme", "dark"));
@@ -212,7 +224,7 @@ public class QualitySettingsApiHandler {
             }
             String locale = req.optString("locale", null);
             if (locale != null) {
-                if (!"auto".equals(locale) && !app.wheelstop.android.server.LocaleManager.isSupported(locale)) {
+                if (!"auto".equals(locale) && !LocaleManager.isSupported(locale)) {
                     response.put("success", false);
                     response.put("error", "locale must be 'auto' or one of the supported tags");
                     HttpResponse.sendJson(out, response.toString());
@@ -220,7 +232,7 @@ public class QualitySettingsApiHandler {
                 }
                 app.put("locale", locale);
             }
-            boolean ok = app.wheelstop.android.config.UnifiedConfigManager.setAppearance(app);
+            boolean ok = UnifiedConfigManager.setAppearance(app);
             response.put("success", ok);
             if (theme != null)  response.put("theme", theme);
             if (locale != null) response.put("locale", locale);
@@ -389,7 +401,7 @@ public class QualitySettingsApiHandler {
                     CameraDaemon.log("Surveillance storage type set to: " + type);
 
                     try {
-                        app.wheelstop.android.surveillance.GpuSurveillancePipeline pipeline =
+                        GpuSurveillancePipeline pipeline =
                             CameraDaemon.getGpuPipeline();
                         if (pipeline != null && pipeline.getSentry() != null) {
                             pipeline.getSentry().setEventOutputDir(storage.getSurveillanceDir());
@@ -487,28 +499,6 @@ public class QualitySettingsApiHandler {
                 response.put("message", Messages.get("messages.quality_storage_settings_updated"));
             }
 
-            // Re-arm RecordingsIndex FileObservers against the new active dir
-            // set, AND walk the new active dir to populate the index. The
-            // refresh-only call would only catch live writes going forward —
-            // existing files on the new volume would be invisible to the
-            // index until the 1-hour periodic reconcile. Reconcile here fills
-            // them immediately. Run on a background thread so the HTTP
-            // response doesn't block on the FUSE walk.
-            if (storageTypeChanged) {
-                try {
-                    app.wheelstop.android.daemon.RecordingsIndexFileWatcher.getInstance().refresh();
-                } catch (Throwable t) {
-                    CameraDaemon.log("RecordingsIndexFileWatcher refresh failed: " + t.getMessage());
-                }
-                new Thread(() -> {
-                    try {
-                        app.wheelstop.android.server.RecordingsIndex.getInstance().reconcile();
-                    } catch (Throwable t) {
-                        CameraDaemon.log("Post-storage-switch reconcile failed: " + t.getMessage());
-                    }
-                }, "RecordingsIndexStorageSwitchReconcile").start();
-            }
-            
             HttpResponse.sendJson(out, response.toString());
             
         } catch (Exception e) {
@@ -598,7 +588,7 @@ public class QualitySettingsApiHandler {
             // file-read/merge/write bypassed the cache: any other writer
             // (StorageManager, ExternalStorageCleaner) within the same mtime
             // second could merge into a stale cache and clobber this section.
-            boolean ok = app.wheelstop.android.config.UnifiedConfigManager.updateSection(section, data);
+            boolean ok = UnifiedConfigManager.updateSection(section, data);
             if (!ok) {
                 HttpResponse.sendJsonError(out, "updateSection returned false");
                 return;
@@ -612,7 +602,7 @@ public class QualitySettingsApiHandler {
             // the next ACC cycle.
             if ("proximityGuard".equals(section)) {
                 try {
-                    app.wheelstop.android.recording.RecordingModeManager rmm =
+                    RecordingModeManager rmm =
                         CameraDaemon.getRecordingModeManager();
                     if (rmm != null) {
                         rmm.reloadConfig();
@@ -632,7 +622,7 @@ public class QualitySettingsApiHandler {
             // AndroidBridge and never hit /api/bs/target. No-op when target absent.
             if ("blindspot".equals(section) && data.has("target")) {
                 try {
-                    app.wheelstop.android.surveillance.GpuSurveillancePipeline p = CameraDaemon.getGpuPipeline();
+                    GpuSurveillancePipeline p = CameraDaemon.getGpuPipeline();
                     if (p != null && p.isBlindSpotEnabled()) {
                         p.retargetBlindSpot();
                     }
@@ -647,7 +637,7 @@ public class QualitySettingsApiHandler {
             // applyBlindSpotCalibration). Covers no-bridge (tunnel/browser) clients.
             if ("blindspot".equals(section) && data.has("mergeMode")) {
                 try {
-                    app.wheelstop.android.surveillance.GpuSurveillancePipeline p = CameraDaemon.getGpuPipeline();
+                    GpuSurveillancePipeline p = CameraDaemon.getGpuPipeline();
                     if (p != null) {
                         String mode = data.optString("mergeMode", "both");
                         int code = "side".equals(mode) ? 1 : ("rear".equals(mode) ? 2 : 0);
@@ -677,7 +667,7 @@ public class QualitySettingsApiHandler {
                     || data.has("rotationLeft") || data.has("rotationRight")
                     || data.has("rotationBaseLeft") || data.has("rotationBaseRight"))) {
                 try {
-                    app.wheelstop.android.surveillance.GpuSurveillancePipeline p = CameraDaemon.getGpuPipeline();
+                    GpuSurveillancePipeline p = CameraDaemon.getGpuPipeline();
                     if (p != null) p.refreshBlindSpotRotation();
                 } catch (Exception e) {
                     CameraDaemon.log("blindspot rotation dispatch failed: " + e.getMessage());
@@ -689,7 +679,7 @@ public class QualitySettingsApiHandler {
             // re-resolves the layerStack + geometry for the new layout).
             if ("blindspot".equals(section) && data.has("clusterSizeProfile")) {
                 try {
-                    app.wheelstop.android.surveillance.GpuSurveillancePipeline p = CameraDaemon.getGpuPipeline();
+                    GpuSurveillancePipeline p = CameraDaemon.getGpuPipeline();
                     if (p != null) p.relayoutCluster();
                 } catch (Exception e) {
                     CameraDaemon.log("blindspot relayout dispatch failed: " + e.getMessage());
@@ -700,7 +690,7 @@ public class QualitySettingsApiHandler {
             // (side/rear) passthrough. Persisted above; push to the running scalers.
             if ("blindspot".equals(section) && data.has("rectifyStrength")) {
                 try {
-                    app.wheelstop.android.surveillance.GpuSurveillancePipeline p = CameraDaemon.getGpuPipeline();
+                    GpuSurveillancePipeline p = CameraDaemon.getGpuPipeline();
                     if (p != null) p.setBlindSpotRectifyStrength(data.optInt("rectifyStrength", 0));
                 } catch (Exception e) {
                     CameraDaemon.log("blindspot fisheye dispatch failed: " + e.getMessage());
@@ -715,7 +705,7 @@ public class QualitySettingsApiHandler {
             // Covers no-bridge (tunnel/browser) clients. No-op when the lane isn't up.
             if ("blindspot".equals(section) && (data.has("geometry") || data.has("geometryCluster"))) {
                 try {
-                    app.wheelstop.android.surveillance.GpuSurveillancePipeline p = CameraDaemon.getGpuPipeline();
+                    GpuSurveillancePipeline p = CameraDaemon.getGpuPipeline();
                     if (p != null) p.refreshBlindSpotRotation();
                 } catch (Exception e) {
                     CameraDaemon.log("blindspot geometry dispatch failed: " + e.getMessage());
@@ -733,12 +723,12 @@ public class QualitySettingsApiHandler {
             // fresh in-daemon.
             if ("blindspot".equals(section) && data.has("enabled")) {
                 try {
-                    app.wheelstop.android.surveillance.GpuSurveillancePipeline p = CameraDaemon.getGpuPipeline();
+                    GpuSurveillancePipeline p = CameraDaemon.getGpuPipeline();
                     boolean enabledNow = data.optBoolean("enabled", false);
                     if (p != null) {
                         if (enabledNow) {
                             // Arm via the daemon resolver (idempotent; no-op if already armed).
-                            app.wheelstop.android.server.StreamingApiHandler.resolveBlindSpotLifecycle();
+                            StreamingApiHandler.resolveBlindSpotLifecycle();
                         } else {
                             p.disableBlindSpot();
                         }
@@ -747,7 +737,7 @@ public class QualitySettingsApiHandler {
                     // the sole consumer should drop to the BS-only profile; a disable
                     // that removed the sole consumer should restore the no-owner
                     // baseline (else the camera is stranded at lane-OFF/~1fps).
-                    app.wheelstop.android.recording.RecordingModeManager rmm =
+                    RecordingModeManager rmm =
                         CameraDaemon.getRecordingModeManager();
                     if (rmm != null) rmm.onPipelineStartedExternally();
                 } catch (Exception e) {
@@ -762,7 +752,7 @@ public class QualitySettingsApiHandler {
             // ACC cycle. No-op if the pipeline isn't up / not in surveillance mode.
             if ("camera".equals(section) && data.has("surveillanceIdleThrottle")) {
                 try {
-                    app.wheelstop.android.recording.RecordingModeManager rmm =
+                    RecordingModeManager rmm =
                         CameraDaemon.getRecordingModeManager();
                     if (rmm != null) rmm.onSurveillanceActivityChanged();
                 } catch (Exception e) {
@@ -775,7 +765,7 @@ public class QualitySettingsApiHandler {
             // the OEM pipeline isn't up.
             if ("oemDashcam".equals(section) && data.has("idleThrottleWhenParked")) {
                 try {
-                    app.wheelstop.android.camera.OemDashcamPipeline oem =
+                    OemDashcamPipeline oem =
                         CameraDaemon.getOemDashcamPipeline();
                     if (oem != null) oem.reapplyAxisProfileFromUcm();
                 } catch (Exception e) {
@@ -881,14 +871,14 @@ public class QualitySettingsApiHandler {
         // Migrate any legacy LOW/REDUCED/NORMAL value silently to STANDARD.
         String tierFromConfig;
         try {
-            org.json.JSONObject recCfg = app.wheelstop.android.config.UnifiedConfigManager
+            org.json.JSONObject recCfg = UnifiedConfigManager
                 .loadConfig().optJSONObject("recording");
             tierFromConfig = recCfg != null ? recCfg.optString("recordingQuality", null) : null;
         } catch (Exception e) {
             tierFromConfig = null;
         }
-        app.wheelstop.android.surveillance.GpuPipelineConfig.RecordingQuality activeTier =
-            app.wheelstop.android.surveillance.GpuPipelineConfig.RecordingQuality.fromString(tierFromConfig);
+        GpuPipelineConfig.RecordingQuality activeTier =
+            GpuPipelineConfig.RecordingQuality.fromString(tierFromConfig);
 
         response.put("recordingQuality", activeTier.name());
         response.put("streamingQuality", currentStreamQuality);
@@ -901,7 +891,7 @@ public class QualitySettingsApiHandler {
         // UI shows the same value both knobs would have shared before.
         String survTierFromConfig;
         try {
-            org.json.JSONObject recCfg = app.wheelstop.android.config.UnifiedConfigManager
+            org.json.JSONObject recCfg = UnifiedConfigManager
                 .loadConfig().optJSONObject("recording");
             survTierFromConfig = recCfg != null
                 ? recCfg.optString("surveillanceQuality",
@@ -910,15 +900,15 @@ public class QualitySettingsApiHandler {
         } catch (Exception e) {
             survTierFromConfig = null;
         }
-        app.wheelstop.android.surveillance.GpuPipelineConfig.RecordingQuality survTier =
-            app.wheelstop.android.surveillance.GpuPipelineConfig.RecordingQuality.fromString(survTierFromConfig);
+        GpuPipelineConfig.RecordingQuality survTier =
+            GpuPipelineConfig.RecordingQuality.fromString(survTierFromConfig);
         response.put("surveillanceQuality", survTier.name());
 
         // Camera FPS setting
         int currentFps = 15;
         int currentSurveillanceFps = 15;
         try {
-            org.json.JSONObject cameraConfig = app.wheelstop.android.config.UnifiedConfigManager
+            org.json.JSONObject cameraConfig = UnifiedConfigManager
                 .loadConfig().optJSONObject("camera");
             if (cameraConfig != null) {
                 currentFps = cameraConfig.optInt("targetFps", 15);
@@ -932,10 +922,10 @@ public class QualitySettingsApiHandler {
         // Shared clip segment length (minutes) — same key both axes read.
         try {
             response.put("segmentDurationMinutes",
-                app.wheelstop.android.config.UnifiedConfigManager.getSegmentDurationMinutes());
+                UnifiedConfigManager.getSegmentDurationMinutes());
         } catch (Exception ignored) {
             response.put("segmentDurationMinutes",
-                app.wheelstop.android.util.Constants.SEGMENT_DURATION_MINUTES);
+                Constants.SEGMENT_DURATION_MINUTES);
         }
 
         // Surface measured FPS so the UI can show actualFps when HAL clamps
@@ -943,7 +933,7 @@ public class QualitySettingsApiHandler {
         // this device). 0 means "not measured yet" — the renderLoop only
         // updates this every 2 minutes.
         try {
-            app.wheelstop.android.surveillance.GpuSurveillancePipeline pipeline =
+            GpuSurveillancePipeline pipeline =
                 CameraDaemon.getGpuPipeline();
             float measured = (pipeline != null && pipeline.getCamera() != null)
                 ? pipeline.getCamera().getMeasuredFps() : 0f;
@@ -963,14 +953,14 @@ public class QualitySettingsApiHandler {
         // Note: bitrate is bandwidth-per-second, FPS does not change file
         // size at fixed bitrate (higher fps just spreads bits over more
         // frames, reducing per-frame detail).
-        app.wheelstop.android.surveillance.GpuPipelineConfig.VideoCodec codecForEstimate =
+        GpuPipelineConfig.VideoCodec codecForEstimate =
             "H265".equalsIgnoreCase(currentCodec)
-                ? app.wheelstop.android.surveillance.GpuPipelineConfig.VideoCodec.H265
-                : app.wheelstop.android.surveillance.GpuPipelineConfig.VideoCodec.H264;
+                ? GpuPipelineConfig.VideoCodec.H265
+                : GpuPipelineConfig.VideoCodec.H264;
 
         JSONObject qualityInfo = new JSONObject();
-        for (app.wheelstop.android.surveillance.GpuPipelineConfig.RecordingQuality q :
-                app.wheelstop.android.surveillance.GpuPipelineConfig.RecordingQuality.values()) {
+        for (GpuPipelineConfig.RecordingQuality q :
+                GpuPipelineConfig.RecordingQuality.values()) {
             JSONObject entry = new JSONObject();
             int br = q.getBitrateForCodec(codecForEstimate);
             entry.put("displayName", q.displayName);
@@ -1016,11 +1006,11 @@ public class QualitySettingsApiHandler {
         //   oemHeadroomBps           remaining for OEM after pano (≥2M floor)
         try {
             JSONObject oem = new JSONObject();
-            int oemId = app.wheelstop.android.config.UnifiedConfigManager.resolveOemDashcamId();
-            JSONObject cam = app.wheelstop.android.config.UnifiedConfigManager
+            int oemId = UnifiedConfigManager.resolveOemDashcamId();
+            JSONObject cam = UnifiedConfigManager
                 .loadConfig().optJSONObject("camera");
             int concurrent = cam == null ? -1 : cam.optInt("concurrentAvmSupported", -1);
-            int budget = app.wheelstop.android.config.UnifiedConfigManager
+            int budget = UnifiedConfigManager
                 .getOemDashcam().optInt("bitrateBudget", 10_000_000);
             int panoBps = activeTier.getBitrateForCodec(codecForEstimate);
             int headroom = Math.max(2_000_000, budget - panoBps);
@@ -1033,8 +1023,8 @@ public class QualitySettingsApiHandler {
             // round-trip its own state (Round-3 audit: GET was missing these).
             // Falls back to legacy recording.* keys if the OEM slot is empty
             // — same precedence as OemDashcamPipeline.applyRecordingConfigFromUcm.
-            JSONObject oemCfg = app.wheelstop.android.config.UnifiedConfigManager.getOemDashcam();
-            JSONObject recCfg = app.wheelstop.android.config.UnifiedConfigManager.getRecording();
+            JSONObject oemCfg = UnifiedConfigManager.getOemDashcam();
+            JSONObject recCfg = UnifiedConfigManager.getRecording();
             oem.put("recordingQuality", oemCfg.has("recordingQuality")
                 ? oemCfg.optString("recordingQuality", "STANDARD")
                 : recCfg.optString("recordingQuality", "STANDARD"));
@@ -1197,13 +1187,13 @@ public class QualitySettingsApiHandler {
                 }
             }
             if (oemDelta.length() > 0) {
-                app.wheelstop.android.config.UnifiedConfigManager.setOemDashcam(oemDelta);
+                UnifiedConfigManager.setOemDashcam(oemDelta);
                 // R8-A #16: forceReload so the upcoming OEM restart on
                 // a different thread sees the new mtime-cached values.
                 // Without this, the restart's applyRecordingConfigFromUcm
                 // can race the mtime invalidation and read stale codec /
                 // bitrate / fps. Cheap explicit signal.
-                app.wheelstop.android.config.UnifiedConfigManager.forceReload();
+                UnifiedConfigManager.forceReload();
                 CameraDaemon.log("OEM dashcam recording config mirrored: " + oemDelta.toString());
                 // If the OEM pipeline is currently running, the mirrored
                 // values only take effect at the next start — without an
@@ -1211,7 +1201,7 @@ public class QualitySettingsApiHandler {
                 // user toggles OEM off+on. Stop+start asynchronously to
                 // pick up the new bitrate / codec / fps without making the
                 // HTTP worker block on encoder teardown.
-                app.wheelstop.android.camera.OemDashcamPipeline live =
+                OemDashcamPipeline live =
                     CameraDaemon.getOemDashcamPipeline();
                 if (live != null && live.isRunning()) {
                     // Route through LIFECYCLE_EXEC so the restart serializes against picker
@@ -1222,10 +1212,10 @@ public class QualitySettingsApiHandler {
                     // would silently start recording a dvr_*.mp4 every time they change
                     // quality/codec/fps. Mirrors the OemDashcamApiHandler.handlePost
                     // restart:true path (OemDashcamApiHandler.java around line 618-625).
-                    app.wheelstop.android.server.OemDashcamApiHandler.LIFECYCLE_EXEC.execute(() -> {
+                    OemDashcamApiHandler.LIFECYCLE_EXEC.execute(() -> {
                         try {
-                            app.wheelstop.android.server.OemDashcamApiHandler.applyLifecycle(false);
-                            app.wheelstop.android.server.OemDashcamApiHandler.applyTriggerLifecycleFromUcm();
+                            OemDashcamApiHandler.applyLifecycle(false);
+                            OemDashcamApiHandler.applyTriggerLifecycleFromUcm();
                         } catch (Exception e) {
                             // Best-effort — quality apply itself already succeeded; restart
                             // failure leaves the user with their old encoder settings until
@@ -1256,7 +1246,7 @@ public class QualitySettingsApiHandler {
                 } else {
                     JSONObject delta = new JSONObject();
                     delta.put("bitrateBudget", budget);
-                    app.wheelstop.android.config.UnifiedConfigManager.setOemDashcam(delta);
+                    UnifiedConfigManager.setOemDashcam(delta);
                     CameraDaemon.log("OEM Dashcam bitrate budget set to: " + budget);
                 }
             }
@@ -1290,17 +1280,17 @@ public class QualitySettingsApiHandler {
                         .put("field", "segmentDurationMinutes").put("value", duration)
                         .put("reason", "must be 2, 5, or 10"));
                 } else {
-                    app.wheelstop.android.config.UnifiedConfigManager
+                    UnifiedConfigManager
                         .setSegmentDurationMinutes(duration);
                     CameraDaemon.log("Clip segment duration set to: " + duration + " min");
                     // Live-apply to the dashcam (ACC-on) axis.
-                    app.wheelstop.android.surveillance.GpuSurveillancePipeline gp =
+                    GpuSurveillancePipeline gp =
                         CameraDaemon.getGpuPipeline();
                     if (gp != null) {
                         try { gp.updateSegmentDuration(duration); } catch (Exception ignored) {}
                     }
                     // Live-apply to the OEM / surveillance (ACC-off) axis.
-                    app.wheelstop.android.camera.OemDashcamPipeline oem =
+                    OemDashcamPipeline oem =
                         CameraDaemon.getOemDashcamPipeline();
                     if (oem != null) {
                         try { oem.updateSegmentDuration(duration); } catch (Exception ignored) {}
@@ -1325,11 +1315,11 @@ public class QualitySettingsApiHandler {
                         || tier.equals("HIGH") || tier.equals("PREMIUM")
                         || tier.equals("MAX")) {
                     try {
-                        org.json.JSONObject recCfg = app.wheelstop.android.config.UnifiedConfigManager
+                        org.json.JSONObject recCfg = UnifiedConfigManager
                             .loadConfig().optJSONObject("recording");
                         if (recCfg == null) recCfg = new org.json.JSONObject();
                         recCfg.put("surveillanceQuality", tier);
-                        app.wheelstop.android.config.UnifiedConfigManager.updateSection("recording", recCfg);
+                        UnifiedConfigManager.updateSection("recording", recCfg);
                         surveillanceDirty = true;
                         CameraDaemon.log("Surveillance quality set to: " + tier);
                     } catch (Exception e) {
@@ -1352,11 +1342,11 @@ public class QualitySettingsApiHandler {
                         .put("reason", "out of range [10..30]"));
                 } else {
                     try {
-                        org.json.JSONObject camCfg = app.wheelstop.android.config.UnifiedConfigManager
+                        org.json.JSONObject camCfg = UnifiedConfigManager
                             .loadConfig().optJSONObject("camera");
                         if (camCfg == null) camCfg = new org.json.JSONObject();
                         camCfg.put("surveillanceTargetFps", fps);
-                        app.wheelstop.android.config.UnifiedConfigManager.updateSection("camera", camCfg);
+                        UnifiedConfigManager.updateSection("camera", camCfg);
                         surveillanceDirty = true;
                         CameraDaemon.log("Surveillance camera FPS set to: " + fps);
                     } catch (Exception e) {
@@ -1369,8 +1359,8 @@ public class QualitySettingsApiHandler {
                 // (mtime-cached loadConfig) see the new values on whatever thread
                 // the live re-assert / next ACC-off runs on. Same guard the OEM
                 // mirror above uses against the mtime-invalidation race.
-                app.wheelstop.android.config.UnifiedConfigManager.forceReload();
-                app.wheelstop.android.surveillance.GpuSurveillancePipeline sp = CameraDaemon.getGpuPipeline();
+                UnifiedConfigManager.forceReload();
+                GpuSurveillancePipeline sp = CameraDaemon.getGpuPipeline();
                 if (sp != null) {
                     try {
                         boolean applied = sp.reapplySurveillanceProfileIfActive();
@@ -1383,18 +1373,18 @@ public class QualitySettingsApiHandler {
             }
 
             // ── Apply the recording-encoder knobs in a single batched call ───
-            app.wheelstop.android.surveillance.GpuSurveillancePipeline pipeline = CameraDaemon.getGpuPipeline();
+            GpuSurveillancePipeline pipeline = CameraDaemon.getGpuPipeline();
             if (pipeline != null) {
-                app.wheelstop.android.surveillance.GpuPipelineConfig.RecordingQuality qualityEnum = null;
+                GpuPipelineConfig.RecordingQuality qualityEnum = null;
                 if (pendingQuality != null) {
-                    qualityEnum = app.wheelstop.android.surveillance.GpuPipelineConfig.RecordingQuality
+                    qualityEnum = GpuPipelineConfig.RecordingQuality
                         .fromString(pendingQuality);
                 }
-                app.wheelstop.android.surveillance.GpuPipelineConfig.VideoCodec codecEnum = null;
+                GpuPipelineConfig.VideoCodec codecEnum = null;
                 if (pendingCodec != null) {
                     codecEnum = "H265".equals(pendingCodec)
-                        ? app.wheelstop.android.surveillance.GpuPipelineConfig.VideoCodec.H265
-                        : app.wheelstop.android.surveillance.GpuPipelineConfig.VideoCodec.H264;
+                        ? GpuPipelineConfig.VideoCodec.H265
+                        : GpuPipelineConfig.VideoCodec.H264;
                 }
                 if (qualityEnum != null || codecEnum != null || pendingFps != null) {
                     pipeline.applyBatchedChange(qualityEnum, codecEnum, pendingFps);
@@ -1402,11 +1392,11 @@ public class QualitySettingsApiHandler {
             } else if (pendingFps != null) {
                 // Pipeline not yet created — persist FPS so init() picks it up.
                 try {
-                    org.json.JSONObject camCfg = app.wheelstop.android.config.UnifiedConfigManager
+                    org.json.JSONObject camCfg = UnifiedConfigManager
                         .loadConfig().optJSONObject("camera");
                     if (camCfg == null) camCfg = new org.json.JSONObject();
                     camCfg.put("targetFps", pendingFps);
-                    app.wheelstop.android.config.UnifiedConfigManager.updateSection("camera", camCfg);
+                    UnifiedConfigManager.updateSection("camera", camCfg);
                     CameraDaemon.log("Camera FPS saved (pipeline not ready): " + pendingFps);
                 } catch (Exception e) {
                     CameraDaemon.log("Failed to save camera FPS: " + e.getMessage());
@@ -1579,11 +1569,11 @@ public class QualitySettingsApiHandler {
             recording.put("recordingQuality", recordingQuality);
             recording.put("quality", recordingQuality);
             recording.put("codec", recordingCodec);
-            app.wheelstop.android.config.UnifiedConfigManager.updateSection("recording", recording);
+            UnifiedConfigManager.updateSection("recording", recording);
 
             org.json.JSONObject streaming = new org.json.JSONObject();
             streaming.put("quality", StreamingApiHandler.getStreamingQuality());
-            app.wheelstop.android.config.UnifiedConfigManager.updateSection("streaming", streaming);
+            UnifiedConfigManager.updateSection("streaming", streaming);
 
             CameraDaemon.log("Settings persisted via UnifiedConfigManager");
         } catch (Exception e) {
@@ -1694,11 +1684,11 @@ public class QualitySettingsApiHandler {
      * separate switches (one per pipeline).
      */
     private static void sendTelemetryOverlaySettings(OutputStream out) throws Exception {
-        boolean panoEffective = app.wheelstop.android.config.UnifiedConfigManager
+        boolean panoEffective = UnifiedConfigManager
             .isTelemetryOverlayEnabledFor("pano");
-        boolean survEffective = app.wheelstop.android.config.UnifiedConfigManager
+        boolean survEffective = UnifiedConfigManager
             .isTelemetryOverlayEnabledFor("surveillance");
-        boolean oemEffective = app.wheelstop.android.config.UnifiedConfigManager
+        boolean oemEffective = UnifiedConfigManager
             .isTelemetryOverlayEnabledFor("oemDashcam");
         JSONObject response = new JSONObject();
         response.put("success", true);
@@ -1720,11 +1710,11 @@ public class QualitySettingsApiHandler {
     private static JSONObject buildFieldsResponse() throws Exception {
         JSONObject fields = new JSONObject();
         for (String flow : new String[]{"accOn", "surveillance", "oemDashcam"}) {
-            org.json.JSONArray arr = app.wheelstop.android.config.UnifiedConfigManager
+            org.json.JSONArray arr = UnifiedConfigManager
                 .getTelemetryOverlayFields(flow);
             // fromJsonArray applies the legacy default on null, then re-serialize
             // so the response is always an explicit, canonical-order array.
-            fields.put(flow, app.wheelstop.android.telemetry.TelemetryFields
+            fields.put(flow, TelemetryFields
                 .fromJsonArray(arr).toJsonArray());
         }
         return fields;
@@ -1738,15 +1728,15 @@ public class QualitySettingsApiHandler {
      * input also collapses to empty here; the web UI only ever sends known keys.
      */
     private static org.json.JSONArray canonicalizeFields(org.json.JSONArray in) {
-        return app.wheelstop.android.telemetry.TelemetryFields
+        return TelemetryFields
             .fromJsonArrayStrict(in).toJsonArray();
     }
 
     /** All selectable fields as {@code [{key,legacyDefault}]} in canonical order. */
     private static org.json.JSONArray buildFieldCatalog() throws Exception {
         org.json.JSONArray cat = new org.json.JSONArray();
-        for (app.wheelstop.android.telemetry.TelemetryFields.Field f
-                : app.wheelstop.android.telemetry.TelemetryFields.Field.values()) {
+        for (TelemetryFields.Field f
+                : TelemetryFields.Field.values()) {
             JSONObject o = new JSONObject();
             o.put("key", f.getKey());
             o.put("legacyDefault", f.isLegacyDefault());
@@ -1762,7 +1752,7 @@ public class QualitySettingsApiHandler {
      * DRIVE_MODE / PROXIMITY_GUARD), never for surveillance recordings.
      */
     private static void sendAudioRecordingSettings(OutputStream out) throws Exception {
-        JSONObject recording = app.wheelstop.android.config.UnifiedConfigManager.getRecording();
+        JSONObject recording = UnifiedConfigManager.getRecording();
         JSONObject response = new JSONObject();
         response.put("success", true);
         response.put("enabled", recording.optBoolean("audioEnabled", false));
@@ -1775,11 +1765,11 @@ public class QualitySettingsApiHandler {
      * top with 360 left/rear/right below). Recordings only.
      */
     private static void sendRecordingLayoutSettings(OutputStream out) throws Exception {
-        JSONObject recording = app.wheelstop.android.config.UnifiedConfigManager.getRecording();
-        app.wheelstop.android.camera.ResolvedCameraConfig camera =
-            app.wheelstop.android.camera.CameraConfigResolver.resolve();
+        JSONObject recording = UnifiedConfigManager.getRecording();
+        ResolvedCameraConfig camera =
+            CameraConfigResolver.resolve();
         int windshieldCameraId = camera.getDirectCameraIdForRole(
-            app.wheelstop.android.camera.CameraRole.WINDSHIELD);
+            CameraRole.WINDSHIELD);
         JSONObject response = new JSONObject();
         response.put("success", true);
         response.put("layout", recording.optString("recordingLayout", "standard"));
@@ -1799,10 +1789,10 @@ public class QualitySettingsApiHandler {
             JSONObject settings = new JSONObject(body);
             String layout = "dashcam".equals(settings.optString("layout", "standard"))
                 ? "dashcam" : "standard";
-            app.wheelstop.android.camera.ResolvedCameraConfig camera =
-                app.wheelstop.android.camera.CameraConfigResolver.resolve();
+            ResolvedCameraConfig camera =
+                CameraConfigResolver.resolve();
             int windshieldCameraId = camera.getDirectCameraIdForRole(
-                app.wheelstop.android.camera.CameraRole.WINDSHIELD);
+                CameraRole.WINDSHIELD);
             boolean windshieldAvailable = windshieldCameraId >= 0;
             boolean useWindshield = settings.optBoolean("dashcamUseWindshield", false)
                 && windshieldAvailable;
@@ -1810,9 +1800,9 @@ public class QualitySettingsApiHandler {
             JSONObject delta = new JSONObject();
             delta.put("recordingLayout", layout);
             delta.put("dashcamUseWindshield", useWindshield);
-            app.wheelstop.android.config.UnifiedConfigManager.setRecording(delta);
+            UnifiedConfigManager.setRecording(delta);
 
-            app.wheelstop.android.surveillance.GpuSurveillancePipeline pipeline =
+            GpuSurveillancePipeline pipeline =
                 CameraDaemon.getGpuPipeline();
             if (pipeline != null) {
                 pipeline.setRecordingLayout("dashcam".equals(layout) ? 1 : 0);
@@ -1840,12 +1830,12 @@ public class QualitySettingsApiHandler {
      * appearance until the user explicitly diverges.
      */
     private static void sendSurveillanceLayoutSettings(OutputStream out) throws Exception {
-        JSONObject surveillance = app.wheelstop.android.config.UnifiedConfigManager.getSurveillance();
-        JSONObject recording = app.wheelstop.android.config.UnifiedConfigManager.getRecording();
-        app.wheelstop.android.camera.ResolvedCameraConfig camera =
-            app.wheelstop.android.camera.CameraConfigResolver.resolve();
+        JSONObject surveillance = UnifiedConfigManager.getSurveillance();
+        JSONObject recording = UnifiedConfigManager.getRecording();
+        ResolvedCameraConfig camera =
+            CameraConfigResolver.resolve();
         int windshieldCameraId = camera.getDirectCameraIdForRole(
-            app.wheelstop.android.camera.CameraRole.WINDSHIELD);
+            CameraRole.WINDSHIELD);
         String layout = surveillance.optString("recordingLayout",
             recording.optString("recordingLayout", "standard"));
         boolean useWindshield = surveillance.has("useWindshield")
@@ -1873,10 +1863,10 @@ public class QualitySettingsApiHandler {
             JSONObject settings = new JSONObject(body);
             String layout = "dashcam".equals(settings.optString("layout", "standard"))
                 ? "dashcam" : "standard";
-            app.wheelstop.android.camera.ResolvedCameraConfig camera =
-                app.wheelstop.android.camera.CameraConfigResolver.resolve();
+            ResolvedCameraConfig camera =
+                CameraConfigResolver.resolve();
             int windshieldCameraId = camera.getDirectCameraIdForRole(
-                app.wheelstop.android.camera.CameraRole.WINDSHIELD);
+                CameraRole.WINDSHIELD);
             boolean windshieldAvailable = windshieldCameraId >= 0;
             boolean useWindshield = settings.optBoolean("dashcamUseWindshield", false)
                 && windshieldAvailable;
@@ -1884,9 +1874,9 @@ public class QualitySettingsApiHandler {
             JSONObject delta = new JSONObject();
             delta.put("recordingLayout", layout);
             delta.put("useWindshield", useWindshield);
-            app.wheelstop.android.config.UnifiedConfigManager.setSurveillance(delta);
+            UnifiedConfigManager.setSurveillance(delta);
 
-            app.wheelstop.android.surveillance.GpuSurveillancePipeline pipeline =
+            GpuSurveillancePipeline pipeline =
                 CameraDaemon.getGpuPipeline();
             if (pipeline != null) {
                 pipeline.setSurveillanceRecordingLayout("dashcam".equals(layout) ? 1 : 0);
@@ -1923,7 +1913,7 @@ public class QualitySettingsApiHandler {
             // transition. getRecording() returns the live shared JSONObject
             // reference — read-only access is fine, but we deliberately
             // avoid mutating it (see delta-write below).
-            JSONObject recording = app.wheelstop.android.config.UnifiedConfigManager.getRecording();
+            JSONObject recording = UnifiedConfigManager.getRecording();
             boolean wasEnabled = recording.optBoolean("audioEnabled", false);
             boolean transitioning = !wasEnabled && enabled;
 
@@ -1936,7 +1926,7 @@ public class QualitySettingsApiHandler {
             // Mirrors the convention in handleTelemetryOverlayPost.
             JSONObject delta = new JSONObject();
             delta.put("audioEnabled", enabled);
-            app.wheelstop.android.config.UnifiedConfigManager.setRecording(delta);
+            UnifiedConfigManager.setRecording(delta);
 
             // OFF→ON: force-rotate the live segment so the next clip the
             // user reviews actually has audio. MediaMuxer can't add tracks
@@ -1955,10 +1945,10 @@ public class QualitySettingsApiHandler {
             // natural rotation at 2 min picks up audio if it's back.
             boolean rotateScheduled = false;
             if (transitioning) {
-                final app.wheelstop.android.surveillance.GpuSurveillancePipeline pipeline =
+                final GpuSurveillancePipeline pipeline =
                     CameraDaemon.getGpuPipeline();
                 if (pipeline != null) {
-                    final app.wheelstop.android.surveillance.HardwareEventRecorderGpu enc =
+                    final HardwareEventRecorderGpu enc =
                         pipeline.getEncoder();
                     if (enc != null && enc.isWritingToFile()) {
                         rotateScheduled = true;
@@ -1988,7 +1978,7 @@ public class QualitySettingsApiHandler {
                             // either no-op silently or throw inside the
                             // muxerLock. Identity-check against the live
                             // pipeline encoder before firing.
-                            app.wheelstop.android.surveillance.HardwareEventRecorderGpu liveEnc =
+                            HardwareEventRecorderGpu liveEnc =
                                 pipeline.getEncoder();
                             if (liveEnc != enc) {
                                 CameraDaemon.log("audio-recording: deferred rotation skipped — "
@@ -2066,7 +2056,7 @@ public class QualitySettingsApiHandler {
                 delta.put("oemDashcamEnabled", settings.optBoolean("oemDashcamEnabled", false));
             }
             if (delta.length() > 0) {
-                app.wheelstop.android.config.UnifiedConfigManager.setTelemetryOverlay(delta);
+                UnifiedConfigManager.setTelemetryOverlay(delta);
             }
 
             // Per-flow field selection. Body key "fields" is an object keyed by
@@ -2078,27 +2068,27 @@ public class QualitySettingsApiHandler {
             if (fieldsIn != null) {
                 if (fieldsIn.has("accOn")) {
                     org.json.JSONArray a = fieldsIn.optJSONArray("accOn");
-                    if (a != null) { app.wheelstop.android.config.UnifiedConfigManager
+                    if (a != null) { UnifiedConfigManager
                         .setTelemetryOverlayFields("accOn", canonicalizeFields(a)); accOnFieldsChanged = true; }
                 }
                 if (fieldsIn.has("surveillance")) {
                     org.json.JSONArray a = fieldsIn.optJSONArray("surveillance");
-                    if (a != null) { app.wheelstop.android.config.UnifiedConfigManager
+                    if (a != null) { UnifiedConfigManager
                         .setTelemetryOverlayFields("surveillance", canonicalizeFields(a)); survFieldsChanged = true; }
                 }
                 if (fieldsIn.has("oemDashcam")) {
                     org.json.JSONArray a = fieldsIn.optJSONArray("oemDashcam");
-                    if (a != null) { app.wheelstop.android.config.UnifiedConfigManager
+                    if (a != null) { UnifiedConfigManager
                         .setTelemetryOverlayFields("oemDashcam", canonicalizeFields(a)); oemFieldsChanged = true; }
                 }
             }
 
             // Notify pano pipeline of the resolved pano state + surveillance master.
-            boolean panoEffective = app.wheelstop.android.config.UnifiedConfigManager
+            boolean panoEffective = UnifiedConfigManager
                 .isTelemetryOverlayEnabledFor("pano");
-            boolean survEffective = app.wheelstop.android.config.UnifiedConfigManager
+            boolean survEffective = UnifiedConfigManager
                 .isTelemetryOverlayEnabledFor("surveillance");
-            app.wheelstop.android.surveillance.GpuSurveillancePipeline pipeline = CameraDaemon.getGpuPipeline();
+            GpuSurveillancePipeline pipeline = CameraDaemon.getGpuPipeline();
             if (pipeline != null) {
                 pipeline.setOverlayEnabled(panoEffective);
                 pipeline.setSurveillanceOverlayEnabled(survEffective);
@@ -2113,14 +2103,14 @@ public class QualitySettingsApiHandler {
             // surface during drawPassthrough (gated on overlayEnabled &&
             // recording so the overlay only burns into actively-recording
             // dvr_*.mp4 clips, not stream-only output).
-            boolean oemEffective = app.wheelstop.android.config.UnifiedConfigManager
+            boolean oemEffective = UnifiedConfigManager
                 .isTelemetryOverlayEnabledFor("oemDashcam");
-            app.wheelstop.android.camera.OemDashcamPipeline oem = CameraDaemon.getOemDashcamPipeline();
+            OemDashcamPipeline oem = CameraDaemon.getOemDashcamPipeline();
             if (oem != null) {
                 oem.setOverlayEnabled(oemEffective);
                 if (oemFieldsChanged) {
-                    oem.setOverlayFields(app.wheelstop.android.telemetry.TelemetryFields.fromJsonArray(
-                        app.wheelstop.android.config.UnifiedConfigManager
+                    oem.setOverlayFields(TelemetryFields.fromJsonArray(
+                        UnifiedConfigManager
                             .getTelemetryOverlayFields("oemDashcam")));
                 }
             }
@@ -2154,7 +2144,7 @@ public class QualitySettingsApiHandler {
      * defeat the purpose of the persistent backoff.
      */
     private static void sendGeocodingSettings(OutputStream out) throws Exception {
-        JSONObject geo = app.wheelstop.android.config.UnifiedConfigManager.getGeocoding();
+        JSONObject geo = UnifiedConfigManager.getGeocoding();
         JSONObject rec = geo.optJSONObject("recording");
         JSONObject sur = geo.optJSONObject("surveillance");
         JSONObject adv = geo.optJSONObject("advanced");
@@ -2233,8 +2223,8 @@ public class QualitySettingsApiHandler {
             JSONObject merged = new JSONObject();
             boolean ok;
             JSONObject readBack;
-            synchronized (app.wheelstop.android.config.UnifiedConfigManager.INSTANCE) {
-                JSONObject current = app.wheelstop.android.config.UnifiedConfigManager.getGeocoding();
+            synchronized (UnifiedConfigManager.INSTANCE) {
+                JSONObject current = UnifiedConfigManager.getGeocoding();
 
                 if (delta.has("recording") || current.has("recording")) {
                     JSONObject curRec = current.optJSONObject("recording");
@@ -2290,9 +2280,9 @@ public class QualitySettingsApiHandler {
                     merged.put("advanced", outAdv);
                 }
 
-                ok = app.wheelstop.android.config.UnifiedConfigManager
+                ok = UnifiedConfigManager
                         .setGeocoding(merged);
-                readBack = app.wheelstop.android.config.UnifiedConfigManager.getGeocoding();
+                readBack = UnifiedConfigManager.getGeocoding();
             }
 
             JSONObject response = new JSONObject();

@@ -1,4 +1,9 @@
 package app.wheelstop.android.daemon.telegram;
+import app.wheelstop.android.byd.cloud.crypto.CredentialCipher;
+import app.wheelstop.android.config.CloudflaredPaidConfig;
+import app.wheelstop.android.launcher.DaemonLauncher;
+import app.wheelstop.android.launcher.ZrokLauncher;
+import app.wheelstop.android.telegram.config.UnifiedTelegramConfig;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -487,7 +492,7 @@ public class DaemonCommandHandler implements TelegramCommandHandler {
         // polling-thread time per cam deploy. Heredoc form is one fork.
         ctx.log("Writing watchdog script (shared with UI flow, single fork)...");
         java.util.List<String> camLines =
-            app.wheelstop.android.launcher.DaemonLauncher.Companion.buildCamDaemonWatchdogScript(
+            DaemonLauncher.Companion.buildCamDaemonWatchdogScript(
                 apkPath, nativeLibDir, outputDir, proxyArgs);
         StringBuilder camBody = new StringBuilder();
         for (String line : camLines) {
@@ -569,7 +574,7 @@ public class DaemonCommandHandler implements TelegramCommandHandler {
         // form = one fork instead of N (one per script line).
         ctx.log("Writing watchdog script (shared with UI flow, single fork)...");
         java.util.List<String> accLines =
-            app.wheelstop.android.launcher.DaemonLauncher.Companion.buildAccSentryWatchdogScript(apkPath, "");
+            DaemonLauncher.Companion.buildAccSentryWatchdogScript(apkPath, "");
         StringBuilder accBody = new StringBuilder();
         for (String line : accLines) {
             accBody.append(line).append('\n');
@@ -624,7 +629,7 @@ public class DaemonCommandHandler implements TelegramCommandHandler {
                 }
                 
                 // Same flags as UI version
-                cfCmd.append("/data/local/tmp/cloudflared ").append(app.wheelstop.android.config.CloudflaredPaidConfig.getArgs());
+                cfCmd.append("/data/local/tmp/cloudflared ").append(CloudflaredPaidConfig.getArgs());
                 cfCmd.append("' > /data/local/tmp/cloudflared.log 2>&1 &");
                 
                 cmd = cfCmd.toString();
@@ -657,7 +662,7 @@ public class DaemonCommandHandler implements TelegramCommandHandler {
                         ctx.log("❌ No zrok enable token found. Set it from the app UI first.");
                         return false;
                     }
-                    enableToken = app.wheelstop.android.byd.cloud.crypto.CredentialCipher.decrypt(enableToken.trim());
+                    enableToken = CredentialCipher.decrypt(enableToken.trim());
                     if (enableToken.isEmpty()) {
                         ctx.log("❌ Zrok enable token could not be decrypted. Re-set it from the app UI.");
                         return false;
@@ -682,7 +687,7 @@ public class DaemonCommandHandler implements TelegramCommandHandler {
                 String reservedToken = null;
                 String tokenRead = ctx.execShell("cat /data/local/tmp/.zrok/reserved_token 2>/dev/null");
                 if (tokenRead != null && !tokenRead.trim().isEmpty() && !tokenRead.contains("No such file")) {
-                    String decrypted = app.wheelstop.android.byd.cloud.crypto.CredentialCipher.decrypt(tokenRead.trim());
+                    String decrypted = CredentialCipher.decrypt(tokenRead.trim());
                     if (!decrypted.isEmpty()) {
                         reservedToken = decrypted;
                     }
@@ -713,7 +718,7 @@ public class DaemonCommandHandler implements TelegramCommandHandler {
                     ctx.log("⚠️ No reserved token found — using public mode (random URL)");
                 }
                 java.util.List<String> watchdogLines =
-                    app.wheelstop.android.launcher.ZrokLauncher.Companion.buildZrokWatchdogScriptStatic(
+                    ZrokLauncher.Companion.buildZrokWatchdogScriptStatic(
                         reservedMode, tokenForScript, useProxy);
                 String zrokScriptPath = "/data/local/tmp/start_zrok.sh";
                 // Heredoc-based write: one fork instead of N (where N is the
@@ -804,8 +809,8 @@ public class DaemonCommandHandler implements TelegramCommandHandler {
             for (int i = 0; i < 15; i++) { // Wait up to 15 seconds
                 try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
                 // SOTA FIX: Use grep instead of cat to avoid loading entire log into memory
-                boolean isPaid = app.wheelstop.android.config.CloudflaredPaidConfig.isPaidVersion();
-                String token = app.wheelstop.android.config.CloudflaredPaidConfig.getToken();
+                boolean isPaid = CloudflaredPaidConfig.isPaidVersion();
+                String token = CloudflaredPaidConfig.getToken();
 
                 if (isPaid && !token.isEmpty()) {
                     String grepResult = ctx.execShell("grep -iE 'ingress|hostname' /data/local/tmp/cloudflared.log 2>/dev/null | grep -oE '[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}' | grep -vE '127\\.0\\.0\\.1' | tail -1");
@@ -904,7 +909,7 @@ public class DaemonCommandHandler implements TelegramCommandHandler {
             
             // Send notification message to owner — read from the unified
             // config (single source of truth shared with the app).
-            long ownerChatId = app.wheelstop.android.telegram.config.UnifiedTelegramConfig.getOwnerChatId();
+            long ownerChatId = UnifiedTelegramConfig.getOwnerChatId();
             if (ownerChatId > 0) {
                 ctx.sendMessage(ownerChatId, ctx.tr("daemon.tunnel_url", url));
                 ctx.log("Tunnel URL notification sent to owner");

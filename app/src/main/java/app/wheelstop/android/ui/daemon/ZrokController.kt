@@ -1,5 +1,8 @@
 package app.wheelstop.android.ui.daemon
 
+import app.wheelstop.android.launcher.AdbShellExecutor
+import app.wheelstop.android.launcher.DaemonLauncher
+import app.wheelstop.android.logging.LogManager
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import app.wheelstop.android.launcher.AdbDaemonLauncher
@@ -40,15 +43,15 @@ class ZrokController(
     @Volatile
     private var zrokLauncherInitialized = false
     @Volatile
-    private var zrokAdbShellExecutor: app.wheelstop.android.launcher.AdbShellExecutor? = null
+    private var zrokAdbShellExecutor: AdbShellExecutor? = null
     private val zrokLauncher by lazy {
-        val exec = app.wheelstop.android.launcher.AdbShellExecutor(context)
+        val exec = AdbShellExecutor(context)
         zrokAdbShellExecutor = exec
         zrokLauncherInitialized = true
         ZrokLauncher(
             context,
             exec,
-            app.wheelstop.android.logging.LogManager.getInstance()
+            LogManager.getInstance()
         )
     }
     
@@ -253,7 +256,7 @@ class ZrokController(
         // self-match the calling shell's argv and drop trailing commands.
         adbLauncher.executeShellScript(
             "rm -f ${ZrokLauncher.ZROK_WATCHDOG_SCRIPT} 2>/dev/null\n" +
-                    app.wheelstop.android.launcher.DaemonLauncher.psAwkKillLine("zrok") +
+                    DaemonLauncher.psAwkKillLine("zrok") +
                     "killall -9 zrok 2>/dev/null\n" +
                     "echo done\n",
             object : AdbDaemonLauncher.LaunchCallback {

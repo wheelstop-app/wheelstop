@@ -1,4 +1,6 @@
 package app.wheelstop.android.services;
+import app.wheelstop.android.byd.BydDeviceHelper;
+import app.wheelstop.android.byd.BydFeatureIds;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -94,7 +96,7 @@ public final class VehicleActuatorService extends Service {
      * refusal we fall through to the only mirror feature-id the OEM SDK defines.
      */
     private boolean setMirrorsFolded(boolean fold) {
-        Object device = app.wheelstop.android.byd.BydDeviceHelper.getDevice(BODYWORK_DEVICE, getApplicationContext());
+        Object device = BydDeviceHelper.getDevice(BODYWORK_DEVICE, getApplicationContext());
         if (device == null) { Log.w(TAG, "bodywork device unavailable"); return false; }
         int val = fold ? 1 : 0;
         try {
@@ -119,8 +121,8 @@ public final class VehicleActuatorService extends Service {
         // Named method missing or refused — try the one mirror feature-id the OEM SDK
         // defines (Mirror.BODYWORK_REARVIEW_MIRROR_SET, 0x4EF32010) on the same device.
         try {
-            int code = app.wheelstop.android.byd.BydDeviceHelper.sendSetCommandRaw(
-                    device, app.wheelstop.android.byd.BydFeatureIds.MIRROR_REARVIEW_SET, val);
+            int code = BydDeviceHelper.sendSetCommandRaw(
+                    device, BydFeatureIds.MIRROR_REARVIEW_SET, val);
             Log.i(TAG, "BODYWORK_REARVIEW_MIRROR_SET(" + val + ") -> code=" + code
                     + (code == 0 ? " ACCEPTED" : " REFUSED"));
             return code == 0;
@@ -137,7 +139,7 @@ public final class VehicleActuatorService extends Service {
      */
     private boolean setHud(int level) {
         if (level < 0 || level > 100) return false;
-        Object device = app.wheelstop.android.byd.BydDeviceHelper.getDevice(SETTING_DEVICE, getApplicationContext());
+        Object device = BydDeviceHelper.getDevice(SETTING_DEVICE, getApplicationContext());
         if (device == null) { Log.w(TAG, "setting device unavailable"); return false; }
         try {
             Method m = device.getClass().getMethod("setHUDBrightness", int.class);
@@ -162,11 +164,11 @@ public final class VehicleActuatorService extends Service {
      * device via {@code getApplicationContext()} and returns whether the write was accepted.
      */
     private boolean setHudPower(boolean on) {
-        Object device = app.wheelstop.android.byd.BydDeviceHelper.getDevice(SETTING_DEVICE, getApplicationContext());
+        Object device = BydDeviceHelper.getDevice(SETTING_DEVICE, getApplicationContext());
         if (device == null) { Log.w(TAG, "setting device unavailable"); return false; }
         int val = on ? 1 : 2; // OEM: 1=on, 2=off
-        boolean ok = app.wheelstop.android.byd.BydDeviceHelper.sendSetCommand(
-                device, app.wheelstop.android.byd.BydFeatureIds.SETTING_HUD_SWITCH_SET, val);
+        boolean ok = BydDeviceHelper.sendSetCommand(
+                device, BydFeatureIds.SETTING_HUD_SWITCH_SET, val);
         Log.i(TAG, "setHudPower SET_HUD_SWITCH_SET(" + val + ") accepted=" + ok);
         return ok;
     }
