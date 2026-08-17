@@ -128,9 +128,17 @@ jobs:
       - name: THIRD_PARTY_NOTICES.md matches app/tunnel-binaries.lock
         run: python3 scripts/gen-third-party-notices.py --check
 
-      # The full test_*.py glob, never a single file: the fixture acceptance test alone
-      # cannot catch substitution-ordering or scope regressions (its frozen tree has no
-      # content that exercises them) — only sibling tests in this same glob catch those.
+      # The full test_*.py glob, never a single file: no one module here catches
+      # substitution-ordering, scope, key-level-merge and invariant regressions on its
+      # own — they cover different halves of the same transform.
+      #
+      # scripts/acceptance_upstream_fixture.py is deliberately OUTSIDE this glob, and
+      # named so that it cannot drift back into it. It needs upstream's alpha-v36.6
+      # commit, which this repository does not contain, so it runs from
+      # .github/workflows/upstream-sync.yml, which already fetches upstream (R15).
+      # Adding an upstream fetch to every PR build to run one test is not worth it —
+      # and the alternative, letting it skip when the ref is absent, is exactly what
+      # made it report OK without ever having run.
       - name: Upstream-sync tooling unit tests
         run: python3 -m unittest discover -s scripts -p 'test_*.py'
 

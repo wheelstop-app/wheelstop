@@ -41,6 +41,27 @@ jobs:
           git config user.name "wheelstop-sync[bot]"
           git config user.email "wheelstop-sync@users.noreply.github.com"
 
+      # R15: the transform's acceptance gate lives here, not in build.yml.
+      # It reproduces the hand-made stage-A vendor tree byte for byte, which
+      # requires upstream's alpha-v36.6 commit -- a ref this repository does
+      # not contain. This job already fetches upstream and checks out full
+      # history; making every unrelated PR build fetch upstream to run one
+      # test is a price not worth paying.
+      #
+      # BEFORE the sync, deliberately: a regressed transform must not get to
+      # produce a PR. The gate never skips -- it fails and says what is
+      # missing -- so a green step here means it really ran.
+      - name: Transform acceptance gate (stage-A fixture)
+        run: |
+          set -euo pipefail
+          upstream=$(sed -n 's/^UPSTREAM_URL="\(.*\)"$/\1/p' scripts/upstream-sync.sh)
+          if [ -z "$upstream" ]; then
+            echo "::error::could not read UPSTREAM_URL from scripts/upstream-sync.sh"
+            exit 1
+          fi
+          git fetch --no-tags "$upstream" main
+          python3 scripts/acceptance_upstream_fixture.py
+
       - name: Run sync
         env:
           GH_TOKEN: ${{ steps.bot.outputs.token }}
