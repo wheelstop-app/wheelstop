@@ -622,8 +622,8 @@
          or only the keepalive survived an OOM respawn. -->
     <string name="daemon_keepalive_notif_title">مفعل فوق السباق</string>
     <string name="daemon_keepalive_notif_text">نظم مراقبة المركبات</string>
-    <string name="overdrive_status_summary_title">فوق القرص</string>
-    <string name="overdrive_status_summary_text">خدمات الخلفية قيد التشغيل</string>
+    <string name="wheelstop_status_summary_title">فوق القرص</string>
+    <string name="wheelstop_status_summary_text">خدمات الخلفية قيد التشغيل</string>
     <!-- ============================================================== -->
     <!-- M3 Revamp: navigation rail + settings sub-rail + theme picker  -->
     <!-- ============================================================== -->
@@ -1363,7 +1363,7 @@
     <string name="settings_backup_with_trips">تضمين الرحلات</string>
     <string name="settings_overlay_replay_subtitle">إظهار شارة CLIP: أخضر أثناء تسجيل الإعادة، أزرق لـ5ث بعد الحفظ، أحمر عند الفشل. يظهر فقط عند وجود ربط إعادة أو تشغيل تلقائي.</string>
     <string name="settings_overlay_replay_title">مؤشر الإعادة الفورية</string>
-    <string name="settings_security_recovery_command">adb shell touch /data/local/tmp/.overdrive_pin_reset</string>
+    <string name="settings_security_recovery_command">adb shell touch /data/local/tmp/.wheelstop_pin_reset</string>
     <string name="toast_cloudflared_token_invalid">رمز غير صالح: استخدم فقط أحرف وأرقام و . _ - =</string>
     <string name="vehicle_model_seagull">BYD Seagull</string>
     </resources>

@@ -722,8 +722,8 @@
          or only the keepalive survived an OOM respawn. -->
     <string name="daemon_keepalive_notif_title">Overdrive aktiv</string>
     <string name="daemon_keepalive_notif_text">Overvåking av kjøretøysystemer</string>
-    <string name="overdrive_status_summary_title">Overkjøring</string>
-    <string name="overdrive_status_summary_text">Bakgrunnstjenester kjører</string>
+    <string name="wheelstop_status_summary_title">Overkjøring</string>
+    <string name="wheelstop_status_summary_text">Bakgrunnstjenester kjører</string>
     <!-- ============================================================== -->
     <!-- M3 Revamp: navigation rail + settings sub-rail + theme picker  -->
     <!-- ============================================================== -->

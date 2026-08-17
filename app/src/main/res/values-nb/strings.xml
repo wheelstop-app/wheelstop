@@ -439,8 +439,8 @@
     <string name="status_overlay_notif_text">Status overlay aktiv</string>
     <string name="daemon_keepalive_notif_title">Overdrive aktiv</string>
     <string name="daemon_keepalive_notif_text">Overvåking av kjøretøysystemer</string>
-    <string name="overdrive_status_summary_title">Overdrive</string>
-    <string name="overdrive_status_summary_text">Bakgrunnstjenester kjører</string>
+    <string name="wheelstop_status_summary_title">Overdrive</string>
+    <string name="wheelstop_status_summary_text">Bakgrunnstjenester kjører</string>
     <string name="rail_dashboard">Dashboard</string>
     <string name="rail_live">Leve</string>
     <string name="rail_recordings">Opptak</string>

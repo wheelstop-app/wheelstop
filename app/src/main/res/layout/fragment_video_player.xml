@@ -44,7 +44,7 @@
          the user can see one of the four AVM cameras at native resolution
          without re-encoding. Same VideoView API surface (setVideoURI,
          start, pause, currentPosition, ...) so the fragment doesn't care. -->
-    <com.overdrive.app.ui.view.ZoomableVideoView
+    <app.wheelstop.android.ui.view.ZoomableVideoView
         android:id="@+id/videoView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -231,7 +231,7 @@
                 android:layout_gravity="center_vertical"
                 android:background="#33FFFFFF" />
 
-            <com.overdrive.app.ui.view.EventTimelineView
+            <app.wheelstop.android.ui.view.EventTimelineView
                 android:id="@+id/eventTimeline"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />

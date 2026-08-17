@@ -607,8 +607,8 @@
          or only the keepalive survived an OOM respawn. -->
     <string name="daemon_keepalive_notif_title">Overdrive 활성</string>
     <string name="daemon_keepalive_notif_text">차량 시스템 모니터링 중</string>
-    <string name="overdrive_status_summary_title">Overdrive</string>
-    <string name="overdrive_status_summary_text">백그라운드 서비스 실행 중</string>
+    <string name="wheelstop_status_summary_title">Overdrive</string>
+    <string name="wheelstop_status_summary_text">백그라운드 서비스 실행 중</string>
     <!-- ============================================================== -->
     <!-- M3 Revamp: navigation rail + settings sub-rail + theme picker  -->
     <!-- ============================================================== -->

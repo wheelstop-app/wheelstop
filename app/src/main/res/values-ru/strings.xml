@@ -732,8 +732,8 @@
          or only the keepalive survived an OOM respawn. -->
     <string name="daemon_keepalive_notif_title">Overdrive активна</string>
     <string name="daemon_keepalive_notif_text">Мониторинг систем транспортных средств</string>
-    <string name="overdrive_status_summary_title">Overdrive</string>
-    <string name="overdrive_status_summary_text">Фоновые службы запущены</string>
+    <string name="wheelstop_status_summary_title">Overdrive</string>
+    <string name="wheelstop_status_summary_text">Фоновые службы запущены</string>
     <!-- ============================================================== -->
     <!-- M3 Revamp: navigation rail + settings sub-rail + theme picker  -->
     <!-- ============================================================== -->
