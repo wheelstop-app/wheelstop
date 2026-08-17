@@ -94,12 +94,18 @@ def merge_xml(base, ours, theirs):
     through byte-identical. Keys present only in `theirs` are inserted
     immediately after the last existing entry (or, if `ours` has no
     entries at all, just before the closing `</resources>` tag, or at the
-    very end if that tag isn't found either).
+    very end if that tag isn't found either) -- UNLESS the key is also in
+    `base`, in which case its absence from `ours` means we deliberately
+    deleted it (symmetric with a changed value winning): it stays deleted.
+    If theirs also changed that key before/independently of our deletion,
+    the key is reported in clash_keys so the caller knows upstream did
+    something to a key we removed, even though nothing is re-added.
 
     base/ours/theirs are the file's text at each side, or None if that
     side doesn't have the file at all. Returns (merged_text, clash_keys):
-    clash_keys lists names where BOTH ours and theirs changed the entry
-    (ours is kept, but it's reported).
+    clash_keys lists names where BOTH sides changed the entry (a same-key
+    edit clash, ours kept; or upstream changed a key we deleted, which
+    also stays deleted).
     """
     base_entries = parse_xml_entries(base)
     theirs_entries = parse_xml_entries(theirs)
@@ -127,8 +133,19 @@ def merge_xml(base, ours, theirs):
         # else: unchanged, and upstream deleted it -> drop (append nothing)
         cursor = end
 
-    new_keys = [k for k in theirs_entries if k not in ours_entries]
-    insertion = "".join(theirs_entries[k] for k in new_keys)
+    new_blocks = []
+    for key in theirs_entries:
+        if key in ours_entries:
+            continue
+        if key in base_entries:
+            # Absent from ours but present in base -- WE deleted it. That's
+            # a deliberate change and it wins, same as a changed value
+            # would: it stays deleted, never resurrected from theirs.
+            if theirs_entries[key] != base_entries[key]:
+                clashes.append(key)  # upstream also changed it; report, but still deleted
+            continue
+        new_blocks.append(theirs_entries[key])  # genuinely new upstream key
+    insertion = "".join(new_blocks)
     if ours_spans:
         pieces.append(insertion)
         pieces.append(ours[cursor:])
@@ -156,7 +173,10 @@ def merge_json(base, ours, theirs):
     base/ours/theirs are parsed JSON values (normally dicts), or None if
     that side doesn't have the file. Returns (merged_obj, clash_keys):
     clash_keys are dotted paths ("common.save") where BOTH sides changed
-    the same leaf (ours is kept, but it's reported).
+    the same leaf (a same-key edit clash, ours kept; or upstream changed a
+    leaf we deleted, which also stays deleted -- symmetric with a changed
+    value winning, a key we deleted (present in base, absent from ours)
+    is never resurrected just because theirs still has it).
     """
     clashes = []
 
@@ -170,13 +190,20 @@ def merge_json(base, ours, theirs):
 
         out = {}
         for key in list(o.keys()) + [k for k in t if k not in o]:
+            in_base = isinstance(b, dict) and key in b
             bv = b.get(key) if isinstance(b, dict) else None
             ov = o.get(key)
             tv = t.get(key)
             child_path = f"{path}.{key}" if path else key
             if ov is None:
-                if tv is not None:
-                    out[key] = tv  # brand-new upstream key
+                if in_base:
+                    # Absent from ours but present in base -- WE deleted
+                    # it deliberately; it stays deleted, never resurrected
+                    # from theirs just because theirs still has it.
+                    if tv is not None and tv != bv:
+                        clashes.append(child_path)  # upstream also changed it; report, still deleted
+                elif tv is not None:
+                    out[key] = tv  # genuinely new upstream key
             elif tv is None:
                 if bv is not None and ov == bv:
                     continue  # upstream deleted it, we never touched it

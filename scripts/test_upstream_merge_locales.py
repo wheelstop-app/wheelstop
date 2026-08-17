@@ -52,6 +52,9 @@ class TestMergeXml(unittest.TestCase):
         self.assertEqual(clashes, ["key_a"])
 
     def test_brand_new_upstream_key_is_added(self):
+        # key_new is in neither base nor ours -- genuinely new. Guards
+        # against over-correcting the fix below into dropping every
+        # theirs-only key.
         base = xml_doc('    <string name="key_a">Base A</string>\n')
         ours = xml_doc('    <string name="key_a">Base A</string>\n')
         theirs = xml_doc(
@@ -61,6 +64,51 @@ class TestMergeXml(unittest.TestCase):
         merged, clashes = merge_xml(base, ours, theirs)
         self.assertIn('<string name="key_new">Brand New</string>', merged)
         self.assertEqual(clashes, [])
+
+    def test_our_deletion_of_a_key_theirs_still_has_stays_deleted(self):
+        # Regression: key_a exists in base and theirs (upstream never
+        # touched it) but we deliberately deleted it during the rebrand
+        # (key_z is untouched by anyone, keeping ours_spans non-empty so
+        # this exercises the ordinary insertion path, not the whole-file-
+        # empty edge case). Naively iterating ours + (theirs - ours)
+        # resurrects key_a from theirs -- confirmed on the real repair as
+        # dead duplicate strings carrying the old brand name
+        # (overdrive_status_summary_title/_text re-appearing next to their
+        # wheelstop_ renames, 2 keys x 34 locale files). Our deletion is a
+        # deliberate change and must win, symmetric with how a changed
+        # value wins.
+        base = xml_doc(
+            '    <string name="key_a">Base A</string>\n',
+            '    <string name="key_z">Base Z</string>\n',
+        )
+        ours = xml_doc('    <string name="key_z">Base Z</string>\n')  # we deleted key_a
+        theirs = xml_doc(
+            '    <string name="key_a">Base A</string>\n',
+            '    <string name="key_z">Base Z</string>\n',
+        )
+        merged, clashes = merge_xml(base, ours, theirs)
+        self.assertNotIn("key_a", merged)
+        self.assertIn('<string name="key_z">Base Z</string>', merged)
+        self.assertEqual(clashes, [])
+
+    def test_our_deletion_stays_deleted_even_when_theirs_also_changed_it(self):
+        # Same as above, but upstream also edited key_a's value before/
+        # independently of our deletion. It must still stay deleted -- we
+        # do not resurrect a key we removed -- but the key is reported as
+        # a clash so the caller knows upstream did something to it.
+        base = xml_doc(
+            '    <string name="key_a">Base A</string>\n',
+            '    <string name="key_z">Base Z</string>\n',
+        )
+        ours = xml_doc('    <string name="key_z">Base Z</string>\n')  # we deleted key_a
+        theirs = xml_doc(
+            '    <string name="key_a">Overdrive A Updated</string>\n',
+            '    <string name="key_z">Base Z</string>\n',
+        )
+        merged, clashes = merge_xml(base, ours, theirs)
+        self.assertNotIn("key_a", merged)
+        self.assertNotIn("Overdrive A Updated", merged)
+        self.assertEqual(clashes, ["key_a"])
 
     def test_key_deleted_upstream_and_never_touched_by_us_is_dropped(self):
         base = xml_doc(
@@ -77,6 +125,9 @@ class TestMergeXml(unittest.TestCase):
         self.assertEqual(clashes, [])
 
     def test_key_deleted_upstream_but_changed_by_us_is_kept(self):
+        # Regression guard, symmetric with the ours-deletion fix below:
+        # theirs deleted key_e, but we changed it -- ours must still win
+        # and keep it. This must keep holding after the deletion fix.
         base = xml_doc('    <string name="key_e">Base E</string>\n')
         ours = xml_doc('    <string name="key_e">Wheelstop E</string>\n')
         theirs = xml_doc("")
@@ -150,6 +201,21 @@ class TestMergeXml(unittest.TestCase):
         self.assertIn('<string name="key_a">Upstream A</string>', merged)
         self.assertEqual(clashes, [])
 
+    def test_base_none_means_every_theirs_only_key_is_new_not_deleted(self):
+        # A locale file we don't have at base at all (e.g. a brand-new
+        # locale ours never shipped) has no history to compare against --
+        # every key only theirs has must be treated as genuinely new, not
+        # mistaken for something we deleted.
+        base = None
+        ours = xml_doc('    <string name="key_a">Ours A</string>\n')
+        theirs = xml_doc(
+            '    <string name="key_a">Ours A</string>\n',
+            '    <string name="key_new">Brand New</string>\n',
+        )
+        merged, clashes = merge_xml(base, ours, theirs)
+        self.assertIn('<string name="key_new">Brand New</string>', merged)
+        self.assertEqual(clashes, [])
+
 
 class TestMergeJson(unittest.TestCase):
     def test_nested_objects_merge_per_leaf_not_wholesale(self):
@@ -180,9 +246,50 @@ class TestMergeJson(unittest.TestCase):
         self.assertEqual(clashes, ["common.save"])
 
     def test_brand_new_upstream_key_is_added(self):
+        # "delete" is in neither base nor ours -- genuinely new. Guards
+        # against over-correcting the fix below into dropping every
+        # theirs-only key.
         base = {"common": {"save": "Base Save"}}
         ours = {"common": {"save": "Base Save"}}
         theirs = {"common": {"save": "Base Save", "delete": "Brand New"}}
+        merged, clashes = merge_json(base, ours, theirs)
+        self.assertEqual(merged["common"]["delete"], "Brand New")
+        self.assertEqual(clashes, [])
+
+    def test_our_deletion_of_a_key_theirs_still_has_stays_deleted(self):
+        # Regression, JSON half of the same bug as the XML case: "legacy"
+        # exists in base and theirs (upstream never touched it) but we
+        # deliberately deleted it. Naively iterating ours + (theirs - ours)
+        # resurrects it from theirs. Our deletion is a deliberate change
+        # and must win, symmetric with how a changed value wins.
+        base = {"common": {"legacy": "Base Legacy", "save": "Base Save"}}
+        ours = {"common": {"save": "Base Save"}}  # we deleted "legacy"
+        theirs = {"common": {"legacy": "Base Legacy", "save": "Base Save"}}
+        merged, clashes = merge_json(base, ours, theirs)
+        self.assertNotIn("legacy", merged["common"])
+        self.assertEqual(merged["common"]["save"], "Base Save")
+        self.assertEqual(clashes, [])
+
+    def test_our_deletion_stays_deleted_even_when_theirs_also_changed_it(self):
+        # Same as above, but upstream also edited "legacy"'s value. It
+        # must still stay deleted -- we do not resurrect a key we removed
+        # -- but it's reported as a clash so the caller knows upstream did
+        # something to it.
+        base = {"common": {"legacy": "Base Legacy", "save": "Base Save"}}
+        ours = {"common": {"save": "Base Save"}}  # we deleted "legacy"
+        theirs = {"common": {"legacy": "Overdrive Legacy Updated",
+                              "save": "Base Save"}}
+        merged, clashes = merge_json(base, ours, theirs)
+        self.assertNotIn("legacy", merged["common"])
+        self.assertEqual(clashes, ["common.legacy"])
+
+    def test_base_none_means_every_theirs_only_key_is_new_not_deleted(self):
+        # A locale file we don't have at base at all -- no history to
+        # compare against, so every key only theirs has must be treated
+        # as genuinely new, not mistaken for something we deleted.
+        base = None
+        ours = {"common": {"save": "Ours Save"}}
+        theirs = {"common": {"save": "Ours Save", "delete": "Brand New"}}
         merged, clashes = merge_json(base, ours, theirs)
         self.assertEqual(merged["common"]["delete"], "Brand New")
         self.assertEqual(clashes, [])
@@ -196,6 +303,9 @@ class TestMergeJson(unittest.TestCase):
         self.assertEqual(clashes, [])
 
     def test_key_deleted_upstream_but_changed_by_us_is_kept(self):
+        # Regression guard, symmetric with the ours-deletion fix above:
+        # theirs deleted "legacy", but we changed it -- ours must still
+        # win and keep it. This must keep holding after the deletion fix.
         base = {"common": {"legacy": "Base Legacy"}}
         ours = {"common": {"legacy": "Wheelstop Legacy"}}
         theirs = {"common": {}}
