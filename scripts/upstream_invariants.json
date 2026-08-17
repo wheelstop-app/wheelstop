@@ -1,0 +1,44 @@
+[
+  {
+    "name": "driving-safety-gate-handler",
+    "reason": "PR #165 gate on screen/HUD writes while moving. Upstream deleted theirs; see yash-srivastava/Overdrive-release#233.",
+    "glob": "app/src/main/java/**/server/VehicleControlApiHandler.java",
+    "needle": "DrivingSafetyGuard.isMovementBlocked",
+    "min_total": 2
+  },
+  {
+    "name": "driving-safety-gate-outcome",
+    "reason": "Both gated call sites must still return the blocked_driving outcome.",
+    "glob": "app/src/main/java/**/server/*.java",
+    "needle": "blocked_driving",
+    "min_total": 2
+  },
+  {
+    "name": "credential-cipher-salt",
+    "reason": "MUST-PRESERVE: changing KD_SALT breaks every stored credential.",
+    "glob": "app/src/main/java/**/CredentialCipher.*",
+    "needle": "KD_SALT",
+    "min_total": 1
+  },
+  {
+    "name": "backup-bundle-format",
+    "reason": "MUST-PRESERVE: changing BUNDLE_FORMAT breaks existing config backups.",
+    "glob": "app/src/main/java/**/ConfigBackupService.*",
+    "needle": "BUNDLE_FORMAT",
+    "min_total": 1
+  },
+  {
+    "name": "exclusivity-preflight-old-package",
+    "reason": "Detects a running com.overdrive.app install so the two apps can coexist. The normalize transform must not rewrite it.",
+    "glob": "app/src/main/java/**/ExclusivityPreflight.*",
+    "needle": "com.overdrive.app",
+    "min_total": 1
+  },
+  {
+    "name": "update-repo-points-at-wheelstop",
+    "reason": "The auto-updater must never be re-pointed at upstream releases.",
+    "glob": "app/build.gradle.kts",
+    "needle": "wheelstop-app/wheelstop",
+    "min_total": 2
+  }
+]
