@@ -107,9 +107,19 @@ BRANCH="sync/upstream-${SHORT}"
 # --open-pr, the sync branch), so that is what gets asked about. A stale
 # vendor commit from a half-finished run is not "done"; it just means step 1
 # can be skipped this time.
+#
+# `--state all` on purpose: a sync PR a human CLOSED without merging was a
+# deliberate decision, and reopening it every Monday would be spam.
 DELIVERED=0
 if [ "$OPEN_PR" = "1" ]; then
-  if [ -n "$(gh pr list --head "$BRANCH" --state all --limit 1 --json number --jq '.[].number' 2>/dev/null)" ]; then
+  # Hard-fail rather than assume "no PR" if the query itself fails. Guessing
+  # wrong in that direction force-pushes over a branch someone may be
+  # reviewing and then dies on a duplicate `gh pr create` anyway.
+  EXISTING_PR=$(gh pr list --head "$BRANCH" --state all --limit 1 --json number --jq '.[].number') || {
+    echo "::error::could not query pull requests for $BRANCH — refusing to guess whether this sync was already delivered" >&2
+    exit 1
+  }
+  if [ -n "$EXISTING_PR" ]; then
     DELIVERED=1
   fi
 elif git rev-parse -q --verify "refs/heads/$BRANCH" >/dev/null \
@@ -297,11 +307,11 @@ Upstream-Commit: ${NEW}" || exit $?
 ) || MERGE_RC=$?
 
 # Exit 3 is the merge subshell's ONE expected non-zero exit: genuine
-# conflicts, committed as a conflict map. Everything else is a crash --
-# `set -e` firing on a python traceback, a git failure, a missing file --
-# and it used to land in the same `STATUS=conflicted` bucket, so a run that
-# produced NO MERGE COMMIT AT ALL was indistinguishable in the log and the
-# PR body from a run that produced a real, reviewable conflict map.
+# conflicts, committed as a conflict map. Everything else is a crash -- a
+# python traceback, a git failure -- surfaced by the explicit `|| exit $?`
+# above. It used to land in the same `STATUS=conflicted` bucket, so a run
+# that produced NO MERGE COMMIT AT ALL was indistinguishable in the log and
+# the PR body from a run that produced a real, reviewable conflict map.
 case "$MERGE_RC" in
   0) STATUS=clean ;;
   3) STATUS=conflicted ;;
