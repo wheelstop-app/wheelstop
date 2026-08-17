@@ -867,7 +867,6 @@
     <string name="rail_integrations">Integrations</string>
     <string name="rail_diagnostics">Diagnostics</string>
     <string name="rail_settings">Settings</string>
-
     <!-- Settings sub-rail -->
     <string name="settings_section_appearance">Appearance</string>
     <string name="settings_section_recording">Recording</string>
@@ -1095,7 +1094,6 @@
     <string name="dashboard_tunnel_offline">Offline</string>
     <string name="dashboard_tunnel_online">Online</string>
     <string name="dashboard_tunnel_connecting">Connecting…</string>
-
     <!-- Quick actions (now rendered as same-size tiles, not chips) -->
     <string name="dashboard_action_live">Live</string>
     <string name="dashboard_action_live_subtitle">Open camera view</string>
@@ -1556,5 +1554,16 @@
     <string name="projection_autostart_conflict_body">RoadSense is set to auto-project the map to the driver cluster when the car powers on. The cluster can only show one thing at a time. Turn that off and auto-start this app instead?</string>
     <string name="projection_autostart_conflict_confirm">Use this app</string>
     <string name="projection_app_uninstalled">That app is no longer installed.</string>
+
+    <string name="recording_lib_index_down_title">Recordings index unavailable</string>
+    <string name="recording_lib_index_down_body">Your recordings are safe on disk, but the library index is down. Retrying automatically…</string>
+    <string name="dashboard_tunnel_failed">Tunnel error</string>
+    <string name="dashboard_tunnel_stopping">Stopping tunnel…</string>
+    <string name="rail_expand">Show navigation labels</string>
+    <string name="rail_collapse">Hide navigation labels</string>
+
+    <string name="recordings_summary_index_down">Counts unavailable — recordings index is down</string>
+    <string name="dashboard_tunnel_tile_failed">Error</string>
+    <string name="dashboard_tunnel_tile_stopping">Stopping…</string>
 
 </resources>

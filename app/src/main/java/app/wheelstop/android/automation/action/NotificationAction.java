@@ -1,6 +1,7 @@
 package app.wheelstop.android.automation.action;
 
 import app.wheelstop.android.automation.AutomationAction;
+import app.wheelstop.android.automation.TextInterpolator;
 import app.wheelstop.android.automation.type.StringType;
 import app.wheelstop.android.automation.type.Type;
 import app.wheelstop.android.automation.value.Label;
@@ -69,17 +70,24 @@ public class NotificationAction extends BaseAction {
     }
 
     /**
-     * Send a push notification to the user
+     * Send a push notification to the user.
+     *
+     * <p>The message supports {@code ${var:NAME}} / {@code ${signal:TYPE[:k=v]}} /
+     * bare {@code ${NAME}} references, resolved against live automation state, so a
+     * notification can report a value ("Charged to ${signal:batteryLevel}%") instead of
+     * only fixed text — the same interpolation the toast / dialog / speak actions get.
      *
      * @param automationAction The AutomationAction with the variables needed to trigger this action
      */
     public void trigger(AutomationAction automationAction) {
+        Object raw = automationAction.getVariables().get("message");
+        String message = TextInterpolator.interpolate(raw == null ? "" : raw.toString());
         NotificationEvent.Severity severity = NotificationEvent.Severity.INFO;
         NotificationEvent event = new NotificationEvent(
                 "automation.action",
                 severity,
                 "Automation triggered",
-                automationAction.getVariables().get("message").toString(),
+                message,
                 "automation-" + System.currentTimeMillis(),
                 null,
                 null);

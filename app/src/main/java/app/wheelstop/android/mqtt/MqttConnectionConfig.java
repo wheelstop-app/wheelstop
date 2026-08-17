@@ -93,9 +93,6 @@ public class MqttConnectionConfig {
         this.name = "";
         this.brokerUrl = "";
         this.port = DEFAULT_PORT;
-        // Default telemetry root for a fresh install. Existing connections that
-        // saved a different root under mqtt_connections.json keep publishing there
-        // (fromJson() below only substitutes this default for brand-new/unset configs).
         this.topic = "wheelstop/vehicle/telemetry";
         this.clientId = "";
         this.username = "";

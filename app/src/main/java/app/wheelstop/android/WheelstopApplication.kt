@@ -19,7 +19,7 @@ import app.wheelstop.android.ui.util.PreferencesManager
  * Initializes global singletons before any Activity is created.
  */
 class WheelstopApplication : Application() {
-
+    
     override fun onCreate() {
         super.onCreate()
 
