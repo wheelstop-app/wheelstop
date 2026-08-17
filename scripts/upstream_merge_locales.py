@@ -64,66 +64,85 @@ BRAND_TERMS = ("OverDrive", "Overdrive")
 BRAND_REPLACEMENT = "Wheelstop"
 
 
-def parse_xml_entries(text):
-    """Split a strings.xml document into an ordered {name: raw_block} map,
-    plus the header (everything before the first entry) and tail (after the
-    last). ({}, "", "") for None input; ({}, text, "") if text has no
-    entries.
-
-    NOTE: free-standing text between two entries (e.g. a `<!-- section
-    header -->` comment with blank lines around it) belongs to neither
-    match and is dropped on reconstruction. This is inherited, deliberately
-    unchanged, from the validated prototype this module was built from --
-    see task-3b-report.md.
-    """
+def _iter_entries(text):
+    """Yield (key, raw_block, start, end) for each <string>/<string-array>/
+    <plurals> entry in text, in document order, with byte offsets into
+    `text` -- the offsets are what let callers edit around entries without
+    reconstructing the file from parsed fragments. Empty for None text."""
     if text is None:
-        return collections.OrderedDict(), "", ""
-    items = collections.OrderedDict()
-    spans = []
+        return
     for m in ENTRY_RE.finditer(text):
         key = m.group(2) or m.group(3)
-        items[key] = m.group(0)
-        spans.append((m.start(), m.end()))
-    if not spans:
-        return items, text, ""
-    return items, text[:spans[0][0]], text[spans[-1][1]:]
+        yield key, m.group(0), m.start(), m.end()
+
+
+def parse_xml_entries(text):
+    """-> ordered {name: raw_block} for every entry in text ({} for None)."""
+    return collections.OrderedDict((k, b) for k, b, _s, _e in _iter_entries(text))
 
 
 def merge_xml(base, ours, theirs):
     """3-way merge of a strings.xml catalogue, per <string>/<string-array>/
     <plurals> entry (matched by its `name=` attribute).
 
-    base/ours/theirs are the file's text at each side, or None if that side
-    doesn't have the file at all. Returns (merged_text, clash_keys):
+    R7: this edits `ours` surgically in place rather than reconstructing
+    the file from parsed fragments. `ours` is the base of the output;
+    entries the merge rule resolves to "take theirs" are spliced over their
+    span in `ours`, entries resolved to "drop" have just their span
+    removed, and everything else -- comments, blank-line grouping,
+    indentation, the XML declaration, `<resources>` attributes -- passes
+    through byte-identical. Keys present only in `theirs` are inserted
+    immediately after the last existing entry (or, if `ours` has no
+    entries at all, just before the closing `</resources>` tag, or at the
+    very end if that tag isn't found either).
+
+    base/ours/theirs are the file's text at each side, or None if that
+    side doesn't have the file at all. Returns (merged_text, clash_keys):
     clash_keys lists names where BOTH ours and theirs changed the entry
     (ours is kept, but it's reported).
     """
-    base_entries, _, _ = parse_xml_entries(base)
-    ours_entries, head, tail = parse_xml_entries(ours)
-    theirs_entries, t_head, t_tail = parse_xml_entries(theirs)
-    if ours is None:
-        head, tail = t_head, t_tail
+    base_entries = parse_xml_entries(base)
+    theirs_entries = parse_xml_entries(theirs)
 
-    merged = collections.OrderedDict()
+    if ours is None:
+        # Nothing of "ours" to preserve -- the merged file is theirs
+        # verbatim (or empty, if neither side has it).
+        return (theirs or ""), []
+
+    ours_spans = list(_iter_entries(ours))
+    ours_entries = collections.OrderedDict((k, b) for k, b, _s, _e in ours_spans)
+
     clashes = []
-    for key in list(ours_entries) + [k for k in theirs_entries if k not in ours_entries]:
-        bv = base_entries.get(key)
-        ov = ours_entries.get(key)
-        tv = theirs_entries.get(key)
-        if ov is not None and ov != bv:
-            merged[key] = ov  # deliberate rebrand -- ours wins
+    pieces = []
+    cursor = 0
+    for key, block, start, end in ours_spans:
+        pieces.append(ours[cursor:start])  # verbatim gap: comments, blank lines, indentation
+        bv, ov, tv = base_entries.get(key), block, theirs_entries.get(key)
+        if ov != bv:
+            pieces.append(ov)  # deliberate rebrand -- ours wins, span untouched
             if tv is not None and tv != bv and tv != ov:
                 clashes.append(key)  # both changed differently; ours kept
         elif tv is not None:
-            merged[key] = tv  # upstream edit, or a brand-new key
-        elif ov is not None:
-            merged[key] = ov  # unchanged
+            pieces.append(tv)  # upstream edit -- splice theirs' block in place
+        # else: unchanged, and upstream deleted it -> drop (append nothing)
+        cursor = end
 
-    for key in list(merged):
-        if key in base_entries and key not in theirs_entries and merged[key] == base_entries[key]:
-            del merged[key]  # upstream deleted it and we never touched it
+    new_keys = [k for k in theirs_entries if k not in ours_entries]
+    insertion = "".join(theirs_entries[k] for k in new_keys)
+    if ours_spans:
+        pieces.append(insertion)
+        pieces.append(ours[cursor:])
+    else:
+        close = ours.rfind("</resources>")
+        if close == -1:
+            pieces.append(ours[cursor:])
+            pieces.append(insertion)
+        else:
+            pieces.append(ours[cursor:close])
+            pieces.append(insertion)
+            pieces.append(ours[close:])
 
-    return head + "".join(merged.values()) + tail, clashes
+    return "".join(pieces), clashes
 
 
 # --- i18n JSON ----------------------------------------------------------
@@ -182,21 +201,29 @@ def _sweep_text(text):
 
 
 def _sweep_xml_text(text):
-    entries, head, tail = parse_xml_entries(text)
+    # R7 applies here too: walk the original text by entry span rather than
+    # reconstructing from parsed fragments, so gaps between entries (and
+    # any text outside entries entirely) come through untouched in
+    # structure -- only ever swept for brand terms, never dropped.
     total = 0
-    swept = collections.OrderedDict()
-    for key, block in entries.items():
+    pieces = []
+    cursor = 0
+    for _key, block, start, end in _iter_entries(text):
+        gap, n_gap = _sweep_text(text[cursor:start])
+        pieces.append(gap)
+        total += n_gap
         # End of the entry's opening tag -- `name="..."` lives entirely
-        # before this and is never part of `rest`.
+        # before this and is never swept.
         tag_end = block.index(">") + 1
         prefix, rest = block[:tag_end], block[tag_end:]
         new_rest, n = _sweep_text(rest)
-        swept[key] = prefix + new_rest
+        pieces.append(prefix + new_rest)
         total += n
-    new_head, n_head = _sweep_text(head)
-    new_tail, n_tail = _sweep_text(tail)
-    total += n_head + n_tail
-    return new_head + "".join(swept.values()) + new_tail, total
+        cursor = end
+    tail, n_tail = _sweep_text(text[cursor:])
+    pieces.append(tail)
+    total += n_tail
+    return "".join(pieces), total
 
 
 def _sweep_json_value(value):

@@ -105,20 +105,50 @@ class TestMergeXml(unittest.TestCase):
         self.assertIn(plurals_block, merged)
         self.assertEqual(clashes, [])
 
-    def test_known_limitation_inter_entry_comments_are_dropped(self):
-        # Inherited from the validated prototype (merge_strings.py): the
-        # entry regex only captures <string>/<string-array>/<plurals>
-        # blocks, so free-standing comments between entries (section
-        # headers like "<!-- Common buttons -->") fall in the gap between
-        # two regex matches and are not carried into merged output. This is
-        # pinned deliberately, not silently accepted -- see task-3b-report.md.
-        base = xml_doc(
-            '    <string name="key_a">A</string>\n',
-            "    <!-- section header -->\n",
-            '    <string name="key_b">B</string>\n',
+    def test_self_merge_is_byte_identical(self):
+        # R7 regression: a logical no-op merge (base == ours == theirs)
+        # must return the input BYTE-FOR-BYTE identical, including every
+        # comment -- free-standing comments between entries, a comment in
+        # the header, and one just before the closing tag. Earlier, the
+        # merger reconstructed the file from parsed <string>/<string-array>/
+        # <plurals> fragments (head + entries + tail), which silently
+        # dropped anything living in the gaps between entries. On the live
+        # branch this was built from, that stripped all 7140 XML comments
+        # across 34 strings.xml files on a single by-hand merge run.
+        text = (
+            '<?xml version="1.0" encoding="utf-8"?>\n'
+            "<!-- Header comment: generated file, do not hand-edit. -->\n"
+            "<resources>\n"
+            "    <!-- Common buttons / labels -->\n"
+            '    <string name="key_a">A</string>\n'
+            "\n"
+            "    <!-- Section: navigation -->\n"
+            '    <string name="key_b">B</string>\n'
+            "    <!-- trailing comment before close -->\n"
+            "</resources>\n"
         )
-        merged, _clashes = merge_xml(base, base, base)
-        self.assertNotIn("section header", merged)
+        merged, clashes = merge_xml(text, text, text)
+        self.assertEqual(merged, text)
+        self.assertEqual(clashes, [])
+
+    def test_theirs_entry_splice_leaves_comment_above_it_intact(self):
+        # An entry taken from theirs (upstream edited it, we didn't) must
+        # be spliced into its own span only -- the section-header comment
+        # immediately above it, which lives in the untouched gap before the
+        # entry's span, must survive verbatim.
+        base = xml_doc(
+            "    <!-- Section: navigation -->\n",
+            '    <string name="key_a">Base A</string>\n',
+        )
+        ours = base  # we never touched key_a
+        theirs = xml_doc(
+            "    <!-- Section: navigation -->\n",
+            '    <string name="key_a">Upstream A</string>\n',
+        )
+        merged, clashes = merge_xml(base, ours, theirs)
+        self.assertIn("<!-- Section: navigation -->", merged)
+        self.assertIn('<string name="key_a">Upstream A</string>', merged)
+        self.assertEqual(clashes, [])
 
 
 class TestMergeJson(unittest.TestCase):
@@ -221,11 +251,11 @@ class TestBrandSweep(unittest.TestCase):
 class TestParseXmlEntries(unittest.TestCase):
     def test_self_closing_entry_is_captured(self):
         text = xml_doc('    <string name="k" translatable="false"/>\n')
-        entries, _head, _tail = parse_xml_entries(text)
+        entries = parse_xml_entries(text)
         self.assertIn("k", entries)
 
     def test_none_input_yields_empty(self):
-        self.assertEqual(parse_xml_entries(None), ({}, "", ""))
+        self.assertEqual(parse_xml_entries(None), {})
 
 
 class TestCliIntegration(unittest.TestCase):
