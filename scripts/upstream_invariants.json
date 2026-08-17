@@ -16,6 +16,14 @@
     "code_only": false
   },
   {
+    "name": "driving-safety-gate-strings",
+    "reason": "The user-facing half of the PR #165 gate: what a client is told when an action is refused because the car is moving. Upstream deleted the key from its catalogues, and the locale merge policy (theirs-deleted + ours-unchanged -> drop) then removes it from every locale we never edited -- no conflict, no clash entry, no error. A live end-to-end sync took it from 32 catalogues to 15 and still reported 'invariants: pass', because this entry is in the spec's invariants table but never reached the manifest; R6 had meanwhile moved server-i18n INTO sync scope, turning it from a redundant tripwire into the only guard. 32 of the 33 server-i18n catalogues carry the key (en.json falls back to the code default), so any total below 32 means the sync ate translations. code_only is false: the needle is a JSON key, a string literal by construction -- it still can never match inside a comment.",
+    "glob": "app/src/main/assets/server-i18n/*.json",
+    "needle": "vehicle_blocked_in_motion",
+    "min_total": 32,
+    "code_only": false
+  },
+  {
     "name": "credential-cipher-salt",
     "reason": "MUST-PRESERVE: changing KD_SALT breaks every stored credential.",
     "glob": "app/src/main/java/**/CredentialCipher.*",

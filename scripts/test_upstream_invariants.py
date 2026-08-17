@@ -195,6 +195,62 @@ class TestExploitRegression(unittest.TestCase):
                          entry["glob"])
 
 
+class TestDrivingSafetyGateStrings(unittest.TestCase):
+    """The 7th invariant. It is in the spec's table and was missing from
+    the manifest, which is how a live sync deleted
+    `errors.vehicle_blocked_in_motion` from 17 server-i18n catalogues (32
+    -> 15) while printing 'invariants: pass'. Nothing else in the manifest
+    watches a locale catalogue, so nothing else would have noticed."""
+
+    NEEDLE = "vehicle_blocked_in_motion"
+
+    def _catalogues(self, d, n_with_key, n_total=33):
+        root = pathlib.Path(d) / "app/src/main/assets/server-i18n"
+        root.mkdir(parents=True)
+        for i in range(n_total):
+            body = {"errors": {"other": "x"}}
+            if i < n_with_key:
+                body["errors"][self.NEEDLE] = "blocked while moving"
+            (root / f"loc{i:02d}.json").write_text(
+                json.dumps(body, ensure_ascii=False), encoding="utf-8")
+
+    def test_full_set_of_catalogues_satisfies_it(self):
+        manifest = load_manifest(upstream_invariants.DEFAULT_MANIFEST)
+        with tempfile.TemporaryDirectory() as d:
+            self._catalogues(d, n_with_key=32)
+            names = {v.name for v in check_tree(d, manifest)}
+        self.assertNotIn("driving-safety-gate-strings", names)
+
+    def test_losing_a_single_catalogue_fires_it(self):
+        # The threshold sits exactly at today's count, so ONE locale losing
+        # the string is a red build -- the deletion is silent by nature, so
+        # there is no margin worth leaving.
+        manifest = load_manifest(upstream_invariants.DEFAULT_MANIFEST)
+        with tempfile.TemporaryDirectory() as d:
+            self._catalogues(d, n_with_key=31)
+            names = {v.name for v in check_tree(d, manifest)}
+        self.assertIn("driving-safety-gate-strings", names)
+
+    def test_the_live_regression_fires_it(self):
+        # The exact numbers the reviewer's end-to-end run produced.
+        manifest = load_manifest(upstream_invariants.DEFAULT_MANIFEST)
+        with tempfile.TemporaryDirectory() as d:
+            self._catalogues(d, n_with_key=15)
+            names = {v.name for v in check_tree(d, manifest)}
+        self.assertIn("driving-safety-gate-strings", names)
+
+    def test_entry_is_scoped_to_server_i18n_catalogues(self):
+        # Regression guard for the entry itself: broadening the glob to,
+        # say, all of assets/ would let web/i18n or a stray fixture make up
+        # the count while the server catalogues emptied out.
+        manifest = load_manifest(upstream_invariants.DEFAULT_MANIFEST)
+        entry = next(e for e in manifest
+                     if e["name"] == "driving-safety-gate-strings")
+        self.assertEqual(entry["glob"],
+                         "app/src/main/assets/server-i18n/*.json")
+        self.assertGreaterEqual(entry["min_total"], 32)
+
+
 class TestManifestValidation(unittest.TestCase):
     """min_total < 1 must be rejected at load time -- such an entry is
     satisfied by construction (0 occurrences already meets "at least 0"),
