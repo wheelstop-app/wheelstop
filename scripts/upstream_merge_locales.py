@@ -12,8 +12,9 @@ this module was built from, key-level merging collapsed 34 conflicted
 Handles two catalogue shapes:
   - Android `res/values*/strings.xml` -- flat `<string>`, `<string-array>`
     and `<plurals>` entries, merged per `name=` attribute.
-  - Nested web i18n JSON (`assets/web/i18n/*.json`) -- merged per leaf key,
-    recursing into nested objects rather than replacing a whole subtree.
+  - Nested JSON (`assets/web/i18n/*.json` and `assets/server-i18n/*.json`,
+    same shape) -- merged per leaf key, recursing into nested objects
+    rather than replacing a whole subtree.
 
 Rule per key (either shape): if our value differs from base, ours wins --
 that's a deliberate rebrand. Otherwise take theirs -- an upstream edit, or a
@@ -32,11 +33,11 @@ names.
 Usage:
   scripts/upstream_merge_locales.py <base-ref> <theirs-ref>
 
-Merges every `values*/strings.xml` and `web/i18n/*.json` locale catalogue in
-the working tree: base-ref/theirs-ref supply the "base" and "theirs" side of
-the 3-way merge, "ours" is always the current on-disk file. Results are
-written back to the working tree (not staged) -- review and `git add` them
-after.
+Merges every `values*/strings.xml`, `web/i18n/*.json` and
+`server-i18n/*.json` locale catalogue in the working tree: base-ref/
+theirs-ref supply the "base" and "theirs" side of the 3-way merge, "ours"
+is always the current on-disk file. Results are written back to the
+working tree (not staged) -- review and `git add` them after.
 """
 import collections
 import fnmatch
@@ -58,7 +59,14 @@ ENTRY_RE = re.compile(
     re.S)
 
 XML_PATTERN = "app/src/main/res/values*/strings.xml"
-JSON_PATTERN = "app/src/main/assets/web/i18n/*.json"
+# R11: server-i18n is the same nested-JSON shape as web/i18n and is in SCOPE
+# (upstream_normalize.SCOPE) same as web/i18n -- without a pattern here it
+# was never merged at all, so upstream's raw checkout silently overwrote our
+# translations wholesale instead of being reconciled key-by-key.
+JSON_PATTERNS = (
+    "app/src/main/assets/web/i18n/*.json",
+    "app/src/main/assets/server-i18n/*.json",
+)
 
 BRAND_TERMS = ("OverDrive", "Overdrive")
 BRAND_REPLACEMENT = "Wheelstop"
@@ -293,7 +301,9 @@ def is_xml_path(rel):
 
 def is_locale_path(rel):
     rel = rel.replace(os.sep, "/")
-    return fnmatch.fnmatch(rel, XML_PATTERN) or fnmatch.fnmatch(rel, JSON_PATTERN)
+    if fnmatch.fnmatch(rel, XML_PATTERN):
+        return True
+    return any(fnmatch.fnmatch(rel, p) for p in JSON_PATTERNS)
 
 
 def repo_root(cwd=None):

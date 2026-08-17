@@ -124,7 +124,48 @@ git branch -f "$BRANCH" main
 git worktree add --quiet "$WT-merge" "$BRANCH"
 STATUS=clean
 ( cd "$WT-merge"
-  if ! git -c merge.renameLimit=20000 merge --no-ff --no-commit vendor/upstream; then
+  git -c merge.renameLimit=20000 merge --no-ff --no-commit vendor/upstream || true
+
+  # R10: git's merge above just ran a LINE-level merge on the locale
+  # catalogues, which is exactly what key-level merging exists to avoid --
+  # an upstream string added next to one we rebranded reads as a textual
+  # conflict even though the two changes are independent. Running the
+  # key-level merger back in step 1 (against $FORK_POINT/$NEW, before this
+  # branch even exists) can't fix that: at that point "ours" on disk is the
+  # freshly-checked-out upstream tree itself, so ours==theirs and the merge
+  # degenerates to a no-op there -- its only real effect in step 1 is the
+  # brand sweep. The genuine reconciliation needs main's actual branding as
+  # "ours", which only exists here. So: discard whatever git's line-level
+  # pass did to these paths (conflict markers or a wrong-but-clean
+  # auto-merge alike), restore them to main's real content, and rerun the
+  # key-level merger with base=fork point, theirs=the vendor tip just built
+  # (normalized identifiers + brand-swept locale values).
+  shopt -s nullglob
+  LOCALE_FILES=(app/src/main/res/values*/strings.xml
+                app/src/main/assets/web/i18n/*.json
+                app/src/main/assets/server-i18n/*.json)
+  shopt -u nullglob
+  for f in "${LOCALE_FILES[@]:+${LOCALE_FILES[@]}}"; do
+    # A path main never had (a locale upstream just introduced) has nothing
+    # to restore from -- leave whatever the merge attempt already placed
+    # there; the key-level merger below treats a missing "ours" as "take
+    # theirs" anyway.
+    git checkout main -- "$f" 2>/dev/null || true
+  done
+  python3 "$ROOT/scripts/upstream_merge_locales.py" "$FORK_POINT" vendor/upstream
+
+  # Re-glob: the merger may have written a locale file that didn't exist on
+  # disk before it ran (a catalogue only vendor/upstream has).
+  shopt -s nullglob
+  LOCALE_FILES=(app/src/main/res/values*/strings.xml
+                app/src/main/assets/web/i18n/*.json
+                app/src/main/assets/server-i18n/*.json)
+  shopt -u nullglob
+  if [ "${#LOCALE_FILES[@]}" -gt 0 ]; then
+    git add -- "${LOCALE_FILES[@]}"
+  fi
+
+  if git diff --name-only --diff-filter=U | grep -q .; then
     echo "CONFLICTS — committing the conflict map for review"
     git add -A
     git commit -q -m "merge: upstream ${SHORT} (CONFLICTS — resolve before merging)"

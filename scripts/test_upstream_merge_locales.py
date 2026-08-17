@@ -477,6 +477,80 @@ class TestCliIntegration(unittest.TestCase):
             paths = discover_locale_paths(root, theirs_sha)
             self.assertIn("app/src/main/assets/web/i18n/fr.json", paths)
 
+    def test_discover_locale_paths_includes_server_i18n(self):
+        # R11: server-i18n is the same JSON shape as web/i18n and is in
+        # upstream_normalize.SCOPE, but was previously unmatched by this
+        # module's own file patterns -- discovered here means it now gets
+        # a real key-level merge instead of being silently overwritten
+        # wholesale by whatever the raw upstream checkout put on disk.
+        with tempfile.TemporaryDirectory() as d:
+            root = pathlib.Path(d)
+            self._git(["init", "-q"], cwd=root)
+            self._git(["config", "user.email", "test@example.com"], cwd=root)
+            self._git(["config", "user.name", "Test"], cwd=root)
+            self._git(["checkout", "-q", "-b", "trunk"], cwd=root)
+            server_json = root / "app/src/main/assets/server-i18n/en.json"
+            server_json.parent.mkdir(parents=True)
+            server_json.write_text('{"errors": {"a": "b"}}\n', encoding="utf-8")
+            self._git(["add", "-A"], cwd=root)
+            self._git(["commit", "-q", "-m", "base"], cwd=root)
+            base_sha = self._rev_parse(root)
+
+            self._git(["checkout", "-q", "trunk"], cwd=root)
+            paths = discover_locale_paths(root, base_sha)
+            self.assertIn("app/src/main/assets/server-i18n/en.json", paths)
+
+    def test_server_i18n_end_to_end_merge(self):
+        # R11 regression: before the fix, server-i18n was not covered by
+        # discover_locale_paths at all, so nothing in this module ever
+        # touched it -- a real sync's raw `git checkout $NEW -- SCOPE`
+        # would leave upstream's version in place untouched, silently
+        # dropping our translation and letting the brand walk in
+        # unswept. This proves both the key-level merge and the brand
+        # sweep now run against server-i18n exactly as they do for
+        # web/i18n.
+        with tempfile.TemporaryDirectory() as d:
+            root = pathlib.Path(d)
+            self._git(["init", "-q"], cwd=root)
+            self._git(["config", "user.email", "test@example.com"], cwd=root)
+            self._git(["config", "user.name", "Test"], cwd=root)
+            self._git(["checkout", "-q", "-b", "trunk"], cwd=root)
+
+            server_json = root / "app/src/main/assets/server-i18n/en.json"
+            server_json.parent.mkdir(parents=True)
+            base_catalogue = {"errors": {"vehicle_blocked_in_motion": "Base blocked"}}
+            server_json.write_text(
+                json.dumps(base_catalogue, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8")
+            self._git(["add", "-A"], cwd=root)
+            self._git(["commit", "-q", "-m", "base"], cwd=root)
+            base_sha = self._rev_parse(root)
+
+            self._git(["checkout", "-q", "-b", "theirs"], cwd=root)
+            theirs_catalogue = {
+                "errors": {"vehicle_blocked_in_motion": "Base blocked",
+                           "storage_full": "Overdrive storage full"},
+            }
+            server_json.write_text(
+                json.dumps(theirs_catalogue, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8")
+            self._git(["commit", "-a", "-q", "-m", "theirs"], cwd=root)
+            theirs_sha = self._rev_parse(root)
+
+            self._git(["checkout", "-q", "trunk"], cwd=root)
+            ours_catalogue = {"errors": {"vehicle_blocked_in_motion": "Wheelstop blocked"}}
+            server_json.write_text(
+                json.dumps(ours_catalogue, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8")
+            self._git(["commit", "-a", "-q", "-m", "ours rebrand"], cwd=root)
+
+            rc = main(["upstream_merge_locales.py", base_sha, theirs_sha], cwd=root)
+            self.assertEqual(rc, 0)
+
+            merged = json.loads(server_json.read_text(encoding="utf-8"))
+            self.assertEqual(merged["errors"]["vehicle_blocked_in_motion"], "Wheelstop blocked")
+            self.assertEqual(merged["errors"]["storage_full"], "Wheelstop storage full")
+
 
 if __name__ == "__main__":
     unittest.main()
