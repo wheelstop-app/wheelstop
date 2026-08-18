@@ -55,9 +55,16 @@ public class CameraFpsFieldContractTest {
         assertTrue("stream.js must surface cameraFpsClampNote, which is the "
                 + "'asked 30, got 26' explanation",
                 stream.contains("cameraFpsClampNote"));
+        String page = readRepositoryFile("app/src/main/assets/web/local/live-view.html");
         assertTrue("live-view.html needs the element the readout writes into",
-                readRepositoryFile("app/src/main/assets/web/local/live-view.html")
-                        .contains("cameraFpsReadout"));
+                page.contains("cameraFpsReadout"));
+        // The clamp note explains WHY a preset under-delivers, so it has to be
+        // on screen. A title attribute would be unreachable here — this runs on
+        // a head-unit touchscreen with no hover.
+        assertTrue("the clamp note needs a visible element, not a tooltip",
+                page.contains("cameraFpsNote"));
+        assertFalse("the clamp note must not be hidden in a title attribute",
+                stream.contains(".title = data.cameraFpsClampNote"));
     }
 
     private static String readRepositoryFile(String relativePath) throws IOException {

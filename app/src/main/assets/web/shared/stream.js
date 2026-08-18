@@ -1247,8 +1247,17 @@ BYD.stream = {
             const data = await res.json();
             if (!data || !data.cameraFpsActual) { el.style.display = 'none'; return; }
             el.textContent = data.cameraFpsActual + ' fps measured';
-            el.title = data.cameraFpsClampNote || '';
             el.style.display = '';
+            // The clamp note ("HAL emitting at ~26 fps (requested 30)") is the
+            // part worth reading — it is the whole explanation for why a preset
+            // did not deliver. Render it BESIDE the picker rather than as a
+            // title attribute: this runs on a head-unit touchscreen, where
+            // hover text can never be surfaced.
+            const note = document.getElementById('cameraFpsNote');
+            if (note) {
+                note.textContent = data.cameraFpsClampNote || '';
+                note.style.display = data.cameraFpsClampNote ? '' : 'none';
+            }
         } catch (e) {
             el.style.display = 'none';
         }
