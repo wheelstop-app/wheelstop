@@ -1231,14 +1231,39 @@ BYD.stream = {
     },
     
     /**
+     * Show what the camera actually delivers next to what the preset asked for.
+     * Both numbers already come back from /api/settings/quality; nothing rendered
+     * them, so a preset that cannot be met looked identical to one that could.
+     *
+     * cameraFpsActual is a 2-minute average (the camera's own stats window), so
+     * it is labelled as measured rather than instantaneous — a slow-moving number
+     * here is expected, not a stall.
+     */
+    async loadCameraFpsReadout() {
+        const el = document.getElementById('cameraFpsReadout');
+        if (!el) return;
+        try {
+            const res = await fetch('/api/settings/quality');
+            const data = await res.json();
+            if (!data || !data.cameraFpsActual) { el.style.display = 'none'; return; }
+            el.textContent = data.cameraFpsActual + ' fps measured';
+            el.title = data.cameraFpsClampNote || '';
+            el.style.display = '';
+        } catch (e) {
+            el.style.display = 'none';
+        }
+    },
+
+    /**
      * Initialize stream module
      */
     init() {
         console.log('[Stream] Init - iOS:', this.isIOS, '- WebCodecs:', this.hasWebCodecs);
-        
+
         // Load saved quality from backend
         this.loadSavedQuality();
-        
+        this.loadCameraFpsReadout();
+
         // Status polling is handled by core.js - no duplicate polling here
         
         // Pause expensive decoding in the background and restore the same

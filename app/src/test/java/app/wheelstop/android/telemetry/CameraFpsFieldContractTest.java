@@ -46,6 +46,20 @@ public class CameraFpsFieldContractTest {
                 .contains("telemetry_field_cameraFps"));
     }
 
+    @Test
+    public void liveViewRendersTheMeasuredRateTheApiAlreadyReturns() throws IOException {
+        String stream = readRepositoryFile("app/src/main/assets/web/shared/stream.js");
+        assertTrue("stream.js must consume cameraFpsActual — the API has returned it "
+                + "unrendered since the field was added",
+                stream.contains("cameraFpsActual"));
+        assertTrue("stream.js must surface cameraFpsClampNote, which is the "
+                + "'asked 30, got 26' explanation",
+                stream.contains("cameraFpsClampNote"));
+        assertTrue("live-view.html needs the element the readout writes into",
+                readRepositoryFile("app/src/main/assets/web/local/live-view.html")
+                        .contains("cameraFpsReadout"));
+    }
+
     private static String readRepositoryFile(String relativePath) throws IOException {
         Path current = Paths.get(System.getProperty("user.dir")).toAbsolutePath().normalize();
         while (current != null) {
