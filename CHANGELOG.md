@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.3.0](https://github.com/wheelstop-app/wheelstop/compare/v0.2.0...v0.3.0) (2026-08-18)
+
+
+### Features
+
+* **camera:** learn the HAL's real frame-rate ceiling and declare it ([#24](https://github.com/wheelstop-app/wheelstop/issues/24)) ([4fb1475](https://github.com/wheelstop-app/wheelstop/commit/4fb1475738d6915173cba971839ae375e6e50c27))
+* **diag:** sentinel-gated AVM frame-rate sweep probe ([#25](https://github.com/wheelstop-app/wheelstop/issues/25)) ([e1d7a79](https://github.com/wheelstop-app/wheelstop/commit/e1d7a79722b91edeb54c334535ee812f7dd46417))
+* **overlay:** make the camera's real frame rate visible ([#29](https://github.com/wheelstop-app/wheelstop/issues/29)) ([8082c45](https://github.com/wheelstop-app/wheelstop/commit/8082c4575c15f51ee6ab4d1a6d2450cfffa72aa1))
+* **sync:** upstream-sync tooling — normalize, key-level locale merge, de-shadowing, invariants guard ([#15](https://github.com/wheelstop-app/wheelstop/issues/15)) ([9c70a51](https://github.com/wheelstop-app/wheelstop/commit/9c70a51e6feeca523c18a4d637eb11ef5676183a))
+
+
+### Bug Fixes
+
+* **daemons:** detect and reset daemons left running a deleted APK ([#27](https://github.com/wheelstop-app/wheelstop/issues/27)) ([67983c3](https://github.com/wheelstop-app/wheelstop/commit/67983c378109d3cc3f7e93ae74355c5317786d85))
+* **daemons:** scope the stale reset to APK-backed daemons, and stop reading watchdog shells as daemons ([#31](https://github.com/wheelstop-app/wheelstop/issues/31)) ([b2a614f](https://github.com/wheelstop-app/wheelstop/commit/b2a614fd92516db34af6d3c4b55e2c0c10f7cb87))
+* restore XML comments and the safety-gate message to the locale merge ([f18ef2e](https://github.com/wheelstop-app/wheelstop/commit/f18ef2ed2f029f0db59ed82bac73250e61676a15))
+* **stream:** apply the live-view quality picker to the running stream ([#22](https://github.com/wheelstop-app/wheelstop/issues/22)) ([5a87f7f](https://github.com/wheelstop-app/wheelstop/commit/5a87f7f2cfc78d2f5741a6c3686ce7ad612f0ca7))
+* **stream:** declare blind-spot clarity uniforms before odBlend() uses them ([#19](https://github.com/wheelstop-app/wheelstop/issues/19)) ([c77530a](https://github.com/wheelstop-app/wheelstop/commit/c77530a13f40c8ab661ca6a76c7c261aebcb8af4))
+* **tailscale:** decide the proxy route by probing the port, not by pgrep ([#30](https://github.com/wheelstop-app/wheelstop/issues/30)) ([ad67fb0](https://github.com/wheelstop-app/wheelstop/commit/ad67fb059364c04d855d9e42202f8ffa7351e2a9))
+
 ## [0.2.0](https://github.com/wheelstop-app/wheelstop/compare/v0.1.0...v0.2.0) (2026-08-02)
 
 
