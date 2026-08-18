@@ -24,6 +24,14 @@ data class StaleDaemon(
  * Per-daemon probing was deliberately removed from the health check: each probe
  * cost two adb shell sessions plus a full `/proc` walk, serialised on a
  * process-wide lock, taken from a shared SYSTEM adbd every 30s forever.
+ *
+ * Two entry points, both ending at the same pid-extraction + batched environ
+ * read: [findStaleDaemons] (no snapshot) takes its own, for a caller with none
+ * in hand (e.g. app start). The snapshot-accepting overload reuses one a
+ * caller already took — the periodic health check takes the single permitted
+ * `ps -A` per tick and MUST pass that snapshot through rather than calling the
+ * no-snapshot overload, which would silently double the `ps -A` cost every
+ * 30s and reintroduce the exact load this class exists to avoid.
  */
 class StaleDaemonDetector(
     private val adbLauncher: AdbDaemonLauncher,
@@ -74,6 +82,13 @@ class StaleDaemonDetector(
         }
     }
 
+    /**
+     * Takes its OWN process-table snapshot before checking for staleness. Callers that are
+     * already inside a `snapshotProcessTable` callback — the periodic health check, which takes
+     * the single permitted snapshot for its own dead-daemon check — MUST use the
+     * [findStaleDaemons] overload that accepts a `snapshot` instead of calling this one, or every
+     * tick pays for a second `ps -A` this class was written specifically to avoid.
+     */
     fun findStaleDaemons(expectedApkPath: String, callback: (List<StaleDaemon>) -> Unit) {
         try {
             adbLauncher.snapshotProcessTable { snapshot ->
@@ -82,47 +97,62 @@ class StaleDaemonDetector(
                     callback(emptyList())
                     return@snapshotProcessTable
                 }
-                val pidsByName = LinkedHashMap<Int, String>()
-                for (name in CORE_PROCESS_NAMES) {
-                    for (pid in adbLauncher.pidsFor(snapshot, name)) pidsByName[pid] = name
-                }
-                if (pidsByName.isEmpty()) {
-                    callback(emptyList())
-                    return@snapshotProcessTable
-                }
-                shell.execute(
-                    command = buildEnvironCommand(pidsByName.keys.toList()),
-                    callback = object : AdbShellExecutor.ShellCallback {
-                        override fun onSuccess(output: String) {
-                            val environs = parseEnvironOutput(output)
-                            val stale = ArrayList<StaleDaemon>()
-                            for ((pid, name) in pidsByName) {
-                                val environ = environs[pid]
-                                when (StaleDaemonClassifier.classify(environ, expectedApkPath)) {
-                                    DaemonApkState.STALE -> {
-                                        val running =
-                                            environ?.let { StaleDaemonClassifier.apkPathFromEnviron(it) }
-                                        log.info(TAG,
-                                            "STALE $name pid=$pid running=$running installed=$expectedApkPath")
-                                        stale.add(StaleDaemon(name, pid, running))
-                                    }
-                                    DaemonApkState.UNKNOWN ->
-                                        log.warn(TAG,
-                                            "UNKNOWN $name pid=$pid — environ unreadable or has no " +
-                                                "/data/app entry; treating as current")
-                                    DaemonApkState.CURRENT -> Unit
-                                }
-                            }
-                            callback(stale)
-                        }
-
-                        override fun onError(error: String) {
-                            log.warn(TAG, "environ read failed: $error — treating all as current")
-                            callback(emptyList())
-                        }
-                    }
-                )
+                findStaleDaemons(expectedApkPath, snapshot, callback)
             }
+        } catch (t: Throwable) {
+            // Never block daemon startup on the detector.
+            log.error(TAG, "stale-daemon detection failed: ${t.message}")
+            callback(emptyList())
+        }
+    }
+
+    /**
+     * Same check as [findStaleDaemons], but against a [snapshot] the caller already took instead
+     * of requesting a new one. Use this from inside an existing `snapshotProcessTable` callback —
+     * see `DaemonStartupManager.runHealthCheck` for the only production caller.
+     */
+    fun findStaleDaemons(expectedApkPath: String, snapshot: String, callback: (List<StaleDaemon>) -> Unit) {
+        try {
+            val pidsByName = LinkedHashMap<Int, String>()
+            for (name in CORE_PROCESS_NAMES) {
+                for (pid in adbLauncher.pidsFor(snapshot, name)) pidsByName[pid] = name
+            }
+            if (pidsByName.isEmpty()) {
+                callback(emptyList())
+                return
+            }
+            shell.execute(
+                command = buildEnvironCommand(pidsByName.keys.toList()),
+                callback = object : AdbShellExecutor.ShellCallback {
+                    override fun onSuccess(output: String) {
+                        val environs = parseEnvironOutput(output)
+                        val stale = ArrayList<StaleDaemon>()
+                        for ((pid, name) in pidsByName) {
+                            val environ = environs[pid]
+                            when (StaleDaemonClassifier.classify(environ, expectedApkPath)) {
+                                DaemonApkState.STALE -> {
+                                    val running =
+                                        environ?.let { StaleDaemonClassifier.apkPathFromEnviron(it) }
+                                    log.info(TAG,
+                                        "STALE $name pid=$pid running=$running installed=$expectedApkPath")
+                                    stale.add(StaleDaemon(name, pid, running))
+                                }
+                                DaemonApkState.UNKNOWN ->
+                                    log.warn(TAG,
+                                        "UNKNOWN $name pid=$pid — environ unreadable or has no " +
+                                            "/data/app entry; treating as current")
+                                DaemonApkState.CURRENT -> Unit
+                            }
+                        }
+                        callback(stale)
+                    }
+
+                    override fun onError(error: String) {
+                        log.warn(TAG, "environ read failed: $error — treating all as current")
+                        callback(emptyList())
+                    }
+                }
+            )
         } catch (t: Throwable) {
             // Never block daemon startup on the detector.
             log.error(TAG, "stale-daemon detection failed: ${t.message}")
