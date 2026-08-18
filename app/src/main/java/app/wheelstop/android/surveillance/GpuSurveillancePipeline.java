@@ -534,6 +534,33 @@ public class GpuSurveillancePipeline {
      * an active live view isn't starved/desynced. Returns 0 (no floor) when no
      * stream is up.
      */
+    /**
+     * The encoder fps this pipeline would ACTUALLY use for a requested stream
+     * fps on this device: the request itself on HALs that honour it, clamped to
+     * {@link #DILINK4_STREAM_FPS_CAP} on the OEM SurfaceTexture path (which
+     * refuses setCameraFps and emits at its own fixed low rate).
+     *
+     * <p>Anything comparing a RUNNING encoder against a requested preset must
+     * compare against this, never the raw request: on a clamped HAL the encoder
+     * legitimately sits below the preset forever, so a raw comparison reads as a
+     * permanent mismatch and would restart the stream lane on every reconnect.
+     *
+     * <p>Falls back to the raw request if the camera can't be probed — the same
+     * value {@code enableStreaming} used before the clamp existed.
+     */
+    public int effectiveStreamFps(int requestedFps) {
+        try {
+            PanoramicCameraGpu cam = camera;
+            if (cam != null && cam.isUsingOemSurfaceTexturePath()
+                    && requestedFps > DILINK4_STREAM_FPS_CAP) {
+                return DILINK4_STREAM_FPS_CAP;
+            }
+        } catch (Throwable t) {
+            logger.warn("dilink4 stream-fps clamp check failed: " + t.getMessage());
+        }
+        return requestedFps;
+    }
+
     public int getActiveStreamFps() {
         if (!streamingEnabled) return 0;
         HardwareEventRecorderGpu enc = streamEncoder;
@@ -4146,18 +4173,12 @@ public class GpuSurveillancePipeline {
         // Legacy (ImageReader) vehicles are untouched: their HAL honours the
         // requested rate, so the clamp is skipped entirely and streaming behaves
         // byte-identically to before.
-        int effectiveStreamFps = streamFps;
-        try {
-            if (camera != null && camera.isUsingOemSurfaceTexturePath()
-                    && streamFps > DILINK4_STREAM_FPS_CAP) {
-                effectiveStreamFps = DILINK4_STREAM_FPS_CAP;
-                logger.info("dilink4: clamping stream encoder fps " + streamFps + " → "
-                    + effectiveStreamFps + " (this HAL refuses setCameraFps and emits"
-                    + " at its own low fixed rate; OEM asks 10 on this lane)."
-                    + " Resolution/bitrate keep the user's preset.");
-            }
-        } catch (Throwable t) {
-            logger.warn("dilink4 stream-fps clamp check failed: " + t.getMessage());
+        int effectiveStreamFps = effectiveStreamFps(streamFps);
+        if (effectiveStreamFps != streamFps) {
+            logger.info("dilink4: clamping stream encoder fps " + streamFps + " → "
+                + effectiveStreamFps + " (this HAL refuses setCameraFps and emits"
+                + " at its own low fixed rate; OEM asks 10 on this lane)."
+                + " Resolution/bitrate keep the user's preset.");
         }
 
         logger.info(String.format("Enabling H.264 streaming: %dx%d @ %dfps, %d Mbps",
