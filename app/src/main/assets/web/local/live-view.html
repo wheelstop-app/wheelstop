@@ -57,9 +57,8 @@
                                     <div class="decoder-chip" id="cameraFpsReadout" style="display:none;"></div>
                                 </div>
                                 <div class="top-bar-right">
-                                    <!-- Why the picked preset may not be what you get. Sits
-                                         BESIDE the selector rather than in a tooltip: this is a
-                                         head-unit touchscreen, so hover text is unreachable. -->
+                                    <!-- Explains why the picked preset may not be what you
+                                         get; filled by loadCameraFpsReadout. -->
                                     <div class="decoder-chip" id="cameraFpsNote" style="display:none;"></div>
                                     <select id="qualitySelector" class="quality-select-sota" onchange="BYD.stream.setQuality(this.value)">
                                         <option value="ULTRA_LOW"  data-i18n="stream.quality_ultra_low">Ultra Low (400k)</option>
