@@ -545,6 +545,17 @@ public class GpuSurveillancePipeline {
      * legitimately sits below the preset forever, so a raw comparison reads as a
      * permanent mismatch and would restart the stream lane on every reconnect.
      *
+     * <p>Also applies the LEARNED ceiling: where the dilink4 cap is a fixed
+     * constant for one known HAL, {@link HalFrameRateObserver} measures what
+     * this particular vehicle delivers, so a HAL that saturates below its
+     * request stops having an impossible rate declared at it. Declaring 30 while
+     * receiving 26 makes a fixed-fps decoder pace ~13% fast and then starve —
+     * judder that no amount of capture stability can fix. Measured on a BYD
+     * Seal: request 30 → 25.9 delivered, unchanged at requests of 45 and 60.
+     *
+     * <p>The learned ceiling is empty until delivery is actually seen to fall
+     * short, so a vehicle whose HAL honours 60 fps is never held back by it.
+     *
      * <p>Falls back to the raw request if the camera can't be probed — the same
      * value {@code enableStreaming} used before the clamp existed.
      */
@@ -555,8 +566,11 @@ public class GpuSurveillancePipeline {
                     && requestedFps > DILINK4_STREAM_FPS_CAP) {
                 return DILINK4_STREAM_FPS_CAP;
             }
+            if (cam != null) {
+                return cam.getHalFrameRateObserver().clamp(requestedFps);
+            }
         } catch (Throwable t) {
-            logger.warn("dilink4 stream-fps clamp check failed: " + t.getMessage());
+            logger.warn("stream-fps clamp check failed: " + t.getMessage());
         }
         return requestedFps;
     }
