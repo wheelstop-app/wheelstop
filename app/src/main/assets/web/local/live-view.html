@@ -54,8 +54,12 @@
                                         <span class="status-text" data-i18n="pip.select_camera">Select Camera</span>
                                     </div>
                                     <div class="decoder-chip" id="decoderChip" style="display:none;">GPU</div>
+                                    <div class="decoder-chip" id="cameraFpsReadout" style="display:none;"></div>
                                 </div>
                                 <div class="top-bar-right">
+                                    <!-- Explains why the picked preset may not be what you
+                                         get; filled by loadCameraFpsReadout. -->
+                                    <div class="decoder-chip" id="cameraFpsNote" style="display:none;"></div>
                                     <select id="qualitySelector" class="quality-select-sota" onchange="BYD.stream.setQuality(this.value)">
                                         <option value="ULTRA_LOW"  data-i18n="stream.quality_ultra_low">Ultra Low (400k)</option>
                                         <option value="LOW"        data-i18n="stream.quality_low">Low (600k)</option>

@@ -1399,6 +1399,7 @@
     "telemetry_field_highBeam": "High beam",
     "telemetry_field_location": "GPS location",
     "telemetry_field_vin": "VIN",
+    "telemetry_field_cameraFps": "Camera FPS",
     "telemetry_fields_label": "Fields to burn in",
     "telemetry_fields_desc": "Choose what the overlay draws on trip and manual recordings."
   },

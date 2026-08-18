@@ -1231,14 +1231,48 @@ BYD.stream = {
     },
     
     /**
+     * Show what the camera actually delivers next to what the preset asked for.
+     * Both numbers already come back from /api/settings/quality; nothing rendered
+     * them, so a preset that cannot be met looked identical to one that could.
+     *
+     * cameraFpsActual is a 2-minute average (the camera's own stats window), so
+     * it is labelled as measured rather than instantaneous — a slow-moving number
+     * here is expected, not a stall.
+     */
+    async loadCameraFpsReadout() {
+        const el = document.getElementById('cameraFpsReadout');
+        if (!el) return;
+        try {
+            const res = await fetch('/api/settings/quality');
+            const data = await res.json();
+            if (!data || !data.cameraFpsActual) { el.style.display = 'none'; return; }
+            el.textContent = data.cameraFpsActual + ' fps measured';
+            el.style.display = '';
+            // The clamp note ("HAL emitting at ~26 fps (requested 30)") is the
+            // part worth reading — it is the whole explanation for why a preset
+            // did not deliver. Render it BESIDE the picker rather than as a
+            // title attribute: this runs on a head-unit touchscreen, where
+            // hover text can never be surfaced.
+            const note = document.getElementById('cameraFpsNote');
+            if (note) {
+                note.textContent = data.cameraFpsClampNote || '';
+                note.style.display = data.cameraFpsClampNote ? '' : 'none';
+            }
+        } catch (e) {
+            el.style.display = 'none';
+        }
+    },
+
+    /**
      * Initialize stream module
      */
     init() {
         console.log('[Stream] Init - iOS:', this.isIOS, '- WebCodecs:', this.hasWebCodecs);
-        
+
         // Load saved quality from backend
         this.loadSavedQuality();
-        
+        this.loadCameraFpsReadout();
+
         // Status polling is handled by core.js - no duplicate polling here
         
         // Pause expensive decoding in the background and restore the same

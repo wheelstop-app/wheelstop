@@ -49,7 +49,11 @@ public final class TelemetryFields {
         // VIN is a persistent vehicle identifier burned into the footage, which
         // may be auto-uploaded (Telegram). Default OFF like every other new
         // field, so it only ever appears when the user explicitly opts in.
-        VIN("vin", false);
+        VIN("vin", false),
+        // Measured capture rate of the recording this overlay is burned into —
+        // HAL delivery divided by the recorder stride, NOT the requested rate.
+        // Default OFF like every field after the original eight.
+        CAMERA_FPS("cameraFps", false);
 
         private final String key;
         private final boolean legacyDefault;
