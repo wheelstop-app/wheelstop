@@ -333,8 +333,8 @@ public class PanoramicCameraGpu {
     // Learned upper bound on what this HAL delivers. The AVM API has no
     // capability query — setCameraFps is a setter whose boolean return is
     // unreliable — so the ceiling can only be established by watching delivery
-    // fall short of a request. Empty until that is actually observed, so a
-    // faster vehicle is never clamped by it.
+    // fall short of a request. Empty until that is observed, so a faster
+    // vehicle is never clamped by it.
     private final HalFrameRateObserver halFpsObserver = new HalFrameRateObserver();
     private long lastFrameTime = 0;
     private volatile long lastCameraStartTime = 0;
@@ -4000,9 +4000,10 @@ public class PanoramicCameraGpu {
                         stageWorstMosaicNs / 1_000_000,
                         stageWindowFrames));
                 // Feed the learned HAL ceiling from THIS window rather than the
-                // 2-minute Stats window below: the ceiling is what the stream
-                // encoder declares, so learning it in 30s instead of 2 minutes
-                // is the difference between one judder-free stream and three.
+                // 2-minute Stats window below. The ceiling is what the stream
+                // encoder declares, and until it is known the encoder declares
+                // the raw preset — so a 30s window shortens the unpaced period
+                // fourfold on a device that has not learned one yet.
                 long stageWindowMs = nowMs - stageTimingWindowStartMs;
                 float stageFps = stageWindowMs > 0
                         ? (stageWindowFrames * 1000f) / stageWindowMs : 0f;
