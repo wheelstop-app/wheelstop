@@ -1227,10 +1227,9 @@ class DaemonStartupManager(
         // in the event history needs an explanation a future operator can find.
         log.info(TAG, "Stale daemons detected, hard-resetting: " +
             stale.joinToString { "${it.name} pid=${it.pid} running=${it.runningApkPath} installed=$expected" })
-        // APK-backed daemons only. The tunnel binaries are native and cannot
-        // be stale, and killing tailscaled here severs the remote access this
-        // reset may have been triggered over — observed on the car, where the
-        // tunnel did not come back on its own.
+        // APK-backed daemons only. Killing the tunnels here once severed the
+        // remote access the reset was triggered over, and the tunnel did not
+        // come back on its own.
         UpdateLifecycle.hardResetDaemons(context, false) {
             log.info(TAG, "Hard reset complete after stale-daemon detection")
         }

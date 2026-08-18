@@ -149,11 +149,9 @@ public final class UpdateLifecycle {
         // user-stopped tunnel/bot — and would also destroy the only cross-UID
         // record of a UI stop that AccSentryDaemon's ACC-on auto-start gate
         // relies on. Mirrors DaemonStartupManager.clearStaleSentinels (core-only).
-        // The four native tunnel binaries never load the APK via CLASSPATH, so
-        // they cannot be stale, and killing tailscaled can sever the very
-        // remote access a stale-daemon reset was triggered over. Built
-        // separately so the unconditional APK-backed kills below stay
-        // untouched regardless of scope.
+        // Built separately so the unconditional APK-backed kills below stay
+        // untouched regardless of scope. See includeNativeTunnels for why these
+        // four are optional.
         String nativeTunnels = !includeNativeTunnels ? "" :
                 psAwkKillLine("cloudflared") +
                 psAwkKillLine("zrok") +
