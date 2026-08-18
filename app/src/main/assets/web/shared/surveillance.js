@@ -4539,7 +4539,7 @@ BYD.surveillance = {
             timestamp: 'Date & time', batteryPercent: 'Battery %',
             voltage12v: '12V voltage', lowBeam: 'Low beam',
             highBeam: 'High beam', location: 'GPS location',
-            vin: 'VIN'
+            vin: 'VIN', cameraFps: 'Camera FPS'
         };
         const i18nKey = 'recording.telemetry_field_' + key;
         const t = (BYD.i18n && BYD.i18n.t) ? BYD.i18n.t(i18nKey) : null;
