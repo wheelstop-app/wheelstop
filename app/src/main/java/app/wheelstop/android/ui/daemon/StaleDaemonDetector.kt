@@ -37,11 +37,23 @@ class StaleDaemonDetector(
     companion object {
         private const val TAG = "StaleDaemonDetector"
 
-        /** Core daemons only — optional daemons carry durable user-stop semantics. */
-        val CORE_PROCESS_NAMES = listOf(
+        /**
+         * Every daemon launched as `CLASSPATH=<apk> app_process …`, and therefore
+         * every daemon that can hold a deleted APK open. `sentry_proxy` and
+         * `telegram_bot_daemon` load the APK exactly as the first three do; they
+         * were simply missed when this list said "core".
+         *
+         * Deliberately excludes cloudflared / zrok / sing-box / tailscaled: those
+         * are native binaries that never load the APK, so replacing it cannot make
+         * them stale, and killing them severs remote access for no diagnostic
+         * reason.
+         */
+        val APK_BACKED_PROCESS_NAMES = listOf(
             "byd_cam_daemon",
             "sentry_daemon",
-            "acc_sentry_daemon"
+            "acc_sentry_daemon",
+            "sentry_proxy",
+            "telegram_bot_daemon"
         )
 
         /** Marks each pid's block so one read can be split back per process. */
@@ -110,7 +122,7 @@ class StaleDaemonDetector(
     fun findStaleDaemons(expectedApkPath: String, snapshot: String, callback: (List<StaleDaemon>) -> Unit) {
         try {
             val pidsByName = LinkedHashMap<Int, String>()
-            for (name in CORE_PROCESS_NAMES) {
+            for (name in APK_BACKED_PROCESS_NAMES) {
                 for (pid in adbLauncher.pidsFor(snapshot, name)) pidsByName[pid] = name
             }
             if (pidsByName.isEmpty()) {
