@@ -1693,18 +1693,32 @@ public class HttpServer {
             // Only restart if not enabled or quality changed.
             boolean needsRestart = !pipeline.isStreamingEnabled();
             
-            // Check if quality changed — need restart for new resolution
+            // Restart on a new resolution OR a new frame rate. Comparing resolution
+            // alone silently dropped every fps-only change, because ULTRA_HIGH,
+            // SMOOTH and MAX are all 1280x960 and differ only in fps. Stream fps is
+            // also what RecordingModeManager floors the shared camera HAL at, so a
+            // stale one pins the camera to the old rate too.
             if (!needsRestart && pipeline.isStreamingEnabled()) {
                 HardwareEventRecorderGpu existingEncoder = pipeline.getStreamEncoder();
                 if (existingEncoder != null) {
-                    // Compare current encoder resolution with requested quality
+                    // Compare current encoder resolution + fps with requested quality
                     app.wheelstop.android.streaming.GpuStreamScaler scaler = pipeline.getStreamScaler();
                     if (scaler != null) {
                         int currentWidth = scaler.getWidth();
                         int currentHeight = scaler.getHeight();
-                        if (currentWidth != q.width || currentHeight != q.height) {
-                            CameraDaemon.log("WS: Quality changed (" + currentWidth + "x" + currentHeight + 
-                                " → " + q.width + "x" + q.height + ") — restarting encoder");
+                        int currentFps = existingEncoder.getFps();
+                        boolean resChanged = (currentWidth != q.width || currentHeight != q.height);
+                        // Compare against the EFFECTIVE fps the pipeline would use, not
+                        // the raw preset: on the dilink4 HAL the encoder is deliberately
+                        // clamped below the request and re-clamped identically on every
+                        // enable, so a raw comparison would never match and would restart
+                        // the lane on every single reconnect.
+                        int wantFps = pipeline.effectiveStreamFps(q.fps);
+                        boolean fpsChanged = (currentFps > 0 && currentFps != wantFps);
+                        if (resChanged || fpsChanged) {
+                            CameraDaemon.log("WS: Quality changed (" + currentWidth + "x" + currentHeight
+                                + "@" + currentFps + " → " + q.width + "x" + q.height + "@" + q.fps
+                                + ") — restarting encoder");
                             needsRestart = true;
                             pipeline.disableStreaming();
                             Thread.sleep(200);

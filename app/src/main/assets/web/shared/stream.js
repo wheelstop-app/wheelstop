@@ -1143,8 +1143,15 @@ BYD.stream = {
                     const tmpl = BYD.i18n.t('stream.quality_set');
                     BYD.utils.toast(tmpl.replace('{name}', displayName), 'info');
                 }
-                // Server restarts encoder with new resolution — the existing WebSocket
-                // connection will receive new SPS/PPS and the decoder handles it automatically
+                // appliedLive means the backend restarted the stream lane for the
+                // new preset, which deliberately closed our socket. Rebuild locally
+                // instead of riding it out: JMuxer is constructed with a FIXED fps,
+                // so a surviving instance keeps pacing at the old rate even once the
+                // new frames arrive — the picker would look inert on screen even
+                // though the encoder did change.
+                if (data.appliedLive) {
+                    await this._reopenForQualityChange(data.fps);
+                }
             }
         } catch (e) {
             console.error('[Stream] Set quality error:', e);
@@ -1152,6 +1159,40 @@ BYD.stream = {
         }
     },
     
+    /**
+     * Rebuild the decoder + socket after the backend restarted the stream lane
+     * for a new quality preset. Narrower than stopStream()/startStream(): it must
+     * NOT drop back to the camera selector or re-run view routing — the viewer
+     * stays on the same camera, only the encode profile changed.
+     */
+    async _reopenForQualityChange(fps) {
+        if (fps) this.activeFps = fps;
+        // Cancel the onclose backoff so it can't race a second connect against
+        // the one below.
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+        if (this.ws) {
+            this.ws.onclose = null;
+            try { this.ws.close(); } catch (e) {}
+            this.ws = null;
+        }
+        if (this.sotaPlayer) {
+            try { this.sotaPlayer.stop(); } catch (e) {}
+            this.sotaPlayer = null;
+        }
+        if (this.jmuxer) {
+            try { this.jmuxer.destroy(); } catch (e) {}
+            this.jmuxer = null;
+        }
+        this.broadwayPlayer = null;
+        if (!this.streamStarted) return;
+        this.markStreamConnecting();
+        const ready = await this.initDecoder();
+        if (ready) this.connectWebSocket();
+    },
+
     /**
      * Toggle fullscreen
      */
