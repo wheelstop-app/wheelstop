@@ -149,6 +149,19 @@ class DaemonLauncher(
         fun pidsFor(snapshot: String, processName: String): List<Int> =
             snapshot.lineSequence()
                 .filter { it.isNotBlank() }
+                .filterNot { line ->
+                    // A daemon's own argv is just its nice-name; the shell that
+                    // launches or supervises it merely MENTIONS that name. Handing
+                    // a shell's pid to the stale-daemon detector is useless — the
+                    // shell has no CLASSPATH of its own, so it classifies UNKNOWN
+                    // forever and logs once per health tick.
+                    //
+                    // Matched on the launcher forms rather than on an exact-equals
+                    // of the argv, because under-matching is the worse failure:
+                    // missing the real daemon means missing genuine staleness.
+                    line.contains("sh -c ") || line.contains("--nice-name=")
+                        || line.contains("/start_")
+                }
                 .filter { line ->
                     if (processName == SENTRY_DAEMON_PROCESS) {
                         line.contains(processName) && !line.contains("acc_")
