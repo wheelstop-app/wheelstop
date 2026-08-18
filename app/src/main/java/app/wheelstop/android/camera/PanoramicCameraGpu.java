@@ -329,6 +329,13 @@ public class PanoramicCameraGpu {
     // via getMeasuredFps() so the UI can show actualFps when it falls below
     // requested (HAL clamp; e.g. user requests 30, HAL emits ~26).
     private volatile float measuredFps = 0f;
+
+    // Learned upper bound on what this HAL delivers. The AVM API has no
+    // capability query — setCameraFps is a setter whose boolean return is
+    // unreliable — so the ceiling can only be established by watching delivery
+    // fall short of a request. Empty until that is observed, so a faster
+    // vehicle is never clamped by it.
+    private final HalFrameRateObserver halFpsObserver = new HalFrameRateObserver();
     private long lastFrameTime = 0;
     private volatile long lastCameraStartTime = 0;
     // DiLink 4: track last error-restart so we can throttle tight reopen
@@ -848,7 +855,25 @@ public class PanoramicCameraGpu {
             + (USE_OEM_SURFACE_TEXTURE_PATH ? "DiLink 4 (SurfaceTexture passthrough)"
                                               : "Default (ImageReader + 2x2 rearrangement)"));
         startTime = System.currentTimeMillis();
-        
+
+        // Restore the learned HAL frame-rate ceiling. Without this the ceiling is
+        // relearned from scratch every daemon start, which means the FIRST stream
+        // of every session declares a rate the HAL cannot meet and judders for
+        // the ~30s until the first stage window closes. Persisted, only the very
+        // first stream on a given vehicle is ever unpaced.
+        try {
+            org.json.JSONObject camCfg = UnifiedConfigManager
+                    .loadConfig().optJSONObject("camera");
+            int persisted = camCfg != null
+                    ? camCfg.optInt("observedHalFpsCeiling", 0) : 0;
+            if (persisted > 0) {
+                halFpsObserver.seed(persisted);
+                logger.info("Seeded HAL fps ceiling from config: " + persisted);
+            }
+        } catch (Throwable t) {
+            logger.warn("HAL fps ceiling seed failed: " + t.getMessage());
+        }
+
         // SOTA: Initialize BYD camera coordinator for cooperative sharing
         if (cameraCoordinator == null) {
             cameraCoordinator = new BydCameraCoordinator();
@@ -3974,6 +3999,20 @@ public class PanoramicCameraGpu {
                         stageWorstAcquireNs / 1_000_000,
                         stageWorstMosaicNs / 1_000_000,
                         stageWindowFrames));
+                // Feed the learned HAL ceiling from THIS window rather than the
+                // 2-minute Stats window below. The ceiling is what the stream
+                // encoder declares, and until it is known the encoder declares
+                // the raw preset — so a 30s window shortens the unpaced period
+                // fourfold on a device that has not learned one yet.
+                long stageWindowMs = nowMs - stageTimingWindowStartMs;
+                float stageFps = stageWindowMs > 0
+                        ? (stageWindowFrames * 1000f) / stageWindowMs : 0f;
+                int ceilingBefore = halFpsObserver.getCeilingFps();
+                halFpsObserver.observe(targetFps, stageFps, stageWindowMs);
+                int ceilingAfter = halFpsObserver.getCeilingFps();
+                if (ceilingAfter != ceilingBefore) {
+                    persistHalFpsCeilingAsync(ceilingAfter);
+                }
                 stageWorstTotalNs = 0;
                 stageWorstAcquireNs = 0;
                 stageWorstMosaicNs = 0;
@@ -6148,6 +6187,40 @@ public class PanoramicCameraGpu {
      */
     public float getMeasuredFps() {
         return measuredFps;
+    }
+
+    /**
+     * Learns what this HAL will actually deliver, so the stream encoder can
+     * declare a rate the hardware can meet. Fed from the 30s stage window.
+     * See {@link HalFrameRateObserver} for why this cannot be queried.
+     */
+    public HalFrameRateObserver getHalFrameRateObserver() {
+        return halFpsObserver;
+    }
+
+    /**
+     * Persist a newly-raised HAL ceiling off the GL thread. {@code updateSection}
+     * does file I/O, and this runs from the render loop's stage-window block —
+     * inline it would stall frame delivery. The ceiling only ratchets upward and
+     * settles after the first window, so this fires approximately once per
+     * vehicle rather than per window; a short-lived thread is cheaper than
+     * keeping an executor alive for it.
+     */
+    private void persistHalFpsCeilingAsync(final int ceilingFps) {
+        Thread t = new Thread(() -> {
+            try {
+                org.json.JSONObject update = new org.json.JSONObject();
+                update.put("observedHalFpsCeiling", ceilingFps);
+                UnifiedConfigManager.updateSection("camera", update);
+                logger.info("Learned HAL fps ceiling = " + ceilingFps + " (persisted)");
+            } catch (Throwable e) {
+                // Losing the persist only costs a relearn next start; never let
+                // it take the render loop down.
+                logger.warn("HAL fps ceiling persist failed: " + e.getMessage());
+            }
+        }, "HalFpsCeilingPersist");
+        t.setDaemon(true);
+        t.start();
     }
     /**
      * Enables auto-probe mode: tries camera IDs 0-5 at startup to find
