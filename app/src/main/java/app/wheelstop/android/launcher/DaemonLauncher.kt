@@ -985,7 +985,13 @@ class DaemonLauncher(
         // core daemons that camera's own guard didn't cover. The existing
         // acc_sentry_daemon.lock file is untouched here; it gates something
         // else entirely, inside launchAccSentryDaemonInternal's cleanup script.
-        isDaemonRunning(ACC_SENTRY_DAEMON_PROCESS) { isRunning ->
+        //
+        // alsoMatch = "start_acc_sentry" restores the watchdog-awareness the
+        // old inline check had: the watchdog script never contains the
+        // daemon's own process name, so without this, a watchdog that's up
+        // but hasn't spawned its daemon yet would read as "not running" and
+        // get a second watchdog launched right alongside it.
+        isDaemonRunning(ACC_SENTRY_DAEMON_PROCESS, alsoMatch = "start_acc_sentry") { isRunning ->
             if (isRunning) {
                 // Clear the disable sentinel synchronously (in the rm's own
                 // onSuccess callback) BEFORE reporting success — same ordering
@@ -2233,14 +2239,49 @@ class DaemonLauncher(
      * Check if a daemon is running.
      * Uses ps with grep which is more reliable on Android than pgrep.
      */
-    fun isDaemonRunning(processName: String, callback: (Boolean) -> Unit) {
+    fun isDaemonRunning(processName: String, callback: (Boolean) -> Unit) =
+        isDaemonRunning(processName, alsoMatch = null, callback = callback)
+
+    /**
+     * Same as the two-argument [isDaemonRunning], but ALSO reports "running"
+     * when [alsoMatch] shows up in the process table alongside [processName].
+     *
+     * ACC_SENTRY_DAEMON's watchdog script (`start_acc_sentry.sh`) never
+     * contains the daemon's own process name in its argv, so without this a
+     * watchdog that is up but hasn't spawned its daemon YET would read as
+     * "not running." The launch guard would then relaunch — tearing down a
+     * perfectly good watchdog and, in the window before its own cleanup
+     * script's kill lands, briefly running two of them, which is exactly the
+     * double-instance failure this guard exists to prevent. The inline check
+     * this guard replaced (`grep -E '($ACC_SENTRY_DAEMON_PROCESS|start_acc_sentry)'`)
+     * already had this watchdog-awareness; this parameter restores it as
+     * something any caller can opt into, rather than a one-off inline
+     * command only AccSentryDaemon had.
+     */
+    fun isDaemonRunning(processName: String, alsoMatch: String?, callback: (Boolean) -> Unit) {
+        // `grep sentry_daemon` also matches `acc_sentry_daemon` — they are
+        // separate daemons with separate lifecycles, and without this
+        // exclusion a live acc_sentry_daemon masks a dead sentry_daemon and
+        // suppresses its relaunch. processAliveIn and pidsFor already carry
+        // this same exclusion; all three must agree about what "sentry is
+        // running" means.
+        val sentryExclusion = if (processName == SENTRY_DAEMON_PROCESS) " | grep -v acc_" else ""
+        // -w (whole word) applies on every branch, not just sentry's: every
+        // process name this is called with today — byd_cam_daemon,
+        // sentry_daemon, acc_sentry_daemon, sentry_proxy, sing-box,
+        // cloudflared, tailscaled, telegram_bot_daemon, and the acc-sentry
+        // watchdog's start_acc_sentry — is bounded by '/', '=', or
+        // whitespace in its `ps` ARGS line, so -w narrows matching without
+        // excluding anything real. Checked against every current caller of
+        // isDaemonRunning before adding this.
+        val grepArgs = if (alsoMatch != null) "-wE '($processName|$alsoMatch)'" else "-w $processName"
         adbShellExecutor.execute(
-            command = "ps -A | grep $processName | grep -v grep",
+            command = "ps -A | grep $grepArgs | grep -v grep$sentryExclusion",
             callback = object : AdbShellExecutor.ShellCallback {
                 override fun onSuccess(output: String) {
                     callback(output.trim().isNotEmpty())
                 }
-                
+
                 override fun onError(error: String) {
                     callback(false)
                 }
