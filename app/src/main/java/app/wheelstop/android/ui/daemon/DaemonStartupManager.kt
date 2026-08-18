@@ -18,6 +18,7 @@ import app.wheelstop.android.telegram.config.UnifiedTelegramConfig
 import app.wheelstop.android.ui.model.DaemonType
 import app.wheelstop.android.ui.util.PreferencesManager
 import app.wheelstop.android.ui.viewmodel.DaemonsViewModel
+import app.wheelstop.android.updater.UpdateLifecycle
 
 class DaemonStartupManager(
     private val context: Context,
@@ -69,6 +70,22 @@ class DaemonStartupManager(
         ZrokLauncher(context, executor, log)
     }
 
+    /**
+     * Consecutive stale-daemon resets this app session. Capped so a reset that
+     * does not take cannot loop: a parked car would otherwise restart surveillance
+     * every 30s forever.
+     */
+    private var consecutiveStaleResets = 0
+    // Flips once we've hit MAX_STALE_RESETS and logged the give-up error. Gating
+    // future checks on this rather than on consecutiveStaleResets means the give-up
+    // log actually runs once (a counter-only gate can return BEFORE the callback
+    // that would log it ever fires) and detection then stays off for the rest of
+    // the session instead of silently retrying forever.
+    private var staleGiveUpLogged = false
+    private val staleDaemonDetector by lazy {
+        StaleDaemonDetector(adbLauncher, adbLauncher.adbShellExecutor, log)
+    }
+
     // Runnables scheduled by proceedInitializeOnAppLaunch/proceedInitializeOnBoot,
     // held so a LATER exclusivity-gate call on THIS instance can cancel an
     // EARLIER call's still-pending schedule before it fires. This manager is a
@@ -104,6 +121,9 @@ class DaemonStartupManager(
         // availability on timeout — same convention as this file's other
         // probe-failure handling (see ifNotUserStopped / relaunchDaemon).
         private const val EXCLUSIVITY_CHECK_TIMEOUT_MS = 5_000L
+
+        /** Resets per app session before we stop trying and surface an error. */
+        private const val MAX_STALE_RESETS = 2
 
         val CORE_DAEMONS: List<DaemonType> = listOf(
             DaemonType.CAMERA_DAEMON,
@@ -1149,6 +1169,66 @@ class DaemonStartupManager(
                     relaunchDaemon(type)
                 }
             }
+            // A sideloaded install leaves daemons running the DELETED apk. Nothing
+            // else notices: BootReceiver never fires (BYD broadcast suppression) and
+            // no sentinel is written, so isPostUpdateLaunch stays false forever.
+            // Passes the snapshot this tick ALREADY took — StaleDaemonDetector also
+            // exposes a no-snapshot overload that takes its own, but calling that one
+            // from here would run a second `ps -A` every 30s and reintroduce the load
+            // the single-snapshot health check was rewritten to avoid.
+            checkForStaleDaemons(snapshot)
+        }
+    }
+
+    /**
+     * One-shot stale check for app start. The health check runs its own on a
+     * 30s cadence; this covers the case where the app is opened by hand after a
+     * sideload and the user closes it again before the first tick. No snapshot
+     * in hand at app start, so this falls through to the detector's
+     * self-snapshotting overload.
+     */
+    fun checkForStaleDaemonsOnce() = checkForStaleDaemons()
+
+    /**
+     * @param snapshot a `ps -A` result the caller already has (the health check's own
+     *   tick), or null to have the detector take its own (app start, which has none).
+     */
+    private fun checkForStaleDaemons(snapshot: String? = null) {
+        if (staleGiveUpLogged) return
+        val expected = try {
+            context.applicationInfo.sourceDir
+        } catch (t: Throwable) {
+            log.warn(TAG, "Cannot read own APK path — skipping stale check")
+            return
+        }
+        val onResult: (List<StaleDaemon>) -> Unit = { stale -> handleStaleDaemonResult(stale, expected) }
+        if (snapshot != null) {
+            staleDaemonDetector.findStaleDaemons(expected, snapshot, onResult)
+        } else {
+            staleDaemonDetector.findStaleDaemons(expected, onResult)
+        }
+    }
+
+    private fun handleStaleDaemonResult(stale: List<StaleDaemon>, expected: String) {
+        if (stale.isEmpty()) {
+            consecutiveStaleResets = 0
+            return
+        }
+        if (consecutiveStaleResets >= MAX_STALE_RESETS) {
+            // Reachable only because the entry gate keys on staleGiveUpLogged
+            // rather than the counter — see that field for why.
+            log.error(TAG, "Stale daemons persist after $MAX_STALE_RESETS resets " +
+                "(${stale.joinToString { "${it.name}#${it.pid}" }}) — no further resets this session")
+            staleGiveUpLogged = true
+            return
+        }
+        consecutiveStaleResets++
+        // INFO, not DEBUG: this restart interrupts surveillance, and the gap
+        // in the event history needs an explanation a future operator can find.
+        log.info(TAG, "Stale daemons detected, hard-resetting: " +
+            stale.joinToString { "${it.name} pid=${it.pid} running=${it.runningApkPath} installed=$expected" })
+        UpdateLifecycle.hardResetDaemons(context) {
+            log.info(TAG, "Hard reset complete after stale-daemon detection")
         }
     }
 

@@ -79,6 +79,16 @@ class DaemonLauncher(
         private var accSentryLaunchStartedAt = 0L
         @Volatile
         private var cameraLaunchStartedAt = 0L
+        // Sentry was the one core launcher missing this guard. Boot (+5s
+        // timer), the health check, and a user tap can all call
+        // launchSentryDaemon within the same window; the isDaemonRunning
+        // check further down is asynchronous (check, await the shell
+        // callback, then launch), so without this latch two overlapping
+        // calls can both observe "not running" in that window and both
+        // spawn a watchdog — the actual cause of the two live
+        // sentry_daemon processes observed under two separate watchdogs.
+        @Volatile
+        private var sentryLaunchStartedAt = 0L
         // Telegram needs the same guard: boot (+15s timer), the ACC-off edge,
         // the 30s health check and a user tap can all call launchTelegramDaemon
         // within the same window. Each deploys start_telegram.sh and nohup's it,
@@ -120,6 +130,34 @@ class DaemonLauncher(
 
         /** Newline-terminated form for use inside `buildString` script bodies. */
         fun psAwkKillLine(pattern: String): String = psAwkKill(pattern) + "\n"
+
+        /**
+         * Pids whose command line matches [processName] in a [snapshotProcessTable]
+         * result. Applies the SAME sentry/acc_sentry exclusion as [processAliveIn] —
+         * a bare `contains("sentry_daemon")` also matches `acc_sentry_daemon`, and the
+         * two are separate daemons with separate lifecycles.
+         *
+         * Lives in the companion object (rather than beside [processAliveIn], an
+         * instance member) so [ProcessTablePidParsingTest] can call it statically
+         * without standing up a whole `DaemonLauncher`.
+         *
+         * Lines that do not begin with an integer (the `ps` header, or anything the
+         * shell interleaved) are skipped rather than treated as an error: a snapshot is
+         * best-effort input, and a detector that throws on it would block daemon startup.
+         */
+        @JvmStatic
+        fun pidsFor(snapshot: String, processName: String): List<Int> =
+            snapshot.lineSequence()
+                .filter { it.isNotBlank() }
+                .filter { line ->
+                    if (processName == SENTRY_DAEMON_PROCESS) {
+                        line.contains(processName) && !line.contains("acc_")
+                    } else {
+                        line.contains(processName)
+                    }
+                }
+                .mapNotNull { it.trim().substringBefore(' ').toIntOrNull() }
+                .toList()
 
         /**
          * Build the shell lines for a backgrounded log-size poller that bounds
@@ -712,28 +750,60 @@ class DaemonLauncher(
      * Monitors ACC state and manages recording/location services.
      */
     fun launchSentryDaemon(callback: LaunchCallback) {
+        // Prevent concurrent launch attempts (self-healing: a stale guard from a
+        // dropped callback expires after LAUNCH_GUARD_TIMEOUT_MS instead of
+        // wedging every future launch). Mirrors launchCameraDaemon's guard
+        // exactly — read that method and copy its shape rather than inventing
+        // a new one.
+        //
+        // This latch, not the isDaemonRunning check below, is the actual fix
+        // for the double-launch observed on a car: launchSentryDaemon was the
+        // one core launcher with no concurrent-launch guard. isDaemonRunning
+        // is asynchronous — check, await the shell callback, then launch — so
+        // two overlapping launchSentryDaemon() calls could both observe "not
+        // running" inside that window and both spawn a watchdog, producing
+        // two live sentry_daemon processes under two separate watchdogs while
+        // CAMERA_DAEMON, which already had this same latch, only ever had one.
+        if (guardHeld(sentryLaunchStartedAt)) {
+            logManager.info(TAG, "SentryDaemon launch already in progress, skipping")
+            callback.onLog("Launch already in progress")
+            callback.onLaunched()
+            return
+        }
+        sentryLaunchStartedAt = System.currentTimeMillis()
+
         logManager.info(TAG, "Launching SentryDaemon...")
         callback.onLog("Launching SentryDaemon...")
-        
-        // Use word boundary to avoid matching acc_sentry_daemon
-        adbShellExecutor.execute(
-            command = "ps -A | grep -w $SENTRY_DAEMON_PROCESS | grep -v grep | grep -v acc_",
-            callback = object : AdbShellExecutor.ShellCallback {
-                override fun onSuccess(output: String) {
-                    if (output.trim().isNotEmpty()) {
-                        logManager.info(TAG, "SentryDaemon already running: ${output.trim()}")
-                        callback.onLog("SentryDaemon already running")
-                        callback.onLaunched()
-                        return
-                    }
-                    launchSentryDaemonInternal(callback)
-                }
-                
-                override fun onError(error: String) {
-                    launchSentryDaemonInternal(callback)
-                }
+
+        // Cross-process backstop below the in-process latch above: the latch
+        // only rules out two overlapping calls WITHIN this app process, not a
+        // sentry_daemon left running from a previous process (e.g. this app
+        // was killed and relaunched). isDaemonRunning(SENTRY_DAEMON_PROCESS)
+        // catches that case. Kept sitting INSIDE this launch method rather
+        // than at whatever scheduled the call, mirroring CAMERA_DAEMON's
+        // shape — including still calling callback.onLaunched() on the
+        // already-running path so a caller waiting on this callback is never
+        // left hanging.
+        isDaemonRunning(SENTRY_DAEMON_PROCESS) { isRunning ->
+            if (isRunning) {
+                logManager.info(TAG, "SentryDaemon already running")
+                callback.onLog("SentryDaemon already running")
+                callback.onLaunched()
+                sentryLaunchStartedAt = 0L
+                return@isDaemonRunning
             }
-        )
+            launchSentryDaemonInternal(object : LaunchCallback {
+                override fun onLog(message: String) = callback.onLog(message)
+                override fun onLaunched() {
+                    sentryLaunchStartedAt = 0L
+                    callback.onLaunched()
+                }
+                override fun onError(error: String) {
+                    sentryLaunchStartedAt = 0L
+                    callback.onError(error)
+                }
+            })
+        }
     }
     
     private fun launchSentryDaemonInternal(callback: LaunchCallback) {
@@ -949,54 +1019,48 @@ class DaemonLauncher(
         
         logManager.info(TAG, "Launching AccSentryDaemon (UID 2000)...")
         callback.onLog("Launching AccSentryDaemon (UID 2000 for screen control)...")
-        
-        // Check if daemon or watchdog process is running
-        adbShellExecutor.execute(
-            command = "ps -A | grep -E '($ACC_SENTRY_DAEMON_PROCESS|start_acc_sentry)' | grep -v grep",
-            callback = object : AdbShellExecutor.ShellCallback {
-                override fun onSuccess(output: String) {
-                    val hasDaemon = output.contains(ACC_SENTRY_DAEMON_PROCESS)
-                    val hasWatchdog = output.contains("start_acc_sentry")
-                    
-                    if (hasDaemon || hasWatchdog) {
-                        // Clear the disable sentinel synchronously on the
-                        // already-running path: report success only after
-                        // the rm has landed, so a daemon exit racing the rm
-                        // can't let the watchdog gate-2 see a still-present
-                        // sentinel and exit 0 (silent permanent stop).
-                        val statusMsg = if (hasDaemon) "AccSentryDaemon already running"
-                                         else "Watchdog active, daemon will respawn"
-                        if (hasDaemon) {
-                            logManager.info(TAG, "AccSentryDaemon already running")
-                        } else {
-                            logManager.info(TAG, "Watchdog process running - daemon will spawn")
+
+        // Same isDaemonRunning guard shape CAMERA_DAEMON uses (see
+        // launchCameraDaemon), sitting INSIDE this launch method rather than at
+        // the scheduling site: two launches scheduled 45 seconds apart would
+        // otherwise both pass a check made before scheduling and both spawn a
+        // watchdog — the exact double-launch this task closes off for the two
+        // core daemons that camera's own guard didn't cover. The existing
+        // acc_sentry_daemon.lock file is untouched here; it gates something
+        // else entirely, inside launchAccSentryDaemonInternal's cleanup script.
+        //
+        // alsoMatch = "start_acc_sentry" restores the watchdog-awareness the
+        // old inline check had: the watchdog script never contains the
+        // daemon's own process name, so without this, a watchdog that's up
+        // but hasn't spawned its daemon yet would read as "not running" and
+        // get a second watchdog launched right alongside it.
+        isDaemonRunning(ACC_SENTRY_DAEMON_PROCESS, alsoMatch = "start_acc_sentry") { isRunning ->
+            if (isRunning) {
+                // Clear the disable sentinel synchronously (in the rm's own
+                // onSuccess callback) BEFORE reporting success — same ordering
+                // launchCameraDaemon uses, so a daemon exit racing the rm can't
+                // let the watchdog gate-2 see a still-present sentinel and exit
+                // 0 (silent permanent stop).
+                logManager.info(TAG, "AccSentryDaemon already running")
+                callback.onLog("AccSentryDaemon already running")
+                adbShellExecutor.execute(
+                    command = "rm -f /data/local/tmp/acc_sentry_daemon.disabled 2>/dev/null; echo done",
+                    callback = object : AdbShellExecutor.ShellCallback {
+                        override fun onSuccess(o: String) {
+                            callback.onLaunched()
+                            accSentryLaunchStartedAt = 0L
                         }
-                        callback.onLog(statusMsg)
-                        adbShellExecutor.execute(
-                            command = "rm -f /data/local/tmp/acc_sentry_daemon.disabled 2>/dev/null; echo done",
-                            callback = object : AdbShellExecutor.ShellCallback {
-                                override fun onSuccess(o: String) {
-                                    callback.onLaunched()
-                                    accSentryLaunchStartedAt = 0L
-                                }
-                                override fun onError(e: String) {
-                                    logManager.warn(TAG, "Sentinel rm failed on already-running short-circuit: $e")
-                                    callback.onLaunched()
-                                    accSentryLaunchStartedAt = 0L
-                                }
-                            }
-                        )
-                        return
+                        override fun onError(e: String) {
+                            logManager.warn(TAG, "Sentinel rm failed on already-running short-circuit: $e")
+                            callback.onLaunched()
+                            accSentryLaunchStartedAt = 0L
+                        }
                     }
-                    
-                    launchAccSentryDaemonInternal(callback)
-                }
-                
-                override fun onError(error: String) {
-                    launchAccSentryDaemonInternal(callback)
-                }
+                )
+                return@isDaemonRunning
             }
-        )
+            launchAccSentryDaemonInternal(callback)
+        }
     }
     
     private fun launchAccSentryDaemonInternal(callback: LaunchCallback) {
@@ -2159,12 +2223,19 @@ class DaemonLauncher(
      * We pass `-o ARGS` anyway so the column set is pinned by us and cannot drift
      * with a vendor's default-field list.
      *
-     * @param callback receives the raw `ps -A -o ARGS` output, or null if the probe
-     *   failed (callers must treat null as "unknown", never as "dead").
+     * `PID` is now the leading column too. The stale-daemon detector needs a pid
+     * for every match so it can read `/proc/<pid>/environ`, and this snapshot is
+     * the only `ps` we are willing to run — see [pidsFor]. Adding the column here
+     * keeps that a single shell round-trip instead of a second `ps` just to
+     * resolve pids. [processAliveIn]'s `contains` matching is unaffected: a
+     * leading pid column does not change whether a line contains a process name.
+     *
+     * @param callback receives the raw `ps -A -o PID,ARGS` output, or null if the
+     *   probe failed (callers must treat null as "unknown", never as "dead").
      */
     fun snapshotProcessTable(callback: (String?) -> Unit) {
         adbShellExecutor.execute(
-            command = "ps -A -o ARGS",
+            command = "ps -A -o PID,ARGS",
             callback = object : AdbShellExecutor.ShellCallback {
                 override fun onSuccess(output: String) { callback(output) }
                 override fun onError(error: String) { callback(null) }
@@ -2173,8 +2244,10 @@ class DaemonLauncher(
     }
 
     /**
-     * Tests one daemon against a [snapshotProcessTable] (`ps -A -o ARGS`) result.
-     * Semantics match the old per-daemon `ps -A | grep <name> | grep -v grep`.
+     * Tests one daemon against a [snapshotProcessTable] (`ps -A -o PID,ARGS`)
+     * result. Semantics match the old per-daemon `ps -A | grep <name> | grep -v grep`.
+     * The leading pid column does not affect this: matching is an unanchored
+     * `contains`, so it is indifferent to what precedes the process name.
      *
      * Deliberately NO watchdog-script exclusion. It looks like the supervising
      * shells (`sh /data/local/tmp/start_cam_daemon.sh`) could false-positive a dead
@@ -2209,14 +2282,49 @@ class DaemonLauncher(
      * Check if a daemon is running.
      * Uses ps with grep which is more reliable on Android than pgrep.
      */
-    fun isDaemonRunning(processName: String, callback: (Boolean) -> Unit) {
+    fun isDaemonRunning(processName: String, callback: (Boolean) -> Unit) =
+        isDaemonRunning(processName, alsoMatch = null, callback = callback)
+
+    /**
+     * Same as the two-argument [isDaemonRunning], but ALSO reports "running"
+     * when [alsoMatch] shows up in the process table alongside [processName].
+     *
+     * ACC_SENTRY_DAEMON's watchdog script (`start_acc_sentry.sh`) never
+     * contains the daemon's own process name in its argv, so without this a
+     * watchdog that is up but hasn't spawned its daemon YET would read as
+     * "not running." The launch guard would then relaunch — tearing down a
+     * perfectly good watchdog and, in the window before its own cleanup
+     * script's kill lands, briefly running two of them, which is exactly the
+     * double-instance failure this guard exists to prevent. The inline check
+     * this guard replaced (`grep -E '($ACC_SENTRY_DAEMON_PROCESS|start_acc_sentry)'`)
+     * already had this watchdog-awareness; this parameter restores it as
+     * something any caller can opt into, rather than a one-off inline
+     * command only AccSentryDaemon had.
+     */
+    fun isDaemonRunning(processName: String, alsoMatch: String?, callback: (Boolean) -> Unit) {
+        // `grep sentry_daemon` also matches `acc_sentry_daemon` — they are
+        // separate daemons with separate lifecycles, and without this
+        // exclusion a live acc_sentry_daemon masks a dead sentry_daemon and
+        // suppresses its relaunch. processAliveIn and pidsFor already carry
+        // this same exclusion; all three must agree about what "sentry is
+        // running" means.
+        val sentryExclusion = if (processName == SENTRY_DAEMON_PROCESS) " | grep -v acc_" else ""
+        // -w (whole word) applies on every branch, not just sentry's: every
+        // process name this is called with today — byd_cam_daemon,
+        // sentry_daemon, acc_sentry_daemon, sentry_proxy, sing-box,
+        // cloudflared, tailscaled, telegram_bot_daemon, and the acc-sentry
+        // watchdog's start_acc_sentry — is bounded by '/', '=', or
+        // whitespace in its `ps` ARGS line, so -w narrows matching without
+        // excluding anything real. Checked against every current caller of
+        // isDaemonRunning before adding this.
+        val grepArgs = if (alsoMatch != null) "-wE '($processName|$alsoMatch)'" else "-w $processName"
         adbShellExecutor.execute(
-            command = "ps -A | grep $processName | grep -v grep",
+            command = "ps -A | grep $grepArgs | grep -v grep$sentryExclusion",
             callback = object : AdbShellExecutor.ShellCallback {
                 override fun onSuccess(output: String) {
                     callback(output.trim().isNotEmpty())
                 }
-                
+
                 override fun onError(error: String) {
                     callback(false)
                 }
