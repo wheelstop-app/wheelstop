@@ -102,6 +102,7 @@ public class OverlayBitmapRenderer {
         Field.LOCATION,
         Field.VIN,
         Field.TIMESTAMP,
+        Field.CAMERA_FPS,
     };
 
     private final DaemonLogger logger;
@@ -155,6 +156,8 @@ public class OverlayBitmapRenderer {
     // (blink = (tick/3)%2). Must NOT reuse the GL frame counter — the worker is
     // decoupled from the render cadence now.
     private int workerTick = 0;
+    // Worker-thread confined; see RecordedFpsMeter for why this is not getMeasuredFps().
+    private final RecordedFpsMeter recordedFpsMeter = new RecordedFpsMeter();
 
     public OverlayBitmapRenderer() {
         logger = DaemonLogger.getInstance("OverlayRenderer");
@@ -334,11 +337,14 @@ public class OverlayBitmapRenderer {
             final boolean needBeams = fields.hasAny(Field.LOW_BEAM, Field.HIGH_BEAM);
             final boolean needLoc = fields.has(Field.LOCATION);
             final boolean needVin = fields.has(Field.VIN);
+            final boolean needFps = fields.has(Field.CAMERA_FPS);
             double soc = Double.NaN, volt12 = Double.NaN;
             boolean lowBeam = false, highBeam = false;
             double lat = Double.NaN, lon = Double.NaN;
             boolean hasLoc = false;
             String vin = null;
+            float recordedFps = Float.NaN;
+            int requestedFps = 0;
             if (needBattery || needVolt || needBeams || needVin) {
                 try {
                     app.wheelstop.android.byd.BydDataCollector col =
@@ -366,6 +372,31 @@ public class OverlayBitmapRenderer {
                     }
                 } catch (Throwable ignored) {}
             }
+            if (needFps) {
+                try {
+                    app.wheelstop.android.surveillance.GpuSurveillancePipeline pipeline =
+                            app.wheelstop.android.daemon.CameraDaemon.getGpuPipeline();
+                    app.wheelstop.android.camera.PanoramicCameraGpu cam =
+                            (pipeline != null) ? pipeline.getCamera() : null;
+                    if (cam != null) {
+                        recordedFpsMeter.sample(cam.getFrameCount(),
+                                cam.getRecorderFrameStride(),
+                                android.os.SystemClock.elapsedRealtime());
+                        recordedFps = recordedFpsMeter.recordedFps();
+                        requestedFps = cam.getTargetFps();
+                    } else {
+                        recordedFpsMeter.reset();
+                    }
+                } catch (Throwable ignored) {
+                    // Same contract as the battery/GPS blocks: a failed read draws
+                    // the placeholder, it never takes a recording down.
+                    recordedFpsMeter.reset();
+                }
+            } else {
+                // Switched off mid-recording: drop the window so re-enabling it
+                // does not compute a rate across the gap.
+                recordedFpsMeter.reset();
+            }
 
             // ---- Measure pass: content segment widths (turn signals excluded) ----
             boolean milesMode = false;
@@ -384,7 +415,7 @@ public class OverlayBitmapRenderer {
             for (Field f : CONTENT_ORDER) {
                 if (!fields.has(f)) continue;
                 float w = measureSegment(f, canText, spd, spdUnit, snap,
-                        soc, volt12, lat, lon, hasLoc, vin);
+                        soc, volt12, lat, lon, hasLoc, vin, recordedFps, requestedFps);
                 segWidth[f.ordinal()] = w;
                 contentW += w;
                 shown++;
@@ -451,7 +482,8 @@ public class OverlayBitmapRenderer {
                 if (!first) x += SEGMENT_GAP;
                 first = false;
                 drawSegment(c, f, x, iy, canText, blink, spd, spdUnit, snap,
-                        soc, volt12, lowBeam, highBeam, lat, lon, hasLoc, vin);
+                        soc, volt12, lowBeam, highBeam, lat, lon, hasLoc, vin,
+                        recordedFps, requestedFps);
                 x += segWidth[f.ordinal()];
             }
             if (saveCount >= 0) c.restoreToCount(saveCount);
@@ -467,7 +499,8 @@ public class OverlayBitmapRenderer {
     /** Measure a single content segment's drawn width (excludes inter-segment gap). */
     private float measureSegment(Field f, boolean canText, String spd, String spdUnit,
                                  TelemetrySnapshot snap, double soc, double volt12,
-                                 double lat, double lon, boolean hasLoc, String vin) {
+                                 double lat, double lon, boolean hasLoc, String vin,
+                                 float recordedFps, int requestedFps) {
         switch (f) {
             case SPEED:
                 return canText ? speedPaint.measureText(spd) + 4 + unitPaint.measureText(spdUnit) : 0f;
@@ -521,6 +554,12 @@ public class OverlayBitmapRenderer {
                 // line drawn at size 20).
                 timePaint.setTextSize(16);
                 return Math.max(96f, timePaint.measureText("0000-00-00"));
+            case CAMERA_FPS:
+                // Text-only segment (no glyph) drawn at valuePaint's normal value
+                // size — see fpsSegmentText for why this stays one short segment
+                // instead of stacking like VIN.
+                if (!canText) return 0f;
+                return valuePaint.measureText(fpsSegmentText(recordedFps, requestedFps));
             default:
                 return 0f;
         }
@@ -531,7 +570,8 @@ public class OverlayBitmapRenderer {
                              boolean blink, String spd, String spdUnit,
                              TelemetrySnapshot snap, double soc, double volt12,
                              boolean lowBeam, boolean highBeam,
-                             double lat, double lon, boolean hasLoc, String vin) {
+                             double lat, double lon, boolean hasLoc, String vin,
+                             float recordedFps, int requestedFps) {
         switch (f) {
             case SPEED:
                 if (canText) {
@@ -616,6 +656,12 @@ public class OverlayBitmapRenderer {
                     c.drawText(timeFmt.format(reusableDate), x, 60, timePaint);
                 }
                 break;
+            case CAMERA_FPS:
+                if (canText) {
+                    valuePaint.setColor(0xFFFFFFFF);
+                    c.drawText(fpsSegmentText(recordedFps, requestedFps), x, iy + 28f, valuePaint);
+                }
+                break;
             default:
                 break;
         }
@@ -636,6 +682,25 @@ public class OverlayBitmapRenderer {
     private static String formatCoord(double v, boolean hasLoc, boolean isLat) {
         if (!hasLoc || Double.isNaN(v)) return isLat ? "lat --" : "lon --";
         return String.format(Locale.US, "%.5f", v);
+    }
+
+    /**
+     * Delivered rate, with the requested rate appended only when it materially
+     * differs — "26/30 fps" is the whole point on hardware whose HAL saturates
+     * below the preset. Uses the same 1.5fps tolerance as the existing
+     * cameraFpsClampNote so the two never disagree.
+     *
+     * <p>Stays ONE short segment at the normal value size: the bar is width
+     * constrained (see the VIN comment, which had to stack onto two lines), and a
+     * separate "target" field would cost a second segment.
+     */
+    private static String fpsSegmentText(float recordedFps, int requestedFps) {
+        if (Float.isNaN(recordedFps)) return "-- fps";
+        int shown = Math.round(recordedFps);
+        if (requestedFps > 0 && Math.abs(requestedFps - recordedFps) > 1.5f) {
+            return shown + "/" + requestedFps + " fps";
+        }
+        return shown + " fps";
     }
 
     /**
