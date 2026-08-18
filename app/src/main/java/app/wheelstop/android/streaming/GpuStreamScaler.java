@@ -1291,6 +1291,14 @@ public class GpuStreamScaler {
             "uniform vec4 uOd3;\n" +
             // 5th opaque coefficient vec4 (rear-tap params; defaults identity).
             "uniform vec4 uOd4;\n" +
+            // Declared HERE, ahead of odBlend(): GLSL requires declaration
+            // before use, and odBlend() references all three. They previously
+            // sat in the blind-spot uniform block further down, which compiles
+            // to "'uBsSharpen' : undeclared identifier" and takes the whole
+            // stream path down with it (the program is shared).
+            "uniform float uBsRadius;\n" +
+            "uniform float uBsContrast;\n" +
+            "uniform float uBsSharpen;\n" +
             "varying vec2 vTexCoord;\n" +
             "varying vec2 vUnit;\n" +
             // View 7/8 sampler. All geometry is host-resolved into uOd0..3
@@ -1414,14 +1422,11 @@ public class GpuStreamScaler {
             // coverage itself is computed inline in the 7/8 branches from the
             // inset card SDF (bsRoundBoxSDF) so the same field drives the curved
             // bevel — see the framing helpers below.
-            "uniform float uBsRadius;\n" +
             "uniform float uBsAspect;\n" +
             "uniform float uBsFeather;\n" +
             // Blind-spot card clarity (views 7/8 only), applied inside odBlend.
             // uBsContrast: 1.0 = neutral identity. uBsSharpen: 0.0 = fully skipped
             // (guarded), so both default to bit-identical output. See odBlend.
-            "uniform float uBsContrast;\n" +
-            "uniform float uBsSharpen;\n" +
             // Blind-spot merge mode (views 7/8): 0 = both (rear+side stitch, default),
             // 1 = side camera only, 2 = rear camera only. Single-camera modes bypass
             // odBlend's two-tap blend and fill the whole card from one tap's full FOV.
