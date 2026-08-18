@@ -742,26 +742,25 @@ class DaemonLauncher(
     fun launchSentryDaemon(callback: LaunchCallback) {
         logManager.info(TAG, "Launching SentryDaemon...")
         callback.onLog("Launching SentryDaemon...")
-        
-        // Use word boundary to avoid matching acc_sentry_daemon
-        adbShellExecutor.execute(
-            command = "ps -A | grep -w $SENTRY_DAEMON_PROCESS | grep -v grep | grep -v acc_",
-            callback = object : AdbShellExecutor.ShellCallback {
-                override fun onSuccess(output: String) {
-                    if (output.trim().isNotEmpty()) {
-                        logManager.info(TAG, "SentryDaemon already running: ${output.trim()}")
-                        callback.onLog("SentryDaemon already running")
-                        callback.onLaunched()
-                        return
-                    }
-                    launchSentryDaemonInternal(callback)
-                }
-                
-                override fun onError(error: String) {
-                    launchSentryDaemonInternal(callback)
-                }
+
+        // The guard sits INSIDE this launch method, not at whatever scheduled
+        // the call — a double app launch during recovery once scheduled two
+        // launchSentryDaemon() calls roughly 45 seconds apart, and a check made
+        // only at the scheduling site would have let both of those calls pass,
+        // producing two sentry_daemon processes under two separate watchdogs,
+        // contending for the same camera and the same sentinel files. This
+        // mirrors CAMERA_DAEMON's isDaemonRunning guard shape exactly, right
+        // down to still calling callback.onLaunched() on the already-running
+        // path so a caller waiting on this callback is never left hanging.
+        isDaemonRunning(SENTRY_DAEMON_PROCESS) { isRunning ->
+            if (isRunning) {
+                logManager.info(TAG, "SentryDaemon already running")
+                callback.onLog("SentryDaemon already running")
+                callback.onLaunched()
+                return@isDaemonRunning
             }
-        )
+            launchSentryDaemonInternal(callback)
+        }
     }
     
     private fun launchSentryDaemonInternal(callback: LaunchCallback) {
@@ -977,54 +976,42 @@ class DaemonLauncher(
         
         logManager.info(TAG, "Launching AccSentryDaemon (UID 2000)...")
         callback.onLog("Launching AccSentryDaemon (UID 2000 for screen control)...")
-        
-        // Check if daemon or watchdog process is running
-        adbShellExecutor.execute(
-            command = "ps -A | grep -E '($ACC_SENTRY_DAEMON_PROCESS|start_acc_sentry)' | grep -v grep",
-            callback = object : AdbShellExecutor.ShellCallback {
-                override fun onSuccess(output: String) {
-                    val hasDaemon = output.contains(ACC_SENTRY_DAEMON_PROCESS)
-                    val hasWatchdog = output.contains("start_acc_sentry")
-                    
-                    if (hasDaemon || hasWatchdog) {
-                        // Clear the disable sentinel synchronously on the
-                        // already-running path: report success only after
-                        // the rm has landed, so a daemon exit racing the rm
-                        // can't let the watchdog gate-2 see a still-present
-                        // sentinel and exit 0 (silent permanent stop).
-                        val statusMsg = if (hasDaemon) "AccSentryDaemon already running"
-                                         else "Watchdog active, daemon will respawn"
-                        if (hasDaemon) {
-                            logManager.info(TAG, "AccSentryDaemon already running")
-                        } else {
-                            logManager.info(TAG, "Watchdog process running - daemon will spawn")
+
+        // Same isDaemonRunning guard shape CAMERA_DAEMON uses (see
+        // launchCameraDaemon), sitting INSIDE this launch method rather than at
+        // the scheduling site: two launches scheduled 45 seconds apart would
+        // otherwise both pass a check made before scheduling and both spawn a
+        // watchdog — the exact double-launch this task closes off for the two
+        // core daemons that camera's own guard didn't cover. The existing
+        // acc_sentry_daemon.lock file is untouched here; it gates something
+        // else entirely, inside launchAccSentryDaemonInternal's cleanup script.
+        isDaemonRunning(ACC_SENTRY_DAEMON_PROCESS) { isRunning ->
+            if (isRunning) {
+                // Clear the disable sentinel synchronously (in the rm's own
+                // onSuccess callback) BEFORE reporting success — same ordering
+                // launchCameraDaemon uses, so a daemon exit racing the rm can't
+                // let the watchdog gate-2 see a still-present sentinel and exit
+                // 0 (silent permanent stop).
+                logManager.info(TAG, "AccSentryDaemon already running")
+                callback.onLog("AccSentryDaemon already running")
+                adbShellExecutor.execute(
+                    command = "rm -f /data/local/tmp/acc_sentry_daemon.disabled 2>/dev/null; echo done",
+                    callback = object : AdbShellExecutor.ShellCallback {
+                        override fun onSuccess(o: String) {
+                            callback.onLaunched()
+                            accSentryLaunchStartedAt = 0L
                         }
-                        callback.onLog(statusMsg)
-                        adbShellExecutor.execute(
-                            command = "rm -f /data/local/tmp/acc_sentry_daemon.disabled 2>/dev/null; echo done",
-                            callback = object : AdbShellExecutor.ShellCallback {
-                                override fun onSuccess(o: String) {
-                                    callback.onLaunched()
-                                    accSentryLaunchStartedAt = 0L
-                                }
-                                override fun onError(e: String) {
-                                    logManager.warn(TAG, "Sentinel rm failed on already-running short-circuit: $e")
-                                    callback.onLaunched()
-                                    accSentryLaunchStartedAt = 0L
-                                }
-                            }
-                        )
-                        return
+                        override fun onError(e: String) {
+                            logManager.warn(TAG, "Sentinel rm failed on already-running short-circuit: $e")
+                            callback.onLaunched()
+                            accSentryLaunchStartedAt = 0L
+                        }
                     }
-                    
-                    launchAccSentryDaemonInternal(callback)
-                }
-                
-                override fun onError(error: String) {
-                    launchAccSentryDaemonInternal(callback)
-                }
+                )
+                return@isDaemonRunning
             }
-        )
+            launchAccSentryDaemonInternal(callback)
+        }
     }
     
     private fun launchAccSentryDaemonInternal(callback: LaunchCallback) {
