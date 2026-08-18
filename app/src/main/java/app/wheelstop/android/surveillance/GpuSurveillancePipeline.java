@@ -786,8 +786,11 @@ public class GpuSurveillancePipeline {
      */
     public void setStreamingQuality(GpuPipelineConfig.StreamingQuality quality) {
         config.setStreamingQuality(quality);
-        // Quality is saved — it will be applied on next stream start.
-        // Don't restart the active stream to avoid disrupting the live view.
+        // Config-only: records the choice, does NOT touch a running stream.
+        // Applying a picked preset to the LIVE stream is StreamingApiHandler
+        // .handleSetStreamQuality's job (it restarts the lane so the encoder,
+        // scaler and the camera's fps floor all move together). Do not add a
+        // restart here as well or the two paths will fight over the lane.
         logger.info(String.format("Streaming quality saved: %s (%dx%d @ %dfps)",
                 quality, quality.width, quality.height, quality.fps));
         // GL budget warning: if the stream encoder rate exceeds the
