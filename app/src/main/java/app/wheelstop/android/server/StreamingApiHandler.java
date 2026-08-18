@@ -1713,23 +1713,18 @@ public class StreamingApiHandler {
         // the on-disk default seeded (MEDIUM).
         QualitySettingsApiHandler.persistSettings();
 
-        // Apply to the RUNNING stream, not just the next one. Persisting alone
-        // made the picker inert while the live view was open: every other reader
-        // of `streamingQuality` is guarded by `if (!pipeline.isStreamingEnabled())`,
-        // and the /ws reconnect path compares only the encoder RESOLUTION — so a
-        // pure fps change (ULTRA_HIGH → SMOOTH → MAX all being 1280x960) was
-        // dropped even on reconnect. The preset only ever landed on a full
-        // teardown, which is why picking a lower rate to fix a choppy view did
-        // nothing at all.
+        // Apply to the RUNNING stream, not just the next one: persisting alone
+        // left the picker inert while the live view was open, because every other
+        // reader of `streamingQuality` is guarded by `!isStreamingEnabled()`.
         //
-        // Restart the lane rather than reconfigure in place: a preset carries
+        // Restart the lane rather than reconfigure in place. A preset carries
         // resolution as well as fps/bitrate, and a resolution change needs a new
         // encoder + scaler regardless (an fps change already forces an encoder
         // reinit, so in-place buys nothing). enableStreaming also re-fires the
-        // pipeline's streamStateListener → RecordingModeManager.reconcileCameraProfile,
+        // streamStateListener → RecordingModeManager.reconcileCameraProfile,
         // which re-floors the shared camera HAL fps at the new stream rate and
-        // recomputes the stream draw stride — both of which a bare encoder swap
-        // would miss, leaving the camera pinned at the OLD rate.
+        // recomputes the draw stride — both of which a bare encoder swap would
+        // miss, leaving the camera pinned at the OLD rate.
         boolean appliedLive = false;
         GpuSurveillancePipeline pipeline = CameraDaemon.getGpuPipeline();
         if (pipeline != null && pipeline.isStreamingEnabled()) {
@@ -1742,8 +1737,8 @@ public class StreamingApiHandler {
                         + newQuality.displayName);
             } catch (Exception e) {
                 // The preset is already persisted, so the next stream start still
-                // honours it. Report the failure instead of claiming success —
-                // a silently-inert picker is the bug being fixed here.
+                // honours it. Log rather than swallow: a silently-inert picker is
+                // the bug being fixed here.
                 CameraDaemon.log("Live stream quality apply failed: " + e.getMessage());
             }
         }

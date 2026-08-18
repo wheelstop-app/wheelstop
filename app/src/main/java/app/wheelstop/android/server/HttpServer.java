@@ -1693,13 +1693,11 @@ public class HttpServer {
             // Only restart if not enabled or quality changed.
             boolean needsRestart = !pipeline.isStreamingEnabled();
             
-            // Check if quality changed — need restart for a new resolution OR a new
-            // frame rate. Comparing resolution alone silently dropped every fps-only
-            // change, because ULTRA_HIGH/SMOOTH/MAX are all 1280x960 and differ only
-            // in fps: the reconnect found the resolution equal, reused the old
-            // encoder, and the picked rate never took effect. fps is also what
-            // RecordingModeManager floors the shared camera HAL at, so a stale
-            // stream fps pins the camera to the old rate too.
+            // Restart on a new resolution OR a new frame rate. Comparing resolution
+            // alone silently dropped every fps-only change, because ULTRA_HIGH,
+            // SMOOTH and MAX are all 1280x960 and differ only in fps. Stream fps is
+            // also what RecordingModeManager floors the shared camera HAL at, so a
+            // stale one pins the camera to the old rate too.
             if (!needsRestart && pipeline.isStreamingEnabled()) {
                 HardwareEventRecorderGpu existingEncoder = pipeline.getStreamEncoder();
                 if (existingEncoder != null) {
