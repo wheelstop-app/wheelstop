@@ -1053,6 +1053,24 @@ public class CameraDaemon {
             log("ImageReader probe invocation failed: " + t.getMessage());
         }
 
+        // Same exclusive-HAL window, same consume-once sentinel contract: sweeps
+        // requested capture rates (and surface modes) to find where the AVM HAL
+        // actually saturates. The live path clamps every request to 30, so it
+        // cannot tell us whether 30 is the HAL's ceiling or only ours.
+        try {
+            File sweepSentinel = new File("/data/local/tmp/run_fps_sweep");
+            if (sweepSentinel.exists()) {
+                log("=== FPS sweep sentinel detected — running sweep ===");
+                new app.wheelstop.android.camera.AvmFpsSweepProbe(sweepSentinel).run();
+                if (!sweepSentinel.delete()) {
+                    log("WARN: Could not delete FPS sweep sentinel " + sweepSentinel);
+                }
+                log("=== FPS sweep finished — continuing with normal startup ===");
+            }
+        } catch (Throwable t) {
+            log("FPS sweep invocation failed: " + t.getMessage());
+        }
+
         // Initialize surveillance module (will use loaded settings)
         initSurveillance();
 
