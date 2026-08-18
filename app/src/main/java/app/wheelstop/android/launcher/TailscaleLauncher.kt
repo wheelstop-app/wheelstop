@@ -31,6 +31,14 @@ class TailscaleLauncher(
         private const val PROXY_HOST = "127.0.0.1"
         private const val PROXY_PORT = "8119"
 
+        /**
+         * Loopback connect timeout for the sing-box readiness probe. Generous
+         * enough to survive a momentarily busy device, short enough that a dead
+         * proxy does not stall the tunnel launch — a refused loopback connect
+         * returns in single-digit milliseconds anyway.
+         */
+        private const val SINGBOX_PROBE_TIMEOUT_MS = 750
+
         // Remote-ADB opt-in sentinel + the adbd port we forward to. Same
         // sentinel-file pattern as TAILSCALE_PROXY_FILE so the UID-2000 shell
         // side and the app agree on state across restarts.
@@ -565,19 +573,50 @@ class TailscaleLauncher(
         )
     }
 
+    /**
+     * Whether tailscaled should route its egress through the sing-box SOCKS5
+     * proxy — answered by asking whether that proxy is ACCEPTING CONNECTIONS,
+     * not whether a process exists.
+     *
+     * <p><b>Why not `pgrep -f sing-box`:</b> `-f` matches the whole command
+     * line, and the check itself runs as `sh -c "pgrep -f sing-box"`, so the
+     * probing shell matches ITSELF. The old form returned true unconditionally.
+     * Measured on the car with sing-box definitively not running: `pgrep -f
+     * sing-box` returned the pid of `/system/bin/sh -c ...sing-box...`.
+     *
+     * <p>The consequence was not cosmetic. tailscaled was always launched with
+     * `ALL_PROXY=socks5://127.0.0.1:8119`, and when nothing was listening there
+     * every outbound dial failed instantly — so the tunnel hung on "starting"
+     * forever, with no error surfaced and no direct-path fallback. That is
+     * exactly what happened after a daemon reset killed sing-box: the UI could
+     * never bring Tailscale back, and the vehicle stayed unreachable.
+     *
+     * <p>A port probe also closes the startup race a fixed process check cannot:
+     * sing-box can be running but not yet bound, and routing through it in that
+     * window fails the same way.
+     */
     private fun isSingboxActive(callback: (Boolean) -> Unit) {
-        adbShellExecutor.execute(
-            command = "pgrep -f sing-box",
-            callback = object : AdbShellExecutor.ShellCallback {
-                override fun onSuccess(output: String) {
-                    callback(output.trim().isNotEmpty())
+        // Off the caller's thread: this is a socket connect with a short timeout,
+        // and the callers are already asynchronous.
+        Thread({
+            val reachable = try {
+                java.net.Socket().use { probe ->
+                    probe.connect(
+                        java.net.InetSocketAddress(PROXY_HOST, PROXY_PORT.toInt()),
+                        SINGBOX_PROBE_TIMEOUT_MS
+                    )
+                    true
                 }
-
-                override fun onError(error: String) {
-                    callback(false)
-                }
+            } catch (e: Exception) {
+                false
             }
-        )
+            if (!reachable) {
+                logManager.info(TAG,
+                    "sing-box proxy not accepting on $PROXY_HOST:$PROXY_PORT — " +
+                        "starting tailscaled on the direct path")
+            }
+            callback(reachable)
+        }, "SingboxProxyProbe").start()
     }
 
     fun stopTunnel(callback: TailscaleCallback) {
