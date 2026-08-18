@@ -11,19 +11,38 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 /**
- * All three core daemons must refuse to launch a second copy of themselves.
+ * Every core daemon launcher must be safe against being called twice at once.
  *
- * CAMERA_DAEMON already did; SENTRY_DAEMON and ACC_SENTRY_DAEMON did not, and a
- * double app launch produced two sentry_daemon processes under two separate
- * watchdogs — two daemons contending for the same camera and sentinel files.
+ * CORRECTION: earlier versions of this test (and the plan/spec it was
+ * written from) claimed SENTRY_DAEMON and ACC_SENTRY_DAEMON had "no
+ * single-instance guard." That was wrong — both already had their own inline
+ * `ps` checks before this file's isDaemonRunning() consolidation, and
+ * sentry's (`ps -A | grep -w $SENTRY_DAEMON_PROCESS | grep -v grep | grep -v
+ * acc_`) correctly called callback.onLog()/onLaunched() before returning.
+ * The consolidation onto a single isDaemonRunning() helper is still worth
+ * keeping — three matchers that can no longer disagree, plus a correctness
+ * fix that also benefits the camera and proxy callers — but it did not fix
+ * the bug actually observed on a car.
+ *
+ * THE ACTUAL DEFECT: launchSentryDaemon was the one core launcher with no
+ * concurrent-launch LATCH (see the guardHeld(...*LaunchStartedAt) calls
+ * below). CAMERA_DAEMON, ACC_SENTRY_DAEMON, and TELEGRAM_DAEMON all
+ * serialize concurrent calls to their own launch method with a self-healing
+ * timestamped guard; sentry did not. Any ps-based "already running" check —
+ * old or new — is ASYNCHRONOUS (check, await the shell callback, then
+ * launch), so two overlapping launchSentryDaemon() calls could both observe
+ * "not running" inside that window and both spawn a watchdog. That race, not
+ * a missing ps check, produced the two live sentry_daemon processes observed
+ * under two separate watchdogs, while CAMERA_DAEMON — which already had the
+ * latch — only ever had one.
  *
  * Source inspection because launching needs a device, an adb channel and a real
  * process table. Same approach as the sibling *ContractTests.
  *
  * Routing SENTRY_DAEMON and ACC_SENTRY_DAEMON through the shared
- * isDaemonRunning() helper (rather than each daemon's own bespoke inline ps
- * check) introduced two regressions the presence check above cannot catch,
- * because it only asserts a call exists, not what the call actually matches:
+ * isDaemonRunning() helper also introduced two smaller regressions that a
+ * bare guard-presence check cannot catch, because it only asserts a call
+ * exists, not what the call actually matches:
  *
  *   1. isDaemonRunning had no acc_/word-boundary exclusion, so
  *      isDaemonRunning(SENTRY_DAEMON_PROCESS) could be masked by a live
@@ -34,8 +53,9 @@ import java.nio.file.Paths;
  *      would read as "not running" and get a second watchdog launched
  *      alongside it.
  *
- * The two tests below assert those specific properties so a future edit that
- * silently drops either one fails here instead of on a car.
+ * The tests below assert all three properties — the latch, and these two
+ * matcher details — so a future edit that silently drops any of them fails
+ * here instead of on a car.
  */
 public class SingleInstanceGuardContractTest {
 
@@ -72,6 +92,45 @@ public class SingleInstanceGuardContractTest {
         assertTrue("isDaemonRunning's sentry branch must exclude acc_ from the match, " +
                         "the same way processAliveIn and pidsFor already do",
                 body.contains("grep -v acc_"));
+    }
+
+    @Test
+    public void everyCoreDaemonLaunchIsLatchedAgainstConcurrentCalls() throws IOException {
+        String source = readRepositoryFile(LAUNCHER);
+        // guardHeld(...) is the fix that actually matters here: an
+        // isDaemonRunning() (or any ps-based) check is asynchronous, so it
+        // cannot by itself stop two overlapping calls to the SAME launch
+        // method from both observing "not running" and both spawning a
+        // watchdog. Only the in-process, self-healing timestamped latch
+        // closes that window. Listed together (not just sentryLaunchStartedAt)
+        // so a future core daemon added without one fails here too, and so a
+        // change that keeps calling guardHeld() but stops actually latching
+        // (e.g. drops the "= System.currentTimeMillis()" that arms it) is
+        // still caught by everyLatchIsArmedAfterItsGuardCheck below.
+        for (String latchCall : new String[]{
+                "guardHeld(cameraLaunchStartedAt)",
+                "guardHeld(sentryLaunchStartedAt)",
+                "guardHeld(accSentryLaunchStartedAt)",
+                "guardHeld(telegramLaunchStartedAt)"}) {
+            assertTrue(latchCall + " must guard its launch method against concurrent calls",
+                    source.contains(latchCall));
+        }
+    }
+
+    @Test
+    public void everyLatchIsArmedAfterItsGuardCheck() throws IOException {
+        String source = readRepositoryFile(LAUNCHER);
+        // A guardHeld() check with nothing ever setting the timestamp is a
+        // guard that never actually holds. Each latch field must be assigned
+        // System.currentTimeMillis() somewhere in the file (immediately after
+        // its own guard check, in every core launcher today).
+        for (String field : new String[]{
+                "cameraLaunchStartedAt", "sentryLaunchStartedAt",
+                "accSentryLaunchStartedAt", "telegramLaunchStartedAt"}) {
+            assertTrue(field + " must be armed with System.currentTimeMillis() " +
+                            "after its guardHeld() check, or the latch can never hold",
+                    source.contains(field + " = System.currentTimeMillis()"));
+        }
     }
 
     @Test

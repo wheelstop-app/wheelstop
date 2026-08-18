@@ -79,6 +79,16 @@ class DaemonLauncher(
         private var accSentryLaunchStartedAt = 0L
         @Volatile
         private var cameraLaunchStartedAt = 0L
+        // Sentry was the one core launcher missing this guard. Boot (+5s
+        // timer), the health check, and a user tap can all call
+        // launchSentryDaemon within the same window; the isDaemonRunning
+        // check further down is asynchronous (check, await the shell
+        // callback, then launch), so without this latch two overlapping
+        // calls can both observe "not running" in that window and both
+        // spawn a watchdog — the actual cause of the two live
+        // sentry_daemon processes observed under two separate watchdogs.
+        @Volatile
+        private var sentryLaunchStartedAt = 0L
         // Telegram needs the same guard: boot (+15s timer), the ACC-off edge,
         // the 30s health check and a user tap can all call launchTelegramDaemon
         // within the same window. Each deploys start_telegram.sh and nohup's it,
@@ -740,26 +750,59 @@ class DaemonLauncher(
      * Monitors ACC state and manages recording/location services.
      */
     fun launchSentryDaemon(callback: LaunchCallback) {
+        // Prevent concurrent launch attempts (self-healing: a stale guard from a
+        // dropped callback expires after LAUNCH_GUARD_TIMEOUT_MS instead of
+        // wedging every future launch). Mirrors launchCameraDaemon's guard
+        // exactly — read that method and copy its shape rather than inventing
+        // a new one.
+        //
+        // This latch, not the isDaemonRunning check below, is the actual fix
+        // for the double-launch observed on a car: launchSentryDaemon was the
+        // one core launcher with no concurrent-launch guard. isDaemonRunning
+        // is asynchronous — check, await the shell callback, then launch — so
+        // two overlapping launchSentryDaemon() calls could both observe "not
+        // running" inside that window and both spawn a watchdog, producing
+        // two live sentry_daemon processes under two separate watchdogs while
+        // CAMERA_DAEMON, which already had this same latch, only ever had one.
+        if (guardHeld(sentryLaunchStartedAt)) {
+            logManager.info(TAG, "SentryDaemon launch already in progress, skipping")
+            callback.onLog("Launch already in progress")
+            callback.onLaunched()
+            return
+        }
+        sentryLaunchStartedAt = System.currentTimeMillis()
+
         logManager.info(TAG, "Launching SentryDaemon...")
         callback.onLog("Launching SentryDaemon...")
 
-        // The guard sits INSIDE this launch method, not at whatever scheduled
-        // the call — a double app launch during recovery once scheduled two
-        // launchSentryDaemon() calls roughly 45 seconds apart, and a check made
-        // only at the scheduling site would have let both of those calls pass,
-        // producing two sentry_daemon processes under two separate watchdogs,
-        // contending for the same camera and the same sentinel files. This
-        // mirrors CAMERA_DAEMON's isDaemonRunning guard shape exactly, right
-        // down to still calling callback.onLaunched() on the already-running
-        // path so a caller waiting on this callback is never left hanging.
+        // Cross-process backstop below the in-process latch above: the latch
+        // only rules out two overlapping calls WITHIN this app process, not a
+        // sentry_daemon left running from a previous process (e.g. this app
+        // was killed and relaunched). isDaemonRunning(SENTRY_DAEMON_PROCESS)
+        // catches that case. Kept sitting INSIDE this launch method rather
+        // than at whatever scheduled the call, mirroring CAMERA_DAEMON's
+        // shape — including still calling callback.onLaunched() on the
+        // already-running path so a caller waiting on this callback is never
+        // left hanging.
         isDaemonRunning(SENTRY_DAEMON_PROCESS) { isRunning ->
             if (isRunning) {
                 logManager.info(TAG, "SentryDaemon already running")
                 callback.onLog("SentryDaemon already running")
                 callback.onLaunched()
+                sentryLaunchStartedAt = 0L
                 return@isDaemonRunning
             }
-            launchSentryDaemonInternal(callback)
+            launchSentryDaemonInternal(object : LaunchCallback {
+                override fun onLog(message: String) = callback.onLog(message)
+                override fun onLaunched() {
+                    sentryLaunchStartedAt = 0L
+                    callback.onLaunched()
+                }
+                override fun onError(error: String) {
+                    sentryLaunchStartedAt = 0L
+                    callback.onError(error)
+                }
+            })
         }
     }
     
