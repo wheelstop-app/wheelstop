@@ -575,47 +575,6 @@ public class GpuSurveillancePipeline {
      * an active live view isn't starved/desynced. Returns 0 (no floor) when no
      * stream is up.
      */
-    /**
-     * The encoder fps this pipeline would ACTUALLY use for a requested stream
-     * fps on this device: the request itself on HALs that honour it, clamped to
-     * {@link #DILINK4_STREAM_FPS_CAP} on the OEM SurfaceTexture path (which
-     * emits at its own fixed low rate).
-     *
-     * <p>Anything comparing a RUNNING encoder against a requested preset must
-     * compare against this, never the raw request: on a clamped HAL the encoder
-     * legitimately sits below the preset forever, so a raw comparison reads as a
-     * permanent mismatch and would restart the stream lane on every reconnect.
-     *
-     * <p>Also applies the LEARNED ceiling: where the dilink4 cap is a fixed
-     * constant for one known HAL, {@link HalFrameRateObserver} measures what
-     * this particular vehicle delivers, so a HAL that saturates below its
-     * request stops having an impossible rate declared at it. Declaring 30 while
-     * receiving 26 makes a fixed-fps decoder pace ~13% fast and then starve —
-     * judder that no amount of capture stability can fix. Measured on a BYD
-     * Seal: request 30 → 25.9 delivered, unchanged at requests of 45 and 60.
-     *
-     * <p>The learned ceiling is empty until delivery is actually seen to fall
-     * short, so a vehicle whose HAL honours 60 fps is never held back by it.
-     *
-     * <p>Falls back to the raw request if the camera can't be probed — the same
-     * value {@code enableStreaming} used before the clamp existed.
-     */
-    public int effectiveStreamFps(int requestedFps) {
-        try {
-            PanoramicCameraGpu cam = camera;
-            if (cam != null && cam.isUsingOemSurfaceTexturePath()
-                    && requestedFps > DILINK4_STREAM_FPS_CAP) {
-                return DILINK4_STREAM_FPS_CAP;
-            }
-            if (cam != null) {
-                return cam.getHalFrameRateObserver().clamp(requestedFps);
-            }
-        } catch (Throwable t) {
-            logger.warn("stream-fps clamp check failed: " + t.getMessage());
-        }
-        return requestedFps;
-    }
-
     public int getActiveStreamFps() {
         if (!streamingEnabled) return 0;
         HardwareEventRecorderGpu enc = streamEncoder;
