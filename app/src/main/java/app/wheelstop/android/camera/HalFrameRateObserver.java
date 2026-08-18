@@ -4,28 +4,23 @@ package app.wheelstop.android.camera;
  * Learns the highest frame rate the camera HAL will actually deliver, by
  * watching what it produces against what it was asked for.
  *
- * <p><b>Why this has to be learned rather than queried.</b> The AVM HAL exposes
- * {@code setCameraFps(int)} and nothing else — no {@code getSupportedFpsRange},
- * no parameter map, not even an fps getter. Worse, on the BYD panoramic HAL
- * {@code setCameraFps} returns {@code false} for every value while demonstrably
- * applying it (measured: request 15 → 15.9 delivered). So neither the API nor
- * its return value can tell us what the hardware can do; only measurement can.
+ * <p><b>Measured, not queried:</b> the AVM HAL exposes {@code setCameraFps(int)}
+ * and nothing else — no {@code getSupportedFpsRange}, no parameter map, no fps
+ * getter. On the BYD panoramic HAL that setter returns {@code false} for every
+ * value while still applying it (measured: request 15 → 15.9 delivered), so its
+ * return cannot be read as capability either.
  *
- * <p><b>Why it matters.</b> Declaring a frame rate the HAL cannot meet is not
- * cosmetic. The encoder budgets bits and paces rate control against the declared
- * rate, and a fixed-fps client decoder (JMuxer) paces playback against it — so
- * declaring 30 while receiving 26 makes the decoder run ~13% fast and then
- * starve, which reads as judder regardless of how stable the capture is.
+ * <p><b>Why the declared rate matters:</b> the encoder budgets bits against it
+ * and a fixed-fps client decoder (JMuxer) paces playback against it, so
+ * declaring 30 while receiving 26 makes playback run ~13% fast and then starve.
  *
- * <p><b>The rule, and why it is shaped this way.</b> A ceiling is recorded ONLY
- * from evidence of saturation: a window where the HAL was asked for materially
- * more than it delivered. Simply taking "the highest rate seen" would be wrong
- * in both directions — this camera idles at 1 fps when no consumer wants frames,
- * which would teach a ceiling of 1; and a car that was only ever asked for 15
- * and duly delivered 15 would be capped at 15 forever, never allowed to reach
- * the 30 or 60 it is capable of. Saturation evidence avoids both: no evidence
- * means no ceiling means no clamp, so a faster HAL is never held back by this
- * class. It only ever describes hardware we have watched fall short.
+ * <p><b>Saturation evidence only:</b> a ceiling is recorded ONLY from a window
+ * where the HAL was asked for materially more than it delivered. Taking "the
+ * highest rate seen" instead would be wrong in both directions — this camera
+ * idles at 1 fps when no consumer wants frames, which would teach a ceiling of
+ * 1; and a car only ever asked for 15 would be capped at 15 forever. With
+ * saturation as the trigger, no evidence yields no clamp, so a HAL that honours
+ * 60 fps is never held back.
  *
  * <p>Thread-safe: a single volatile int, written from the camera's stats window
  * and read by the stream-enable path.
@@ -67,14 +62,15 @@ public final class HalFrameRateObserver {
         if (deliveredFps < MIN_CREDIBLE_FPS) return;
         // Not saturating: the HAL met (or beat) the request, so this window says
         // nothing about an upper bound. Recording it would cap the device at
-        // whatever it merely happened to be asked for.
+        // whatever it happened to be asked for.
         if (deliveredFps >= requestedFps - SATURATION_TOLERANCE_FPS) return;
 
         int observed = Math.round(deliveredFps);
-        // Monotonic: keep the HIGHEST saturating delivery ever seen. A later
-        // window under extra load can deliver less without that being a lower
-        // hardware ceiling, and ratcheting down on it would slowly starve the
-        // declared rate toward the worst moment the device ever had.
+        // Monotonic: keep the HIGHEST saturating delivery seen. A later window
+        // under extra load delivers less without the hardware ceiling having
+        // moved, so ratcheting down would pin the declared rate to the device's
+        // worst moment. On-car this matters immediately: the first window reads
+        // ~23 during camera warm-up before settling at 26.
         if (observed > ceilingFps) {
             ceilingFps = observed;
         }
