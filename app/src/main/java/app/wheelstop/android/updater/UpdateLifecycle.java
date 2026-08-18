@@ -80,12 +80,29 @@ public final class UpdateLifecycle {
     }
 
     /**
+     * Full reset, including the native tunnel binaries. This is the in-app update
+     * path: the app is about to restart anyway, so dropping the tunnels costs
+     * nothing and guarantees a clean slate.
+     */
+    public static void hardResetDaemons(Context ctx, Runnable onComplete) {
+        hardResetDaemons(ctx, true, onComplete);
+    }
+
+    /**
      * Hard-kill every known daemon + watchdog, wipe lock/sentinel files, then
      * invoke onComplete on the same thread that the underlying launcher uses.
      * Safe to call when no update is in progress — it's just a sweep.
+     *
+     * @param includeNativeTunnels whether to also kill cloudflared / zrok /
+     *   sing-box / tailscaled. TRUE for the in-app update path. FALSE for a
+     *   stale-daemon reset: those four are native binaries that never load the
+     *   APK via CLASSPATH, so an APK change cannot make them stale, and killing
+     *   them severs the remote access the reset may have been triggered over.
+     *   The APK-backed daemons are killed in both scopes.
      */
-    public static void hardResetDaemons(Context ctx, Runnable onComplete) {
-        Log.i(TAG, "post-update detected — hard-resetting daemons");
+    public static void hardResetDaemons(Context ctx, boolean includeNativeTunnels, Runnable onComplete) {
+        Log.i(TAG, "hard-resetting daemons (scope="
+                + (includeNativeTunnels ? "all" : "apk-backed only") + ")");
         long start = System.currentTimeMillis();
         // We allocate a fresh AdbDaemonLauncher here because hardResetDaemons
         // is static and runs early in MainActivity.runDaemonStartup, before
@@ -132,6 +149,21 @@ public final class UpdateLifecycle {
         // user-stopped tunnel/bot — and would also destroy the only cross-UID
         // record of a UI stop that AccSentryDaemon's ACC-on auto-start gate
         // relies on. Mirrors DaemonStartupManager.clearStaleSentinels (core-only).
+        // The four native tunnel binaries never load the APK via CLASSPATH, so
+        // they cannot be stale, and killing tailscaled can sever the very
+        // remote access a stale-daemon reset was triggered over. Built
+        // separately so the unconditional APK-backed kills below stay
+        // untouched regardless of scope.
+        String nativeTunnels = !includeNativeTunnels ? "" :
+                psAwkKillLine("cloudflared") +
+                psAwkKillLine("zrok") +
+                psAwkKillLine("sing-box") +
+                psAwkKillLine("tailscaled") +
+                "killall -9 cloudflared 2>/dev/null\n" +
+                "killall -9 zrok 2>/dev/null\n" +
+                "killall -9 tailscaled 2>/dev/null\n" +
+                "killall -9 sing-box 2>/dev/null\n";
+
         String script =
                 "echo \"disabled by post-update reset at $(date)\" > /data/local/tmp/camera_daemon.disabled\n" +
                 "chmod 666 /data/local/tmp/camera_daemon.disabled 2>/dev/null\n" +
@@ -153,14 +185,7 @@ public final class UpdateLifecycle {
                 psAwkKillLine("acc_sentry_daemon") +
                 psAwkKillLine("telegram_bot_daemon") +
                 psAwkKillLine("sentry_proxy") +
-                psAwkKillLine("cloudflared") +
-                psAwkKillLine("zrok") +
-                psAwkKillLine("sing-box") +
-                psAwkKillLine("tailscaled") +
-                "killall -9 cloudflared 2>/dev/null\n" +
-                "killall -9 zrok 2>/dev/null\n" +
-                "killall -9 tailscaled 2>/dev/null\n" +
-                "killall -9 sing-box 2>/dev/null\n" +
+                nativeTunnels +
                 // Brief settle so SIGKILL'd daemons release their lockfiles
                 // before we rm the lock files. Without this delay, a daemon
                 // mid-shutdown could still rewrite the lock between our
