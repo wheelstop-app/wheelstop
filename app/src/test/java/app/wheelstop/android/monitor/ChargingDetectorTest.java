@@ -41,6 +41,23 @@ public class ChargingDetectorTest {
         return new ChargingDetector(30L, 30L, 40L);
     }
 
+    /**
+     * Same detector, but with freshness windows far too wide to expire while a
+     * test body runs.
+     *
+     * <p>{@link #newDetector()}'s 30/30/40ms windows exist so tests that WAIT for
+     * a timeout (awaitStopped, the 80-90ms sleeps) stay fast. A test that never
+     * waits for expiry gets no benefit from them and inherits a hazard instead:
+     * its own setup must finish inside 40ms of wall clock, and under a full suite
+     * — parallel forks, GC — it sometimes does not. That is a property of the
+     * machine, not of the behaviour under test, and it produced an intermittent
+     * failure that only ever appeared in full-suite runs, never with the class
+     * run alone (8/8 green in isolation).
+     */
+    private static ChargingDetector newDetectorWithoutExpiryPressure() {
+        return new ChargingDetector(30_000L, 30_000L, 40_000L);
+    }
+
     private static void awaitStopped(ChargingDetector detector) throws Exception {
         long deadline = System.currentTimeMillis() + 1_000L;
         while (detector.isCharging() && System.currentTimeMillis() < deadline) {
@@ -380,7 +397,7 @@ public class ChargingDetectorTest {
     @Test
     public void freshPostTerminalPackFlowCanStartScheduledRestartWithoutSampledL2False()
             throws Exception {
-        ChargingDetector detector = newDetector();
+        ChargingDetector detector = newDetectorWithoutExpiryPressure();
         detector.updateConnectionState(2, false);
         detector.updateBmsState(ChargingStateData.CHARGING_BATTERY_STATE_CHARGING);
         detector.updatePollEvidence(new BydVehicleData.Builder()
