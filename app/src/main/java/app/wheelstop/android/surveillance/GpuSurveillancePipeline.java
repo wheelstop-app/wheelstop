@@ -538,7 +538,7 @@ public class GpuSurveillancePipeline {
      * The encoder fps this pipeline would ACTUALLY use for a requested stream
      * fps on this device: the request itself on HALs that honour it, clamped to
      * {@link #DILINK4_STREAM_FPS_CAP} on the OEM SurfaceTexture path (which
-     * refuses setCameraFps and emits at its own fixed low rate).
+     * emits at its own fixed low rate).
      *
      * <p>Anything comparing a RUNNING encoder against a requested preset must
      * compare against this, never the raw request: on a clamped HAL the encoder

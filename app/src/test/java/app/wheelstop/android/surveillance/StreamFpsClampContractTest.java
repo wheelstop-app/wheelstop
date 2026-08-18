@@ -16,16 +16,15 @@ import java.nio.file.Paths;
  *
  * <p>On the OEM SurfaceTexture HAL the stream encoder is deliberately capped
  * below the requested preset ({@code DILINK4_STREAM_FPS_CAP}), because that HAL
- * refuses {@code setCameraFps} and emits at its own fixed low rate. That cap is
- * not a detail of encoder construction: anything comparing a RUNNING encoder
- * against a requested preset has to apply the same cap, or the encoder appears
- * permanently mismatched against the preset and the comparison misfires forever
- * on exactly the hardware the cap exists for.
+ * emits at its own fixed low rate. The cap is not a detail of encoder
+ * construction: anything comparing a RUNNING encoder against a requested preset
+ * must apply the same cap, or the encoder reads as permanently mismatched and
+ * the comparison misfires on exactly the hardware the cap exists for.
  *
- * <p>Keeping the cap inline inside the enable path is what makes that mistake
- * easy — a second caller has no way to ask "what fps would this actually use?"
- * and reaches for the raw preset instead. {@link GpuSurveillancePipeline#effectiveStreamFps(int)}
- * is that question; these assertions keep it the only answer.
+ * <p>An inline cap makes that mistake easy, because a second caller has no way
+ * to ask what fps the pipeline would actually use and reaches for the raw preset
+ * instead. These assertions keep
+ * {@link GpuSurveillancePipeline#effectiveStreamFps(int)} the single definition.
  *
  * <p>Source inspection rather than invocation: the clamp reads live camera state
  * through a HAL that does not exist in a JVM test. Same approach as the sibling
