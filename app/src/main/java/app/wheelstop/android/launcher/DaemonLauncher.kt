@@ -122,6 +122,34 @@ class DaemonLauncher(
         fun psAwkKillLine(pattern: String): String = psAwkKill(pattern) + "\n"
 
         /**
+         * Pids whose command line matches [processName] in a [snapshotProcessTable]
+         * result. Applies the SAME sentry/acc_sentry exclusion as [processAliveIn] —
+         * a bare `contains("sentry_daemon")` also matches `acc_sentry_daemon`, and the
+         * two are separate daemons with separate lifecycles.
+         *
+         * Lives in the companion object (rather than beside [processAliveIn], an
+         * instance member) so [ProcessTablePidParsingTest] can call it statically
+         * without standing up a whole `DaemonLauncher`.
+         *
+         * Lines that do not begin with an integer (the `ps` header, or anything the
+         * shell interleaved) are skipped rather than treated as an error: a snapshot is
+         * best-effort input, and a detector that throws on it would block daemon startup.
+         */
+        @JvmStatic
+        fun pidsFor(snapshot: String, processName: String): List<Int> =
+            snapshot.lineSequence()
+                .filter { it.isNotBlank() }
+                .filter { line ->
+                    if (processName == SENTRY_DAEMON_PROCESS) {
+                        line.contains(processName) && !line.contains("acc_")
+                    } else {
+                        line.contains(processName)
+                    }
+                }
+                .mapNotNull { it.trim().substringBefore(' ').toIntOrNull() }
+                .toList()
+
+        /**
          * Build the shell lines for a backgrounded log-size poller that bounds
          * the daemon's stdout-redirect log (`$LOG_FILE`) *while the daemon is
          * alive*, not merely at respawn.
@@ -2159,12 +2187,19 @@ class DaemonLauncher(
      * We pass `-o ARGS` anyway so the column set is pinned by us and cannot drift
      * with a vendor's default-field list.
      *
-     * @param callback receives the raw `ps -A -o ARGS` output, or null if the probe
-     *   failed (callers must treat null as "unknown", never as "dead").
+     * `PID` is now the leading column too. The stale-daemon detector needs a pid
+     * for every match so it can read `/proc/<pid>/environ`, and this snapshot is
+     * the only `ps` we are willing to run — see [pidsFor]. Adding the column here
+     * keeps that a single shell round-trip instead of a second `ps` just to
+     * resolve pids. [processAliveIn]'s `contains` matching is unaffected: a
+     * leading pid column does not change whether a line contains a process name.
+     *
+     * @param callback receives the raw `ps -A -o PID,ARGS` output, or null if the
+     *   probe failed (callers must treat null as "unknown", never as "dead").
      */
     fun snapshotProcessTable(callback: (String?) -> Unit) {
         adbShellExecutor.execute(
-            command = "ps -A -o ARGS",
+            command = "ps -A -o PID,ARGS",
             callback = object : AdbShellExecutor.ShellCallback {
                 override fun onSuccess(output: String) { callback(output) }
                 override fun onError(error: String) { callback(null) }
@@ -2173,8 +2208,10 @@ class DaemonLauncher(
     }
 
     /**
-     * Tests one daemon against a [snapshotProcessTable] (`ps -A -o ARGS`) result.
-     * Semantics match the old per-daemon `ps -A | grep <name> | grep -v grep`.
+     * Tests one daemon against a [snapshotProcessTable] (`ps -A -o PID,ARGS`)
+     * result. Semantics match the old per-daemon `ps -A | grep <name> | grep -v grep`.
+     * The leading pid column does not affect this: matching is an unanchored
+     * `contains`, so it is indifferent to what precedes the process name.
      *
      * Deliberately NO watchdog-script exclusion. It looks like the supervising
      * shells (`sh /data/local/tmp/start_cam_daemon.sh`) could false-positive a dead

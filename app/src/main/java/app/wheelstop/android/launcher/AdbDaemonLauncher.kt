@@ -234,6 +234,10 @@ class AdbDaemonLauncher(private val context: Context) {
     /** Test one process name against a [snapshotProcessTable] result. */
     fun processAliveIn(snapshot: String, processName: String): Boolean =
         daemonLauncher.processAliveIn(snapshot, processName)
+
+    /** Pids for [processName] in a [snapshotProcessTable] result. */
+    fun pidsFor(snapshot: String, processName: String): List<Int> =
+        DaemonLauncher.pidsFor(snapshot, processName)
     
     /**
      * Get process uptime for a daemon.
