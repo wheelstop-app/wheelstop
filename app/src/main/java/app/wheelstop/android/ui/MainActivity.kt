@@ -483,6 +483,13 @@ class MainActivity : AppCompatActivity() {
     private fun runDaemonStartup(intent: android.content.Intent?, fromOnCreate: Boolean) {
         val isPostUpdate = UpdateLifecycle
             .isPostUpdateLaunch(this, intent)
+        // The sentinel/broadcast path above only fires for an IN-APP update. A
+        // sideload (adb install -r) satisfies none of its three conditions, so ask
+        // the daemons directly which APK they are running. Detection is advisory:
+        // it never blocks the startup path below.
+        if (!isPostUpdate) {
+            daemonStartupManager.checkForStaleDaemonsOnce()
+        }
         // Skip the postDelayed boilerplate when called from onNewIntent for
         // a non-post-update intent — daemons are already up from onCreate
         // and re-running initializeOnAppLaunch() in that case just churns.
