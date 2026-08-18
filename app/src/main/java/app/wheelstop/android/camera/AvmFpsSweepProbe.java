@@ -26,19 +26,23 @@ import java.util.List;
  * images are acquired and closed immediately so the measurement is what the HAL
  * pushes, not what a pipeline can absorb.
  *
- * <p>Answers two questions the live pipeline cannot:
+ * <p>The live pipeline cannot answer either of these itself: it clamps every
+ * request to 30 ({@code Math.min(30, fps)}), so it can never distinguish "the
+ * HAL saturates at 26" from "we only ever asked for 30". {@code setCameraFps}
+ * returns {@code false} for every value on this HAL while the rate still
+ * follows it, so the return is ignored here.
  *
- * <ol>
- *   <li><b>Is ~26 fps the HAL's ceiling, or just our request?</b> The live path
- *       clamps every request to 30 ({@code Math.min(30, fps)}). If delivery
- *       tracks the request but saturates below it, asking for 45 or 60 may land
- *       30. Note {@code setCameraFps} returns {@code false} for every value on
- *       this HAL yet the rate demonstrably follows it, so the return is
- *       ignored here.</li>
- *   <li><b>Does a single quadrant run faster than the mosaic?</b> Surface mode 0
- *       is the stitched 5120x960 strip; modes 1-4 are individual 1280x960
- *       cameras. A quarter of the pixels may clear a bandwidth-bound ceiling.</li>
- * </ol>
+ * <p>First results (BYD Seal, DiLink), mosaic 5120x960 unless noted:
+ *
+ * <pre>
+ *   req 15 → 15.92    req 45 → 25.91
+ *   req 30 → 25.92    req 60 → 25.91
+ *   req 60 → 25.92    (surface mode 1, single 1280x960 quadrant)
+ * </pre>
+ *
+ * <p>So the ceiling is ~25.9 fps, unmoved by asking for more, and a quadrant at
+ * a quarter of the pixels delivers the same rate — making it temporal rather
+ * than bandwidth-bound.
  *
  * <p>Driven by {@code /data/local/tmp/run_fps_sweep}. Each non-blank, non-{@code #}
  * line is one run: {@code camId surfaceMode width height fpsRequest seconds}.
