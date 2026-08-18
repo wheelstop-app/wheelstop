@@ -67,12 +67,15 @@ class ProcessTablePidParsingTest {
     }
 
     @Test
-    fun skipsTheWatchdogScriptForTheCameraDaemon() {
-        val withScript = """
-            1300 sh /data/local/tmp/start_cam_daemon.sh
+    fun skipsTheLaunchShellForTheCameraDaemon() {
+        // The camera daemon's own watchdog SCRIPT (`sh .../start_cam_daemon.sh`)
+        // never mentions "byd_cam_daemon", so it was never a false match. Its
+        // direct-launch shell does, and that is the form that needs excluding.
+        val withLaunchShell = """
+            1300 sh -c CLASSPATH=/data/app/app.wheelstop.android-abc==/base.apk app_process /system/bin --nice-name=byd_cam_daemon app.wheelstop.android.daemon.CameraDaemon
             1161 byd_cam_daemon
         """.trimIndent()
-        assertEquals(listOf(1161), DaemonLauncher.pidsFor(withScript, "byd_cam_daemon"))
+        assertEquals(listOf(1161), DaemonLauncher.pidsFor(withLaunchShell, "byd_cam_daemon"))
     }
 
     @Test
