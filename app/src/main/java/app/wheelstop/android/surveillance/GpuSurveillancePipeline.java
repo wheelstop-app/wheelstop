@@ -528,13 +528,6 @@ public class GpuSurveillancePipeline {
     }
 
     /**
-     * @return the fps of the currently-enabled live-view stream lane, or 0 when
-     * streaming is off. The stream (PASS 1B) shares the one camera; when the
-     * camera is dropped to a low BS-only idle fps, callers use this as a FLOOR so
-     * an active live view isn't starved/desynced. Returns 0 (no floor) when no
-     * stream is up.
-     */
-    /**
      * The encoder fps this pipeline would ACTUALLY use for a requested stream
      * fps on this device: the request itself on HALs that honour it, clamped to
      * {@link #DILINK4_STREAM_FPS_CAP} on the OEM SurfaceTexture path (which
@@ -575,6 +568,13 @@ public class GpuSurveillancePipeline {
         return requestedFps;
     }
 
+    /**
+     * @return the fps of the currently-enabled live-view stream lane, or 0 when
+     * streaming is off. The stream (PASS 1B) shares the one camera; when the
+     * camera is dropped to a low BS-only idle fps, callers use this as a FLOOR so
+     * an active live view isn't starved/desynced. Returns 0 (no floor) when no
+     * stream is up.
+     */
     public int getActiveStreamFps() {
         if (!streamingEnabled) return 0;
         HardwareEventRecorderGpu enc = streamEncoder;
