@@ -26,12 +26,8 @@ data class StaleDaemon(
  * process-wide lock, taken from a shared SYSTEM adbd every 30s forever.
  *
  * Two entry points, both ending at the same pid-extraction + batched environ
- * read: [findStaleDaemons] (no snapshot) takes its own, for a caller with none
- * in hand (e.g. app start). The snapshot-accepting overload reuses one a
- * caller already took — the periodic health check takes the single permitted
- * `ps -A` per tick and MUST pass that snapshot through rather than calling the
- * no-snapshot overload, which would silently double the `ps -A` cost every
- * 30s and reintroduce the exact load this class exists to avoid.
+ * read: one takes its own snapshot, the other reuses a caller's. Which to use
+ * is a real correctness question for the health check — see the overloads.
  */
 class StaleDaemonDetector(
     private val adbLauncher: AdbDaemonLauncher,

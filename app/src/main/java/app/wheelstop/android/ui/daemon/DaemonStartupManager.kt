@@ -1215,10 +1215,8 @@ class DaemonStartupManager(
             return
         }
         if (consecutiveStaleResets >= MAX_STALE_RESETS) {
-            // Unreachable via a counter-only entry gate (the NEXT call would have
-            // returned before ever reaching this callback) — staleGiveUpLogged is
-            // what makes this branch actually run, exactly once, instead of the
-            // detector going silent after MAX_STALE_RESETS with no explanation.
+            // Reachable only because the entry gate keys on staleGiveUpLogged
+            // rather than the counter — see that field for why.
             log.error(TAG, "Stale daemons persist after $MAX_STALE_RESETS resets " +
                 "(${stale.joinToString { "${it.name}#${it.pid}" }}) — no further resets this session")
             staleGiveUpLogged = true
