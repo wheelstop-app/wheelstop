@@ -119,8 +119,7 @@
     "tyres_persist_failed": "保存轮胎限制失败",
     "recordings_index_unavailable": "录制索引不可用",
     "surveillance_all_classes_off": "此次保存会关闭所有对象类别，导致 AI 检测完全停用。请确认后继续。",
-    "tyres_invalid_unit": "pressureUnit 必须是 kpa、psi 或 bar",
-    "vehicle_blocked_in_motion": "車輛行駛中無法使用此操作"
+    "tyres_invalid_unit": "pressureUnit 必须是 kpa、psi 或 bar"
   },
   "notifications": {
     "charging_started": "开始充电",

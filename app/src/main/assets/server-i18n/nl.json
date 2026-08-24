@@ -119,8 +119,7 @@
     "tyres_persist_failed": "Kon de bandenspanningsgrenzen niet opslaan",
     "recordings_index_unavailable": "Opname-index niet beschikbaar",
     "surveillance_all_classes_off": "Deze wijziging zou alle objectklassen uitschakelen en AI-detectie volledig uitzetten. Bevestig om door te gaan.",
-    "tyres_invalid_unit": "pressureUnit moet kpa, psi of bar zijn",
-    "vehicle_blocked_in_motion": "Deze actie is niet beschikbaar terwijl het voertuig rijdt"
+    "tyres_invalid_unit": "pressureUnit moet kpa, psi of bar zijn"
   },
   "notifications": {
     "charging_started": "Opladen is gestart .",

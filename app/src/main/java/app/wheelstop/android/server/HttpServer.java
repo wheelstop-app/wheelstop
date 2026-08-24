@@ -569,6 +569,10 @@ public class HttpServer {
                 if (!serveStaticFile(out, "local/notifications.html")) {
                     HttpResponse.sendError(out, 404, "notifications.html not found");
                 }
+            } else if (path.equals("/seat-positions.html") || path.equals("/seat-positions")) {
+                if (!serveStaticFile(out, "local/seat-positions.html")) {
+                    HttpResponse.sendError(out, 404, "seat-positions.html not found");
+                }
             } else if (path.equals("/key-mapping.html") || path.equals("/key-mapping")) {
                 if (!serveStaticFile(out, "local/key-mapping.html")) {
                     HttpResponse.sendError(out, 404, "key-mapping.html not found");
@@ -619,7 +623,7 @@ public class HttpServer {
                 if (q >= 0) filePath = filePath.substring(0, q);
                 int h = filePath.indexOf('#');
                 if (h >= 0) filePath = filePath.substring(0, h);
-                if (!serveStaticFile(out, filePath)) {
+                if (!serveStaticFile(out, filePath, ifNoneMatchHeader)) {
                     HttpResponse.sendError(out, 404, "Not Found: " + path);
                 }
             } else if (path.startsWith("/h264/")) {
@@ -657,6 +661,11 @@ public class HttpServer {
         "/api/recording/mode", // recording mode
         "/api/apps/launch",    // open-app action: launch a user-selected app (NOT /api/apps/list)
         "/api/camview/",       // camera-view show/hide (native lane, shares blind-spot pipeline)
+        // Saved seat/mirror position recall. EXACT path, not the /api/positions/ prefix: the
+        // sibling endpoints create, overwrite and delete stored positions, which an ApiAction
+        // has no business reaching. startsWith() on the query-stripped path matches
+        // /api/positions/apply?id=.. and nothing else under /api/positions/.
+        "/api/positions/apply",
         "/api/bs/",            // blind-spot: enable/disable/hide/view/geometry/target/tweak
                                // (same native camera lane as /api/camview/ above — the card's
                                // own on/off + view knobs, no new capability class)
@@ -968,6 +977,22 @@ public class HttpServer {
         // See LightDebugApiHandler / HazardLightProbe.
         if (path.startsWith("/api/debug/light/")) {
             return LightDebugApiHandler.handle(method, path, body, out);
+        }
+
+        // OverDrive-native seat/mirror POSITIONS store (feature: seat positions).
+        // list / capture (fired by the long-press a11y hook) / apply / delete.
+        // Runs in the daemon (only uid that can read/write BYD geometry).
+        if (path.startsWith("/api/positions")) {
+            return PositionsApiHandler.handle(method, path, body, out);
+        }
+
+        // Bodywork seat/keyfob feature-id READS — read-only probe of the
+        // absolute seat geometry (System B) and the keyfob-identity ids via
+        // BYDAutoBodyworkDevice.get(int[], Class) through a PermissiveContext,
+        // the reach the CarProperty bridge lacks. No writes; the seat never
+        // moves. See SeatDebugApiHandler / BodyworkSeatProbe.
+        if (path.startsWith("/api/debug/seat/")) {
+            return SeatDebugApiHandler.handle(method, path, body, out);
         }
 
         // Radar blind-spot ALERT register probe — read-only. The `blindSpot` automation
@@ -1523,6 +1548,10 @@ public class HttpServer {
      * Serves static files from WEB_ROOT with streaming for large files.
      */
     private boolean serveStaticFile(OutputStream out, String relativePath) {
+        return serveStaticFile(out, relativePath, null);
+    }
+
+    private boolean serveStaticFile(OutputStream out, String relativePath, String ifNoneMatch) {
         if (relativePath.contains("..")) {
             return false;
         }
@@ -1552,9 +1581,15 @@ public class HttpServer {
             // The service worker and PWA manifest also need to bypass cache —
             // a stuck-cached SW means the user can't pick up notification fixes
             // without a manual unregister.
-            // Other shared static assets (JS/CSS/fonts/images) ship inside the APK
-            // and never change without an app update, so we let the browser cache
-            // them to avoid re-downloading ~360KB on every page load.
+            //
+            // Other static assets (JS/CSS/fonts/images) ship inside the APK, so they only
+            // change on an app update — but they DO change then, and the old policy
+            // ("public, max-age=86400", no validator) meant the browser could not find that
+            // out for a day. That is what made freshly-deployed nav items appear only
+            // intermittently: /shared/app-shell.js was served from cache with no way to
+            // revalidate. A short max-age plus an ETag keeps the bandwidth win — repeat
+            // page loads in a session still skip the body — while an update is picked up on
+            // the next revalidation instead of the next day.
             String cacheControl;
             String fileName = new File(relativePath).getName();
             if (relativePath.endsWith(".html")
@@ -1562,13 +1597,27 @@ public class HttpServer {
                     || fileName.equals("manifest.json")) {
                 cacheControl = "no-store, no-cache, must-revalidate, max-age=0";
             } else {
-                cacheControl = "public, max-age=86400";
+                cacheControl = "public, max-age=300, must-revalidate";
             }
-            
+
+            // Validator over (mtime, size). Both change when the APK reinstalls an asset,
+            // and neither requires reading the file to compute.
+            String etag = "\"" + Long.toHexString(file.lastModified())
+                    + "-" + Long.toHexString(file.length()) + "\"";
+            if (ifNoneMatch != null && etag.equals(ifNoneMatch.trim())) {
+                out.write(("HTTP/1.1 304 Not Modified\r\n"
+                        + "ETag: " + etag + "\r\n"
+                        + "Cache-Control: " + cacheControl + "\r\n"
+                        + "Connection: close\r\n\r\n").getBytes());
+                out.flush();
+                return true;
+            }
+
             StringBuilder headers = new StringBuilder();
             headers.append("HTTP/1.1 200 OK\r\n")
                    .append("Content-Type: ").append(contentType).append("\r\n")
                    .append("Content-Length: ").append(file.length()).append("\r\n")
+                   .append("ETag: ").append(etag).append("\r\n")
                    .append("Cache-Control: ").append(cacheControl).append("\r\n");
             if (relativePath.endsWith(".html")) {
                 headers.append("Pragma: no-cache\r\n")
