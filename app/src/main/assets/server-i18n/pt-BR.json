@@ -119,8 +119,7 @@
     "tyres_persist_failed": "Falha ao salvar os limites de pressão dos pneus",
     "recordings_index_unavailable": "Índice de gravações indisponível",
     "surveillance_all_classes_off": "Esta salvamento desativará todas as classes de objetos, desligando a detecção por IA por completo. Confirme para prosseguir.",
-    "tyres_invalid_unit": "pressureUnit deve ser kpa, psi ou bar",
-    "vehicle_blocked_in_motion": "Esta ação não está disponível enquanto o veículo está em movimento"
+    "tyres_invalid_unit": "pressureUnit deve ser kpa, psi ou bar"
   },
   "notifications": {
     "charging_started": "Carregamento iniciado",

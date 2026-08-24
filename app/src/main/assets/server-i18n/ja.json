@@ -118,8 +118,7 @@
     "tyres_nothing_to_update": "更新する項目がありません",
     "tyres_persist_failed": "タイヤ空気圧のしきい値を保存できませんでした",
     "recordings_index_unavailable": "録画インデックスを利用できません",
-    "surveillance_all_classes_off": "この保存はすべての物体クラスを無効にし、AI 検出を完全にオフにします。続行するには確認してください。",
-    "vehicle_blocked_in_motion": "この操作は車両走行中は利用できません"
+    "surveillance_all_classes_off": "この保存はすべての物体クラスを無効にし、AI 検出を完全にオフにします。続行するには確認してください。"
   },
   "notifications": {
     "charging_started": "充電開始",
