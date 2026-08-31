@@ -2,6 +2,7 @@ package app.wheelstop.android.launcher
 
 import android.content.Context
 import app.wheelstop.android.logging.LogManager
+import app.wheelstop.android.mqtt.ProxyHelper
 
 /**
  * Launches Tailscale tunnel processes via ADB shell for remote access.
@@ -29,7 +30,7 @@ class TailscaleLauncher(
 
         // Proxy settings for sing-box (socks5 for tailscale)
         private const val PROXY_HOST = "127.0.0.1"
-        private const val PROXY_PORT = "8119"
+        private const val PROXY_PORT = 8119
 
         /**
          * Loopback connect timeout for the sing-box readiness probe. Generous
@@ -85,10 +86,9 @@ class TailscaleLauncher(
                 }
             } else {
                 checkAndInstallTailscale(callback) {
-                    isSingboxActive { active ->
-                        isProxyEnabled { enableProxy ->
-                            launchTailscaleDaemon(active, enableProxy, callback)
-                        }
+                    val useProxy = ProxyHelper.probePort(PROXY_PORT)
+                    isProxyEnabled { enableProxy ->
+                        launchTailscaleDaemon(useProxy, enableProxy, callback)
                     }
                 }
             }
@@ -573,6 +573,7 @@ class TailscaleLauncher(
         )
     }
 
+<<<<<<< HEAD
     /**
      * Whether tailscaled should route its egress through the sing-box SOCKS5
      * proxy — answered by asking whether that proxy is ACCEPTING CONNECTIONS,
@@ -619,6 +620,8 @@ class TailscaleLauncher(
         }, "SingboxProxyProbe").start()
     }
 
+=======
+>>>>>>> vendor/upstream
     fun stopTunnel(callback: TailscaleCallback) {
         logManager.info(TAG, "Stopping tailscale tunnel...")
         callback.onLog("Stopping tailscale tunnel...")

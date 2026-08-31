@@ -118,8 +118,7 @@
     "tyres_nothing_to_update": "Güncellenecek bir şey yok",
     "tyres_persist_failed": "Lastik basıncı sınırları kaydedilemedi",
     "recordings_index_unavailable": "Kayıt dizini kullanılamıyor",
-    "surveillance_all_classes_off": "Bu kayıt tüm nesne sınıflarını devre dışı bırakarak yapay zekâ algılamasını tamamen kapatır. Devam etmek için onaylayın.",
-    "vehicle_blocked_in_motion": "Araç hareket halindeyken bu işlem kullanılamaz"
+    "surveillance_all_classes_off": "Bu kayıt tüm nesne sınıflarını devre dışı bırakarak yapay zekâ algılamasını tamamen kapatır. Devam etmek için onaylayın."
   },
   "notifications": {
     "charging_started": "Şarj başladı .",
@@ -1087,7 +1086,13 @@
     "ambient_state_description": "İç ortam ışığı, nasıl açılıp kapatıldığına bakılmaksızın açıldığında veya kapandığında tetiklenir. Yalnızca ortam ışığı durumunu bildiren araçlarda kullanılabilir.",
     "compute_variable": "Değişken Hesapla",
     "compute_variable_description": "Bir sayı hesaplar ve bir değişkende saklar. + - * / % işleçlerini, parantezleri ve min, max, clamp, round, floor, ceil, abs, sqrt ve pow işlevlerini destekler. Canlı bir araç değeri için ${signal:NAME}, başka bir değişken için ${var:NAME} kullanın — örn. 500 + (${signal:batteryLevel} - 20) * 3.75. Bir değer okunamazsa (henüz bildirim yapmamış bir sinyal) değişken değiştirilmeden bırakılır.",
-    "variable_expression": "İfade"
+    "variable_expression": "İfade",
+    "set_headlight_mode": "Far modunu ayarla",
+    "set_headlight_mode_description": "Fabrika dış aydınlatma seçicisini ayarlar. Kapalı yalnızca araç güvenli şekilde park edilmişken kabul edilir. Bu yerel bir araç kontrolüdür ve araç kapalıyken çalışmaz.",
+    "headlight_mode": "Far modu",
+    "headlight_auto": "Otomatik",
+    "parking_lights": "Park lambaları",
+    "headlight_on_low_beam": "Açık (kısa far)"
   },
   "messages": {
     "logged_out": "Çıkış .",

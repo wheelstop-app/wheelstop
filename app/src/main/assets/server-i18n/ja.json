@@ -118,8 +118,7 @@
     "tyres_nothing_to_update": "更新する項目がありません",
     "tyres_persist_failed": "タイヤ空気圧のしきい値を保存できませんでした",
     "recordings_index_unavailable": "録画インデックスを利用できません",
-    "surveillance_all_classes_off": "この保存はすべての物体クラスを無効にし、AI 検出を完全にオフにします。続行するには確認してください。",
-    "vehicle_blocked_in_motion": "この操作は車両走行中は利用できません"
+    "surveillance_all_classes_off": "この保存はすべての物体クラスを無効にし、AI 検出を完全にオフにします。続行するには確認してください。"
   },
   "notifications": {
     "charging_started": "充電開始",
@@ -1087,7 +1086,13 @@
     "set_front_defrost": "フロントデフロスター",
     "set_front_defrost_description": "フロントガラスのデフロスター／デフォッガーをオンまたはオフにします。この操作は車両の電源がオフのときは動作しません。",
     "set_rear_defrost": "リアデフロスター",
-    "set_rear_defrost_description": "リアガラスのデフロスター／デフォッガーをオンまたはオフにします。この操作は車両の電源がオフのときは動作しません。"
+    "set_rear_defrost_description": "リアガラスのデフロスター／デフォッガーをオンまたはオフにします。この操作は車両の電源がオフのときは動作しません。",
+    "set_headlight_mode": "ヘッドライトモードを設定",
+    "set_headlight_mode_description": "純正の外部ライトセレクターを設定します。オフは車両が安全に駐車されている場合にのみ受け付けられます。これは車両側のローカル制御で、車両の電源が切れている場合は動作しません。",
+    "headlight_mode": "ヘッドライトモード",
+    "headlight_auto": "オート",
+    "parking_lights": "車幅灯",
+    "headlight_on_low_beam": "オン（ロービーム）"
   },
   "messages": {
     "logged_out": "ログアウト",

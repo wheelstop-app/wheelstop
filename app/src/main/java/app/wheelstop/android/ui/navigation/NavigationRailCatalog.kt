@@ -15,9 +15,11 @@ data class NavigationRailOption(
  * persisted because they can change between builds.
  */
 object NavigationRailCatalog {
+    const val ASSISTANT = "assistant"
     const val LIVE = "live"
     const val RECORDINGS = "recordings"
     const val VEHICLE = "vehicle"
+    const val SEAT_POSITIONS = "seat_positions"
     const val PROJECTION = "projection"
     const val TRIPS = "trips"
     const val CHARGING = "charging"
@@ -30,9 +32,11 @@ object NavigationRailCatalog {
     const val DIAGNOSTICS = "diagnostics"
 
     val customizableOptions: List<NavigationRailOption> = listOf(
+        NavigationRailOption(ASSISTANT, R.string.rail_assistant, R.drawable.ic_smart_toy),
         NavigationRailOption(LIVE, R.string.rail_live, R.drawable.ic_live),
         NavigationRailOption(RECORDINGS, R.string.rail_recordings, R.drawable.ic_recording),
         NavigationRailOption(VEHICLE, R.string.rail_vehicle, R.drawable.ic_vehicle_control),
+        NavigationRailOption(SEAT_POSITIONS, R.string.rail_seat_positions, R.drawable.ic_seat_positions),
         NavigationRailOption(PROJECTION, R.string.rail_projection, R.drawable.ic_projection),
         NavigationRailOption(TRIPS, R.string.rail_trips, R.drawable.ic_trips),
         NavigationRailOption(CHARGING, R.string.rail_charging, R.drawable.ic_charging),

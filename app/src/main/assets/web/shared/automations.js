@@ -76,6 +76,8 @@ BYD.automations = {
     formData: {},
     editingId: null,
     sortMode: 'default',
+    _schemaLoadGeneration: 0,
+    _localeChangeBound: false,
 
     init() {
         // Restore the persisted list sort before the first render. An unknown
@@ -91,6 +93,16 @@ BYD.automations = {
         this.loadAutomationSchema();
         this.loadSettings();
         this.loadGroups();
+        // Most of this page is hydrated from the web catalog, but the editor schema is
+        // translated by the daemon and every field/select is then built imperatively.
+        // Reload that schema for the new browser locale and rebuild every dynamic surface,
+        // otherwise a switch such as pt-BR -> en leaves the old Portuguese labels behind.
+        if (!this._localeChangeBound && window.BYD && BYD.i18n
+                && typeof BYD.i18n.onChange === 'function') {
+            this._localeChangeBound = true;
+            BYD.i18n.onChange(() => this.refreshLocale());
+        }
+        this.loadPositionList();
         // Re-sync the Groups tab whenever the user switches TO it. app-tabs only
         // toggles element visibility; without this the list wouldn't refresh (a group
         // saved on another visit, or a stale editor pane left open) until a full reload.
@@ -104,16 +116,76 @@ BYD.automations = {
         });
     },
 
-    // Automation-wide settings (currently just the shell-action gate). Kept
-    // separate from the per-automation CRUD above.
+    // Automation-wide settings. Kept separate from the per-automation CRUD above.
     async loadSettings() {
+        const controls = document.getElementById('safetySettingsControls');
+        const status = document.getElementById('safetySettingsStatus');
+        const statusText = document.getElementById('safetySettingsStatusText');
+        const statusIcon = document.getElementById('safetySettingsStatusIcon');
+        if (controls) controls.hidden = true;
+        if (status) {
+            status.hidden = false;
+            status.className = 'info-box-note';
+            status.setAttribute('role', 'status');
+        }
+        if (statusIcon) statusIcon.hidden = true;
+        if (statusText) {
+            statusText.setAttribute('data-i18n', 'automation.safety_loading');
+            statusText.textContent = BYD.i18n.t('automation.safety_loading')
+                || 'Loading safety settings…';
+        }
+        let timeoutId = 0;
         try {
-            const resp = await fetch('/api/automations/settings', { cache: 'no-store' });
+            const resp = await Promise.race([
+                fetch('/api/automations/settings', { cache: 'no-store' }),
+                new Promise((resolve, reject) => {
+                    timeoutId = setTimeout(
+                        () => reject(new Error('safety settings request timed out')), 10000);
+                })
+            ]);
             const data = await resp.json();
+            if (!resp.ok || !data || data.success !== true
+                    || !data.drivingSafety
+                    || typeof data.drivingSafety !== 'object') {
+                throw new Error('invalid safety settings response');
+            }
             const el = document.getElementById('autoAllowShell');
-            if (el) el.checked = !!(data && data.allowShell);
+            if (el) el.checked = !!data.allowShell;
+            const safety = data.drivingSafety;
+            const toggles = document.querySelectorAll('[data-safety-key]');
+            for (let i = 0; i < toggles.length; i++) {
+                const key = toggles[i].getAttribute('data-safety-key');
+                if (typeof safety[key] !== 'boolean') {
+                    throw new Error('missing safety setting: ' + key);
+                }
+            }
+            for (let i = 0; i < toggles.length; i++) {
+                const key = toggles[i].getAttribute('data-safety-key');
+                toggles[i].checked = safety[key];
+            }
+            if (controls) controls.hidden = false;
+            if (status) status.hidden = true;
         } catch (e) {
+            if (controls) controls.hidden = true;
+            if (status) {
+                status.hidden = false;
+                status.className = 'info-box-warning';
+                status.setAttribute('role', 'alert');
+            }
+            if (statusIcon) statusIcon.hidden = false;
+            if (statusText) {
+                statusText.setAttribute('data-i18n', 'automation.safety_unavailable');
+                let message = 'Safety settings are unavailable. The current guard state could not be verified; reload this page to try again.';
+                try {
+                    if (window.BYD && BYD.i18n && typeof BYD.i18n.t === 'function') {
+                        message = BYD.i18n.t('automation.safety_unavailable') || message;
+                    }
+                } catch (_) {}
+                statusText.textContent = message;
+            }
             console.warn('[Automations] Failed to load settings:', e);
+        } finally {
+            if (timeoutId) clearTimeout(timeoutId);
         }
     },
 
@@ -134,6 +206,75 @@ BYD.automations = {
         } catch (e) {
             if (el) el.checked = !allow;
             if (window.BYD && BYD.utils && BYD.utils.toast) BYD.utils.toast(BYD.i18n.t('automation.settings_save_failed'), 'error');
+        }
+    },
+
+    async saveSafetySetting(el) {
+        if (!el) return;
+        const key = el.getAttribute('data-safety-key');
+        const enabled = !!el.checked;
+        if (!key) return;
+        if (!enabled) {
+            let message = 'Disable this safety guard? The action will be allowed while the car is moving or its state is unknown.';
+            try {
+                if (window.BYD && BYD.i18n && typeof BYD.i18n.t === 'function') {
+                    message = BYD.i18n.t('automation.safety_disable_confirm') || message;
+                }
+            } catch (_) {}
+            const confirmed = (window.BYD && BYD.utils && BYD.utils.confirmDialog)
+                ? await BYD.utils.confirmDialog({
+                    title: BYD.i18n.t('common.warning') || 'Warning',
+                    body: message,
+                    confirmLabel: BYD.i18n.t('common.disable') || 'Disable',
+                    cancelLabel: BYD.i18n.t('common.cancel') || 'Cancel',
+                    danger: true
+                  })
+                : window.confirm(message);
+            if (!confirmed) {
+                el.checked = true;
+                return;
+            }
+        }
+
+        const previous = !enabled;
+        const drivingSafety = {};
+        drivingSafety[key] = enabled;
+        // One settings mutation at a time. Otherwise a failed request can re-read
+        // authority while another toggle is still committing and repaint stale state.
+        const toggles = document.querySelectorAll('[data-safety-key]');
+        for (let i = 0; i < toggles.length; i++) toggles[i].disabled = true;
+        try {
+            const resp = await fetch('/api/automations/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ drivingSafety: drivingSafety })
+            });
+            const data = await resp.json();
+            const safety = data && data.drivingSafety;
+            if (!resp.ok || !data || data.success !== true
+                    || !safety || typeof safety !== 'object') {
+                throw new Error('safety setting was not persisted');
+            }
+            for (let i = 0; i < toggles.length; i++) {
+                const toggleKey = toggles[i].getAttribute('data-safety-key');
+                if (typeof safety[toggleKey] !== 'boolean') {
+                    throw new Error('missing safety setting: ' + toggleKey);
+                }
+            }
+            for (let i = 0; i < toggles.length; i++) {
+                const toggleKey = toggles[i].getAttribute('data-safety-key');
+                toggles[i].checked = safety[toggleKey];
+            }
+        } catch (e) {
+            el.checked = previous;
+            // The POST may have committed before its response was lost. Re-read the
+            // authoritative values; if that also fails, loadSettings hides every toggle.
+            await this.loadSettings();
+            if (window.BYD && BYD.utils && BYD.utils.toast) {
+                BYD.utils.toast(BYD.i18n.t('automation.settings_save_failed'), 'error');
+            }
+        } finally {
+            for (let i = 0; i < toggles.length; i++) toggles[i].disabled = false;
         }
     },
 
@@ -221,20 +362,44 @@ BYD.automations = {
     },
 
     async loadAutomationSchema() {
+        const generation = ++this._schemaLoadGeneration;
+        const lang = (window.BYD && BYD.i18n && BYD.i18n.getLang)
+            ? BYD.i18n.getLang() : 'en';
         try {
-            const resp = await fetch('/api/automations/schema');
+            const resp = await fetch(
+                '/api/automations/schema?lang=' + encodeURIComponent(lang),
+                { cache: 'no-store' });
             const data = await resp.json();
+            if (generation !== this._schemaLoadGeneration) return;
             if (data) {
                 this.schema = data;
             } else {
                 this.schema = [];
             }
         } catch (e) {
+            if (generation !== this._schemaLoadGeneration) return;
             console.warn('[Automations] Failed to load schema:', e);
             this.schema = [];
         }
         this.render();
         this.renderForm();
+    },
+
+    async refreshLocale() {
+        // Intl.Collator is locale-bound, so discard the old one before rebuilding sorted
+        // action/condition lists and automation-name ordering.
+        this._sortCollator = null;
+        await this.loadAutomationSchema();
+        this.renderGroupList();
+        if (this.groupData) this.renderGroupForm();
+        // These sibling controllers also render translated text imperatively.
+        if (window.AudioLibrary && typeof AudioLibrary.refresh === 'function') {
+            AudioLibrary.refresh();
+        }
+        if (window.CommunityAutomations
+                && typeof CommunityAutomations.loadPage === 'function') {
+            CommunityAutomations.loadPage(CommunityAutomations.currentPage || 1);
+        }
     },
 
     // The schema is an ordered list of sections. Normalize whatever the
@@ -2338,7 +2503,7 @@ BYD.automations = {
             inputs.classList.remove('has-cond-value');   // re-added below only if a cond-value editor renders
             if (this.formData[id][index].type !== value) this.formData[id][index] = { type: value };
             if (!this.formData[id][index].variables) this.formData[id][index].variables = {};
-            if (selected.description) {
+            if (selected.description && value !== 'operatingMode') {
                 const icon = document.createElement('div');
                 icon.classList.add(token + '-description-tooltip', 'description-icon');
                 icon.innerHTML = infoIcon;
@@ -2489,23 +2654,29 @@ BYD.automations = {
                 inputs.classList.add('has-cond-value');   // top-align (see createRow eventListener note)
                 inputs.append(valSel);
             }
-            // "How variables work" help — shown once under the Set Variable action
-            // and the Variable condition (the only two variable-typed items). Purely
-            // informational; removed/re-added with the other dynamic inputs above so
-            // switching type never leaves a stale note. Uses i18n so it localizes.
-            if (value === 'setVariable' || value === 'variable') {
+            // Persistent help for controls whose behavior needs more context than a tooltip.
+            const helpKeys = (value === 'setVariable' || value === 'variable')
+                ? [
+                    'automation.variables_help_intro',
+                    'automation.variables_help_unset',
+                    'automation.variables_help_mutex'
+                ]
+                : value === 'operatingMode'
+                    ? [
+                        'automation.operating_mode_help_intro',
+                        'automation.operating_mode_help_on_only',
+                        'automation.operating_mode_help_on_and_off'
+                    ]
+                    : null;
+            if (helpKeys) {
                 const help = document.createElement('div');
                 help.classList.add('field-help', 'variable-input');
                 const body = document.createElement('div');
-                // Three short lines: what a variable is, then the mutex recipe. <code>
-                // spans wrap the literal name/value so they read as literals, not prose.
-                const l1 = document.createElement('p');
-                l1.textContent = BYD.i18n.t('automation.variables_help_intro');
-                const l2 = document.createElement('p');
-                l2.textContent = BYD.i18n.t('automation.variables_help_unset');
-                const l3 = document.createElement('p');
-                l3.textContent = BYD.i18n.t('automation.variables_help_mutex');
-                body.append(l1, l2, l3);
+                for (const key of helpKeys) {
+                    const line = document.createElement('p');
+                    line.textContent = BYD.i18n.t(key);
+                    body.append(line);
+                }
                 help.innerHTML = infoIcon;
                 help.append(body);
                 inputs.append(help);
@@ -2698,6 +2869,7 @@ BYD.automations = {
             case 'colour': return this.createColourInput(data, defaultValue, eventListener);
             case 'time': return this.createTimeInput(data, defaultValue, eventListener);
             case 'app': return this.createAppInput(data, defaultValue, eventListener);
+            case 'savedSeatPosition': return this.createSeatPositionInput(data, defaultValue, eventListener);
             case 'audio': return this.createAudioInput(data, defaultValue, eventListener);
             case 'actionGroup': return this.createActionGroupInput(data, defaultValue, eventListener);
             case 'automationRef': return this.createAutomationRefInput(data, defaultValue, eventListener);
@@ -3002,6 +3174,16 @@ BYD.automations = {
             const app = (this._appList || []).find(a => a.package === rawVal);
             return this._escVal((app && app.label) ? app.label : rawVal);
         }
+        if (spec && spec.type === 'savedSeatPosition' && rawVal != null) {
+            // Stored value is the position id; show the position's NAME. Distinguish "cache
+            // not loaded yet" from "loaded and the id is gone" — collapsing the two would
+            // label every position as missing for the moment before loadPositionList lands.
+            const list = this._positionList;
+            if (!list) return this._escVal(rawVal);
+            const pos = list.find(p => p.id === rawVal);
+            if (pos) return this._escVal(pos.name);
+            return this._escVal(rawVal) + ' (' + this._escVal(BYD.i18n.t('automation.position_missing')) + ')';
+        }
         if (spec && spec.type === 'actionGroup' && rawVal != null) {
             // The stored value is a group UUID; show its friendly NAME from the cached
             // group list (loadGroups fills this._groups on init + after any change, and
@@ -3078,6 +3260,83 @@ BYD.automations = {
 
         // Async-load the app list once; reuse the cache on subsequent renders.
         this.loadAppList().then(fill).catch(() => { changeEvent(); this._syncSaveDisabled(); });
+        changeEvent();
+        return selector;
+    },
+
+    // Saved seat/mirror position dropdown, populated live from GET /api/positions. The
+    // value stored is the position ID, never its name: a captured position's name is
+    // rebuilt from the car on every capture, so a name-keyed binding would silently stop
+    // matching after a rename in the car. Options are NOT in the schema (positions are
+    // created and deleted at runtime, and captured ones differ per signed-in DiLink
+    // profile). Mirrors createAppInput, with optgroups because the list mixes the user's
+    // own positions with the car's slots for one or more profiles.
+    createSeatPositionInput(data, defaultValue, eventListener) {
+        const selector = document.createElement('select');
+        selector.classList.add('input', 'enum', 'seat-position');
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = data.label;
+        placeholder.disabled = true;
+        placeholder.selected = true;
+        placeholder.hidden = true;
+        selector.append(placeholder);
+
+        const fill = (positions) => {
+            while (selector.options.length > 1) selector.remove(1);
+
+            const add = (parent, p) => {
+                const opt = document.createElement('option');
+                opt.value = p.id;
+                opt.textContent = p.name || p.id;
+                parent.append(opt);
+            };
+            const group = (label) => {
+                const g = document.createElement('optgroup');
+                g.label = label;
+                selector.append(g);
+                return g;
+            };
+
+            const mine = positions.filter(p => p.source === 'user');
+            if (mine.length) {
+                const g = group(BYD.i18n.t('automation.positions_mine'));
+                mine.forEach(p => add(g, p));
+            }
+            // Captured positions are per-profile, so group by profile — the same slot
+            // number means different geometry for a different signed-in account.
+            const profiles = [];
+            positions.forEach(p => {
+                if (p.source === 'captured' && profiles.indexOf(p.profile) === -1) profiles.push(p.profile);
+            });
+            profiles.forEach(prof => {
+                const g = group(BYD.i18n.t('automation.positions_from_car') + ' — ' + prof);
+                positions.filter(p => p.source === 'captured' && p.profile === prof).forEach(p => add(g, p));
+            });
+
+            // If the stored id isn't in the list (deleted since), add it so the binding
+            // shows what it points at rather than silently blanking — same as apps.
+            if (defaultValue && !positions.some(p => p.id === defaultValue)) {
+                const opt = document.createElement('option');
+                opt.value = defaultValue;
+                opt.textContent = defaultValue + ' (' + BYD.i18n.t('automation.position_missing') + ')';
+                selector.append(opt);
+            }
+            if (defaultValue) selector.value = defaultValue;
+            changeEvent();
+            // Same reason as createAppInput: the list resolves after showForm() already
+            // ran _syncSaveDisabled() against the placeholder-only state.
+            this._syncSaveDisabled();
+        };
+
+        const changeEvent = () => {
+            const ok = !!selector.value;
+            selector.classList.toggle('invalid', !ok);
+            if (ok && eventListener) eventListener(selector, selector.value);
+        };
+        selector.addEventListener('change', changeEvent);
+
+        this.loadPositionList().then(fill).catch(() => { changeEvent(); this._syncSaveDisabled(); });
         changeEvent();
         return selector;
     },
@@ -3254,6 +3513,29 @@ BYD.automations = {
             })
             .catch(e => { this._appList = []; return this._appList; });
         return this._appListPromise;
+    },
+
+    // Fetch + cache the saved seat/mirror positions. Resolves to
+    // [{id, name, source, profile, slot, axes}]. Loaded on init as well as on demand,
+    // because the saved-automation cards resolve a stored position id to its name for
+    // display — same reasoning as loadGroups.
+    loadPositionList() {
+        if (this._positionList) return Promise.resolve(this._positionList);
+        if (this._positionListPromise) return this._positionListPromise;
+        this._positionListPromise = fetch('/api/positions', { cache: 'no-store' })
+            .then(r => r.json())
+            .then(j => {
+                this._positionList = (j && Array.isArray(j.positions)) ? j.positions : [];
+                // Re-render the automation list now the cache is fresh, or a card summary
+                // would show the raw position id until the next full reload. loadPositions
+                // and loadAutomations race on init. Cheap no-op when the list is empty.
+                try {
+                    if (this.automations && Object.keys(this.automations).length) this.render();
+                } catch (_) {}
+                return this._positionList;
+            })
+            .catch(() => { this._positionList = []; return this._positionList; });
+        return this._positionListPromise;
     },
 
     _switchTab(id) {

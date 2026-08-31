@@ -311,7 +311,9 @@ class DaemonLauncher(
                 "    exit 0",
                 "  fi",
                 "",
-                "  echo \"[\$(date)] Starting Daemon...\" >> \"\$LOG_FILE\"",
+                "  RESOLVED_APK=\$(pm path app.wheelstop.android 2>/dev/null | grep '/base.apk\$' | head -n 1 | sed 's/^package://')",
+                "  if [ -n \"\$RESOLVED_APK\" ] && [ -f \"\$RESOLVED_APK\" ]; then APK_PATH=\"\$RESOLVED_APK\"; fi",
+                "  echo \"[\$(date)] Starting Daemon from \$APK_PATH...\" >> \"\$LOG_FILE\"",
                 // Backgrounded so the log poller can supervise it while it runs.
                 "  CLASSPATH=\"\$APK_PATH\" app_process \$PROXY_ARGS /system/bin --nice-name=\"\$PROCESS_NAME\" \"\$CLS\" >> \"\$LOG_FILE\" 2>&1 &",
                 "  DAEMON_PID=\$!",
@@ -434,12 +436,12 @@ class DaemonLauncher(
             // daemon is the highest-volume stdout logger, so real-time
             // bounding of cam_daemon.log (the UI-shown file) matters most here.
             val appProcessLine =
-                "  CLASSPATH=/system/framework/bmmcamera.jar:$apkPath app_process " +
-                "-Djava.library.path=$nativeLibDir:/system/lib64:/vendor/lib64:/product/lib64:/odm/lib64 " +
+                "  CLASSPATH=/system/framework/bmmcamera.jar:\$APK_PATH app_process " +
+                "-Djava.library.path=\$NATIVE_LIB_DIR:/system/lib64:/vendor/lib64:/product/lib64:/odm/lib64 " +
                 "${proxyArgs}/system/bin " +
                 "--nice-name=$CAMERA_DAEMON_PROCESS " +
                 "app.wheelstop.android.daemon.CameraDaemon " +
-                "$outputDir $nativeLibDir >> \"\$LOG_FILE\" 2>&1 &"
+                "$outputDir \$NATIVE_LIB_DIR >> \"\$LOG_FILE\" 2>&1 &"
 
             return listOf(
                 "#!/system/bin/sh",
@@ -448,6 +450,8 @@ class DaemonLauncher(
                 "LOCK_FILE=\"/data/local/tmp/camera_daemon.lock\"",
                 "SENTINEL=\"/data/local/tmp/camera_daemon.disabled\"",
                 "PARKED=\"/data/local/tmp/wheelstop_parked_shutdown\"",
+                "FALLBACK_APK_PATH=\"$apkPath\"",
+                "FALLBACK_NATIVE_LIB_DIR=\"$nativeLibDir\"",
                 "RETRY_COUNT=0",
                 "HEALTHY_UPTIME_SEC=300",
                 // Record THIS supervisor loop's PID so the kill-readers
@@ -466,7 +470,20 @@ class DaemonLauncher(
                 "    echo \"[\$(date)] Daemon disabled by user (sentinel file exists). Exiting watchdog.\" >> \"\$LOG_FILE\"",
                 "    exit 0",
                 "  fi",
-                "  echo \"[\$(date)] Starting CameraDaemon...\" >> \"\$LOG_FILE\"",
+                // Resolve the package path for every launch. `adb install -r`
+                // can move base.apk while this watchdog survives, so baking the
+                // path captured when the script was written can restart stale
+                // code or fail forever after an update.
+                "  APK_PATH=\$(pm path app.wheelstop.android 2>/dev/null | grep '/base.apk\$' | head -n 1 | sed 's/^package://')",
+                "  if [ -z \"\$APK_PATH\" ] && [ -f \"\$FALLBACK_APK_PATH\" ]; then APK_PATH=\"\$FALLBACK_APK_PATH\"; fi",
+                "  if [ -z \"\$APK_PATH\" ]; then",
+                "    echo \"[\$(date)] Installed OverDrive APK not found, retrying in 10s...\" >> \"\$LOG_FILE\"",
+                "    sleep 10",
+                "    continue",
+                "  fi",
+                "  NATIVE_LIB_DIR=\"\${APK_PATH%/base.apk}/lib/arm64\"",
+                "  if [ ! -d \"\$NATIVE_LIB_DIR\" ] && [ \"\$APK_PATH\" = \"\$FALLBACK_APK_PATH\" ]; then NATIVE_LIB_DIR=\"\$FALLBACK_NATIVE_LIB_DIR\"; fi",
+                "  echo \"[\$(date)] Starting CameraDaemon from \$APK_PATH...\" >> \"\$LOG_FILE\"",
                 "  START_EPOCH=\$(awk '{print int(\$1)}' /proc/uptime 2>/dev/null || date +%s)",
                 "",
                 appProcessLine,
@@ -1991,8 +2008,6 @@ class DaemonLauncher(
             // contain the variable assignment text but the kill
             // operates on a PID list, so $$ filtering correctly
             // excludes the priv-shell's PID.
-            "echo \"disabled by ui at \$(date)\" > /data/local/tmp/camera_daemon.disabled; " +
-            "chmod 666 /data/local/tmp/camera_daemon.disabled 2>/dev/null; " +
             "rm -f /data/local/tmp/start_cam_daemon.sh /data/local/tmp/cam_watchdog.pid 2>/dev/null; " +
             "MY_PID=\$\$; ps -A -o PID,ARGS | grep -F cam_daemon | grep -v grep " +
             "| awk '{print \$1}' | while read pid; do " +
@@ -2087,6 +2102,7 @@ class DaemonLauncher(
 
         val killScript = when (processName) {
             ACC_SENTRY_DAEMON_PROCESS ->
+                "[ -f /data/local/tmp/acc_sentry_daemon.disabled ] || " +
                 "echo \"disabled by killDaemon at \$(date)\" > /data/local/tmp/acc_sentry_daemon.disabled\n" +
                 "chmod 666 /data/local/tmp/acc_sentry_daemon.disabled 2>/dev/null\n" +
                 "rm -f /data/local/tmp/start_acc_sentry.sh 2>/dev/null\n" +
@@ -2105,6 +2121,7 @@ class DaemonLauncher(
                 "rm -f /data/local/tmp/camera_daemon.lock 2>/dev/null\n" +
                 "echo done\n"
             else -> // ZROK_PROCESS
+                "[ -f /data/local/tmp/zrok.disabled ] || " +
                 "echo \"disabled by killDaemon at \$(date)\" > /data/local/tmp/zrok.disabled\n" +
                 "chmod 666 /data/local/tmp/zrok.disabled 2>/dev/null\n" +
                 "rm -f /data/local/tmp/start_zrok.sh 2>/dev/null\n" +
@@ -2138,8 +2155,6 @@ class DaemonLauncher(
         // its own `sh -c`. ps+awk+kill keeps the priv-shell alive (PID
         // exclusion via $$) so the trailing lock-rm runs.
         val privKillCmd = if (processName == CAMERA_DAEMON_PROCESS) {
-            "echo \"disabled by ui at \$(date)\" > /data/local/tmp/camera_daemon.disabled; " +
-            "chmod 666 /data/local/tmp/camera_daemon.disabled 2>/dev/null; " +
             "rm -f /data/local/tmp/start_cam_daemon.sh /data/local/tmp/cam_watchdog.pid 2>/dev/null; " +
             "MY_PID=\$\$; ps -A -o PID,ARGS | grep -F cam_daemon | grep -v grep " +
             "| awk '{print \$1}' | while read pid; do " +
@@ -2159,6 +2174,7 @@ class DaemonLauncher(
         // safer (avoids an unnecessary 137 exit on the inner sh that
         // runs the script body).
         val adbKillCmd = if (processName == ACC_SENTRY_DAEMON_PROCESS) {
+            "[ -f /data/local/tmp/acc_sentry_daemon.disabled ] || " +
             "echo \"disabled by killDaemon at \$(date)\" > /data/local/tmp/acc_sentry_daemon.disabled; " +
             "chmod 666 /data/local/tmp/acc_sentry_daemon.disabled 2>/dev/null; " +
             "rm -f /data/local/tmp/start_acc_sentry.sh 2>/dev/null; " +
@@ -2176,6 +2192,7 @@ class DaemonLauncher(
             "sleep 1; " +
             "rm -f /data/local/tmp/camera_daemon.lock 2>/dev/null"
         } else if (processName == ZROK_PROCESS) {
+            "[ -f /data/local/tmp/zrok.disabled ] || " +
             "echo \"disabled by killDaemon at \$(date)\" > /data/local/tmp/zrok.disabled; " +
             "chmod 666 /data/local/tmp/zrok.disabled 2>/dev/null; " +
             "rm -f /data/local/tmp/start_zrok.sh 2>/dev/null; " +
