@@ -118,8 +118,7 @@
     "tyres_nothing_to_update": "업데이트할 항목이 없습니다",
     "tyres_persist_failed": "타이어 공기압 기준값을 저장하지 못했습니다",
     "recordings_index_unavailable": "녹화 색인을 사용할 수 없음",
-    "surveillance_all_classes_off": "이대로 저장하면 모든 객체 클래스가 사용 중지되어 AI 감지가 완전히 꺼집니다. 계속하려면 확인하세요.",
-    "vehicle_blocked_in_motion": "차량이 주행 중일 때는 이 작업을 사용할 수 없습니다"
+    "surveillance_all_classes_off": "이대로 저장하면 모든 객체 클래스가 사용 중지되어 AI 감지가 완전히 꺼집니다. 계속하려면 확인하세요."
   },
   "notifications": {
     "charging_started": "충전 시작",
@@ -1087,7 +1086,13 @@
     "set_front_defrost": "전방 제상",
     "set_front_defrost_description": "앞유리 제상/서리 제거를 켜거나 끕니다. 이 제어는 차량 전원이 꺼져 있는 동안에는 작동하지 않습니다.",
     "set_rear_defrost": "후방 제상",
-    "set_rear_defrost_description": "뒷유리 제상/서리 제거를 켜거나 끕니다. 이 제어는 차량 전원이 꺼져 있는 동안에는 작동하지 않습니다."
+    "set_rear_defrost_description": "뒷유리 제상/서리 제거를 켜거나 끕니다. 이 제어는 차량 전원이 꺼져 있는 동안에는 작동하지 않습니다.",
+    "set_headlight_mode": "전조등 모드 설정",
+    "set_headlight_mode_description": "순정 외부 조명 선택 스위치를 설정합니다. 끄기는 차량이 안전하게 주차된 상태에서만 적용됩니다. 차량 내 로컬 제어이므로 차량 전원이 꺼진 상태에서는 작동하지 않습니다.",
+    "headlight_mode": "전조등 모드",
+    "headlight_auto": "자동",
+    "parking_lights": "주차등",
+    "headlight_on_low_beam": "켜기 (하향등)"
   },
   "messages": {
     "logged_out": "로그아웃",

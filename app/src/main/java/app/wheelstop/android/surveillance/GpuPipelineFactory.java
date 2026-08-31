@@ -31,13 +31,23 @@ public class GpuPipelineFactory {
     public static GpuSurveillancePipeline createDefault(File eventOutputDir) {
         app.wheelstop.android.camera.ResolvedCameraConfig resolved =
             app.wheelstop.android.camera.CameraConfigResolver.resolve();
+        boolean passiveApa =
+            app.wheelstop.android.camera.CameraConfigResolver.isPassiveApaModeEnabled();
+        int encoderWidth = passiveApa
+            ? app.wheelstop.android.camera.PassiveApaGeometry.WIDTH
+            : resolved.getProfile().getEncoderWidth();
+        int encoderHeight = passiveApa
+            ? app.wheelstop.android.camera.PassiveApaGeometry.HEIGHT
+            : resolved.getProfile().getEncoderHeight();
         logger.info("createDefault: profile=" + resolved.getProfile().getDisplayName()
             + " (panoSize=" + resolved.getPanoWidth() + "x" + resolved.getPanoHeight()
-            + ", encoderSize=" + resolved.getProfile().getEncoderWidth()
-            + "x" + resolved.getProfile().getEncoderHeight() + ")");
+            + ", encoderSize=" + encoderWidth + "x" + encoderHeight
+            + (passiveApa ? ", passiveApa=true" : "") + ")");
         return new GpuSurveillancePipeline(
             resolved.getPanoWidth(),
             resolved.getPanoHeight(),
+            encoderWidth,
+            encoderHeight,
             eventOutputDir);
     }
     

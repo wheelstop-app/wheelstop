@@ -216,11 +216,13 @@ class CommunitySyncProvider(
         private val logger = DaemonLogger.getInstance("Community/Sync")
         private val JSON = "application/json; charset=utf-8".toMediaType()
 
-        /** Proxy-aware OkHttp client — same convention as RoadSense/ABRP/updater. */
+        /** Privacy-sensitive AI/community traffic fails closed when proxy-only mode is enabled. */
         private fun proxiedClient(): OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
-            .proxy(app.wheelstop.android.mqtt.ProxyHelper.getHttpProxy())
+            .proxy(app.wheelstop.android.mqtt.ProxyHelper.getFailClosedHttpProxy())
+            .followRedirects(false)
+            .followSslRedirects(false)
             .build()
     }
 }

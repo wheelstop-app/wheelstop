@@ -63,6 +63,8 @@ import java.io.OutputStream;
  *   POST /api/vehicle/start-charging      — CLOUD_ONLY, terminally confirmed
  *   GET  /api/vehicle/charge-cap         — { percent, enabled, supported } SDK_ONLY (verified charge-stop backend)
  *   POST /api/vehicle/charge-cap         — { percent? 50..100, enabled? } SDK_ONLY (verified charge-stop backend)
+ *   GET  /api/vehicle/ac-charge-current-limit  — { state, label, supported } SDK_ONLY
+ *   POST /api/vehicle/ac-charge-current-limit  — { state: 1..5 } SDK_ONLY, readback verified
  */
 public class VehicleControlApiHandler {
 
@@ -74,6 +76,23 @@ public class VehicleControlApiHandler {
         // GET /api/vehicle/state
         if (cleanPath.equals("/api/vehicle/state") && method.equals("GET")) {
             handleGetState(out);
+            return true;
+        }
+
+        // App-process actuator/activity final-boundary safety check. The caller fails
+        // closed if this endpoint cannot be reached or returns malformed data.
+        if (cleanPath.startsWith("/api/vehicle/driving-safety/")
+                && method.equals("GET")) {
+            String key = cleanPath.substring("/api/vehicle/driving-safety/".length());
+            if (!DrivingSafetyGuard.isKnownGuard(key)) {
+                HttpResponse.sendJsonError(out, "Unknown driving-safety guard");
+                return true;
+            }
+            JSONObject response = new JSONObject();
+            response.put("success", true);
+            response.put("guard", key);
+            response.put("blocked", DrivingSafetyGuard.isActionBlocked(key));
+            HttpResponse.sendJson(out, response.toString());
             return true;
         }
 
@@ -254,6 +273,16 @@ public class VehicleControlApiHandler {
         // POST /api/vehicle/charge-cap
         if (cleanPath.equals("/api/vehicle/charge-cap") && method.equals("POST")) {
             handleChargeCap(out, body);
+            return true;
+        }
+
+        // GET/POST /api/vehicle/ac-charge-current-limit
+        if (cleanPath.equals("/api/vehicle/ac-charge-current-limit") && method.equals("GET")) {
+            handleGetAcChargeCurrentLimit(out);
+            return true;
+        }
+        if (cleanPath.equals("/api/vehicle/ac-charge-current-limit") && method.equals("POST")) {
+            handleAcChargeCurrentLimit(out, body);
             return true;
         }
 
@@ -566,12 +595,29 @@ public class VehicleControlApiHandler {
         JSONObject response = new JSONObject();
         BydDataCollector collector = BydDataCollector.getInstance();
         BydVehicleData data = collector.getData();
+        if (data == null) {
+            // Trigger a full data collection in the background
+            try {
+                new Thread(() -> collector.collectAllFull(), "EarlyCollectState").start();
+            } catch (Throwable ignored) {}
+
+            // Check if cloud data is available to populate initial state
+            try {
+                BydCloudDataProvider provider =
+                        BydCloudDataProvider.getInstance();
+                VehicleCloudSnapshot cs = provider.getSnapshot();
+                BydVehicleData.Builder b = new BydVehicleData.Builder();
+                if (cs != null) {
+                    if (cs.hasSoc()) b.socPercent(cs.socPercent);
+                    if (cs.hasElecRange()) b.elecRangeKm(cs.elecRangeKm);
+                    if (cs.hasChargingState()) b.chargingState(cs.getChargingStateAsSdk());
+                }
+                data = b.build();
+            } catch (Throwable ignored) {}
+        }
 
         if (data == null) {
-            response.put("success", false);
-            response.put("error", Messages.get("errors.vehicle_data_unavailable"));
-            HttpResponse.sendJson(out, response.toString());
-            return;
+            data = new BydVehicleData.Builder().build();
         }
 
         response.put("success", true);
@@ -767,16 +813,42 @@ public class VehicleControlApiHandler {
             windows.put("rr", data.windowOpenPercent[3]);
             if (data.windowOpenPercent.length >= 5) windows.put("sunroof", data.windowOpenPercent[4]);
             if (data.windowOpenPercent.length >= 6) windows.put("sunshade", data.windowOpenPercent[5]);
+        } else {
+            // Check cloud fallback
+            try {
+                BydCloudDataProvider provider =
+                        BydCloudDataProvider.getInstance();
+                VehicleCloudSnapshot cs = provider.getSnapshot();
+                if (cs != null && cs.hasWindows()) {
+                    int[] w = cs.getWindowOpenPercentAsArray();
+                    windows.put("lf", w[0]);
+                    windows.put("rf", w[1]);
+                    windows.put("lr", w[2]);
+                    windows.put("rr", w[3]);
+                    windows.put("sunroof", w[4]);
+                    windows.put("sunshade", w[5]);
+                }
+            } catch (Exception ignored) {}
         }
         response.put("windows", windows);
 
-        // Trunk/tailgate status from extended bodywork
+        // Trunk/tailgate status from extended bodywork or cloud
         JSONObject trunk = new JSONObject();
-        // Back door status from feature ID (if available in toJson)
-        // We use doorLockStatus[4] for trunk lock, and check body door status flags
+        int trunkLock = -1;
         if (data.doorLockStatus != null && data.doorLockStatus.length >= 5) {
-            trunk.put("lockStatus", data.doorLockStatus[4]);
+            trunkLock = data.doorLockStatus[4];
         }
+        if (trunkLock == -1) {
+            try {
+                BydCloudDataProvider provider =
+                        BydCloudDataProvider.getInstance();
+                VehicleCloudSnapshot cs = provider.getSnapshot();
+                if (cs != null && cs.trunkLid != -1) {
+                    trunk.put("doorStatus", cs.trunkLid == 1 ? "OPEN" : "CLOSED");
+                }
+            } catch (Exception ignored) {}
+        }
+        trunk.put("lockStatus", trunkLock);
         response.put("trunk", trunk);
 
         // Sunroof
@@ -786,6 +858,16 @@ public class VehicleControlApiHandler {
         }
         if (data.sunroofPosition != BydVehicleData.UNAVAILABLE) {
             sunroof.put("position", data.sunroofPosition);
+        }
+        if (!sunroof.has("state")) {
+            try {
+                BydCloudDataProvider provider =
+                        BydCloudDataProvider.getInstance();
+                VehicleCloudSnapshot cs = provider.getSnapshot();
+                if (cs != null && cs.skylight != -1) {
+                    sunroof.put("state", cs.skylight == 2 ? 1 : 0);
+                }
+            } catch (Exception ignored) {}
         }
         response.put("sunroof", sunroof);
 
@@ -1434,6 +1516,8 @@ public class VehicleControlApiHandler {
                 }
                 case "auto_on":  cmd = new VehicleCommandRouter.AcAutoModeCommand(true);  break;
                 case "auto_off": cmd = new VehicleCommandRouter.AcAutoModeCommand(false); break;
+                case "sync_on":  cmd = new VehicleCommandRouter.AcTemperatureSyncCommand(true);  break;
+                case "sync_off": cmd = new VehicleCommandRouter.AcTemperatureSyncCommand(false); break;
                 case "fan_only_on":  cmd = new VehicleCommandRouter.FanOnlyModeCommand(true);  break;
                 case "fan_only_off": cmd = new VehicleCommandRouter.FanOnlyModeCommand(false); break;
                 case "steering_heat_on":  cmd = new VehicleCommandRouter.SteeringWheelHeatCommand(true);  break;
@@ -2009,6 +2093,18 @@ public class VehicleControlApiHandler {
      * proven dedicated BydAutoSettingDevice setters (setInfotainmentBrightness /
      * setDriverDisplayBrightness / setHUDBrightness), all 0-100.
      */
+    private static String drivingSafetyGuardForDisplayTarget(String target) {
+        if ("brightness".equals(target)
+                || "cluster_brightness".equals(target)
+                || "hud_brightness".equals(target)) {
+            return DrivingSafetyGuard.GUARD_DISPLAY_BRIGHTNESS;
+        }
+        if ("hud_power".equals(target) || "screen_power".equals(target)) {
+            return DrivingSafetyGuard.GUARD_DISPLAY_POWER;
+        }
+        return null;
+    }
+
     private static void handleMedia(OutputStream out, String body) throws Exception {
         JSONObject response = new JSONObject();
         try {
@@ -2087,6 +2183,16 @@ public class VehicleControlApiHandler {
                     HttpResponse.sendJson(out, response.toString());
                     return;
                 }
+            }
+            String displaySafetyGuard = drivingSafetyGuardForDisplayTarget(target);
+            if (displaySafetyGuard != null
+                    && !(isHudPower && value > 0)
+                    && DrivingSafetyGuard.isActionBlocked(displaySafetyGuard)) {
+                response.put("success", false);
+                response.put("outcome", "blocked_driving");
+                response.put("error", Messages.get("vehicle_control.blocked_driving"));
+                HttpResponse.sendJson(out, 409, response.toString());
+                return;
             }
             boolean ok;
             if (isMediaKey) {
@@ -2412,10 +2518,18 @@ public class VehicleControlApiHandler {
             // frames, so screen playback deliberately ignores any supplied channel and uses
             // Media. Anything else (default) is audio-only and honours its chosen channel.
             boolean onScreen = "screen".equalsIgnoreCase(req.optString("display", "speakers"));
+<<<<<<< HEAD
             if (onScreen && DrivingSafetyGuard.isMovementBlocked()) {
                 response.put("success", false);
                 response.put("outcome", "blocked_driving");
                 response.put("error", Messages.get("errors.vehicle_blocked_in_motion"));
+=======
+            if (onScreen && DrivingSafetyGuard.isActionBlocked(
+                    DrivingSafetyGuard.GUARD_SCREEN_MEDIA)) {
+                response.put("success", false);
+                response.put("outcome", "blocked_driving");
+                response.put("error", Messages.get("vehicle_control.blocked_driving"));
+>>>>>>> vendor/upstream
                 HttpResponse.sendJson(out, 409, response.toString());
                 return;
             }
@@ -2976,6 +3090,105 @@ public class VehicleControlApiHandler {
         if (kind != null && !"unknown".equals(kind)) response.put("controlKind", kind);
     }
 
+    private static void handleGetAcChargeCurrentLimit(OutputStream out) throws Exception {
+        JSONObject response = new JSONObject();
+        try {
+            BydDataCollector collector = BydDataCollector.getInstance();
+            BydDataCollector.AcChargingCurrentLimitStatus status =
+                    collector.getAcChargingCurrentLimitStatus();
+            int state = status.state;
+            response.put("success", true);
+            response.put("supported", status.supported != null
+                    ? status.supported.booleanValue() : JSONObject.NULL);
+            response.put("available", status.available);
+            response.put("configState", status.configState);
+            response.put("state", state >= BydDataCollector.AC_CHARGE_CURRENT_6A
+                    && state <= BydDataCollector.AC_CHARGE_CURRENT_MAX
+                    ? state : JSONObject.NULL);
+            String label = BydDataCollector.acChargingCurrentLimitLabel(state);
+            response.put("label", label != null ? label : JSONObject.NULL);
+        } catch (Exception e) {
+            logger.warn("AC charge current limit read failed: " + e.getMessage());
+            response.put("success", false);
+            response.put("error", e.getMessage());
+        }
+        HttpResponse.sendJson(out, response.toString());
+    }
+
+    private static void handleAcChargeCurrentLimit(
+            OutputStream out, String body) throws Exception {
+        JSONObject response = new JSONObject();
+        try {
+            JSONObject request = body == null || body.isEmpty()
+                    ? new JSONObject() : new JSONObject(body);
+            Integer state = jsonInteger(request, "state");
+            if (state == null
+                    || state.intValue() < BydDataCollector.AC_CHARGE_CURRENT_6A
+                    || state.intValue() > BydDataCollector.AC_CHARGE_CURRENT_MAX) {
+                response.put("success", false);
+                response.put("error", "state must be an integer from 1 to 5");
+                HttpResponse.sendJson(out, response.toString());
+                return;
+            }
+            BydDataCollector collector = BydDataCollector.getInstance();
+            BydDataCollector.AcChargingCurrentLimitStatus status =
+                    collector.getAcChargingCurrentLimitStatus();
+            if (status.supported == null || !status.available) {
+                response.put("success", false);
+                response.put("supported", status.supported != null
+                        ? status.supported.booleanValue() : JSONObject.NULL);
+                response.put("available", false);
+                response.put("configState", status.configState);
+                response.put("error", Messages.get("vehicle_data_unavailable"));
+                HttpResponse.sendJson(out, response.toString());
+                return;
+            }
+            if (!status.supported.booleanValue()) {
+                response.put("success", false);
+                response.put("supported", false);
+                response.put("available", true);
+                response.put("configState", status.configState);
+                response.put("error", Messages.get("vehicle_control.not_supported"));
+                HttpResponse.sendJson(out, response.toString());
+                return;
+            }
+            CommandResult result = VehicleCommandRouter.getInstance().execute(
+                    new VehicleCommandRouter.AcChargeCurrentLimitCommand(state.intValue()));
+            JSONObject routed = routedResponse(result, "ac-charge-current-limit");
+            int readBack = collector.getAcChargingCurrentLimitState();
+            boolean confirmed = readBack == state.intValue();
+            // The final HAL state is the automation/manual command contract. This also handles a
+            // delayed app-process retry: it may apply after the daemon-side route timed out, or a
+            // newer command may supersede this one before the response is serialized.
+            routed.put("success", confirmed);
+            routed.put("commandSuccess", confirmed);
+            routed.put("outcome", confirmed ? "success" : "failed");
+            if (confirmed) {
+                routed.put("path", "sdk");
+                routed.put("message", Messages.get("vehicle_control.local_sent"));
+                routed.remove("error");
+            } else {
+                String error = Messages.get("vehicle_control.local_failed");
+                routed.put("message", error);
+                routed.put("error", error);
+            }
+            routed.put("supported", true);
+            routed.put("available", readBack >= BydDataCollector.AC_CHARGE_CURRENT_6A
+                    && readBack <= BydDataCollector.AC_CHARGE_CURRENT_MAX);
+            routed.put("state", readBack >= BydDataCollector.AC_CHARGE_CURRENT_6A
+                    && readBack <= BydDataCollector.AC_CHARGE_CURRENT_MAX
+                    ? readBack : JSONObject.NULL);
+            String label = BydDataCollector.acChargingCurrentLimitLabel(readBack);
+            routed.put("label", label != null ? label : JSONObject.NULL);
+            HttpResponse.sendJson(out, routed.toString());
+        } catch (Exception e) {
+            logger.warn("AC charge current limit command failed: " + e.getMessage());
+            response.put("success", false);
+            response.put("error", e.getMessage());
+            HttpResponse.sendJson(out, response.toString());
+        }
+    }
+
     // ==================== LOG HELPERS ====================
 
     private static String areaName(int area) {
@@ -3247,7 +3460,7 @@ public class VehicleControlApiHandler {
      * — `message` is a localized user-facing string,
      * — `commandSuccess` mirrors `success` so legacy UI branches still work.
      */
-    private static JSONObject routedResponse(CommandResult r, String action) {
+    static JSONObject routedResponse(CommandResult r, String action) {
         JSONObject resp = new JSONObject();
         try {
             boolean success = r.outcome == VehicleCommandRouter.Outcome.SUCCESS;

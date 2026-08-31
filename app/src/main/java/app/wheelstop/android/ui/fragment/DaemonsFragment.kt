@@ -23,8 +23,10 @@ import app.wheelstop.android.ui.viewmodel.DaemonsViewModel
 import app.wheelstop.android.ui.model.DaemonType
 import app.wheelstop.android.ui.model.localizedName
 import app.wheelstop.android.R
+import app.wheelstop.android.config.UnifiedConfigManager
 import app.wheelstop.android.ui.model.DaemonStatus
 import app.wheelstop.android.ui.util.QrCodeGenerator
+import java.util.concurrent.Executors
 
 /**
  * Fragment for managing background daemons.
@@ -32,11 +34,16 @@ import app.wheelstop.android.ui.util.QrCodeGenerator
 class DaemonsFragment : Fragment() {
 
     private val handler = Handler(Looper.getMainLooper())
+    private val wifiSettingsWorker = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "WifiAutoEnableSettings").apply { isDaemon = true }
+    }
 
     private val daemonsViewModel: DaemonsViewModel by activityViewModels()
     private lateinit var recyclerDaemons: RecyclerView
     private lateinit var tvDaemonsCount: TextView
+    private lateinit var swWifiAutoEnable: SwitchMaterial
     private lateinit var daemonAdapter: DaemonAdapter
+    private var applyingWifiAutoEnable = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -60,6 +67,72 @@ class DaemonsFragment : Fragment() {
     private fun initViews(view: View) {
         recyclerDaemons = view.findViewById(R.id.recyclerDaemons)
         tvDaemonsCount = view.findViewById(R.id.tvDaemonsCount)
+        swWifiAutoEnable = view.findViewById(R.id.swWifiAutoEnable)
+        swWifiAutoEnable.isEnabled = false
+
+        view.findViewById<View>(R.id.rowWifiAutoEnable).setOnClickListener {
+            if (swWifiAutoEnable.isEnabled) {
+                swWifiAutoEnable.isChecked = !swWifiAutoEnable.isChecked
+            }
+        }
+        swWifiAutoEnable.setOnCheckedChangeListener { _, enabled ->
+            if (applyingWifiAutoEnable || !swWifiAutoEnable.isEnabled) {
+                return@setOnCheckedChangeListener
+            }
+            persistWifiAutoEnable(enabled)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::swWifiAutoEnable.isInitialized) refreshWifiAutoEnable()
+    }
+
+    override fun onDestroy() {
+        wifiSettingsWorker.shutdown()
+        super.onDestroy()
+    }
+
+    private fun refreshWifiAutoEnable() {
+        swWifiAutoEnable.isEnabled = false
+        wifiSettingsWorker.execute {
+            val enabled = runCatching {
+                UnifiedConfigManager.forceReload()
+                UnifiedConfigManager.isWifiAutoEnableEnabled()
+            }.getOrDefault(true)
+            handler.post {
+                if (view == null || !::swWifiAutoEnable.isInitialized) return@post
+                applyingWifiAutoEnable = true
+                swWifiAutoEnable.isChecked = enabled
+                swWifiAutoEnable.isEnabled = true
+                applyingWifiAutoEnable = false
+            }
+        }
+    }
+
+    private fun persistWifiAutoEnable(enabled: Boolean) {
+        swWifiAutoEnable.isEnabled = false
+        wifiSettingsWorker.execute {
+            val saved = runCatching {
+                UnifiedConfigManager.setWifiAutoEnableEnabled(enabled)
+            }.getOrDefault(false)
+            handler.post {
+                if (view == null || !::swWifiAutoEnable.isInitialized) return@post
+                applyingWifiAutoEnable = true
+                if (!saved) swWifiAutoEnable.isChecked = !enabled
+                swWifiAutoEnable.isEnabled = true
+                applyingWifiAutoEnable = false
+                if (!saved) {
+                    context?.let {
+                        Toast.makeText(
+                            it,
+                            R.string.daemons_wifi_auto_enable_save_failed,
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            }
+        }
     }
     
     private fun setupRecyclerView() {

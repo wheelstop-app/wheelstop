@@ -3085,7 +3085,8 @@ public class TelegramBotDaemon {
             }
             reader.close();
             if (!p.waitFor(30, TimeUnit.SECONDS)) {
-                log("Shell timeout after 30s, destroying: " + command);
+                log("Shell timeout after 30s, destroying: "
+                        + app.wheelstop.android.launcher.ZrokRuntimeProbe.redactCommand(command));
                 p.destroyForcibly();
                 return null;
             }

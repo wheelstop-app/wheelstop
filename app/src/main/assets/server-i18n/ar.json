@@ -118,8 +118,7 @@
     "tyres_critical_order": "يجب ألا يتجاوز الضغط الحرج الحد الأدنى لأي من المحورين",
     "tyres_nothing_to_update": "لا يوجد شيء للتحديث",
     "tyres_persist_failed": "فشل في حفظ حدود ضغط الإطارات",
-    "surveillance_all_classes_off": "سيؤدي هذا الحفظ إلى تعطيل جميع فئات الكائنات، إيقاف الكشف عن الذكاء الاصطناعي تماماً. تأكيد للمتابعة.",
-    "vehicle_blocked_in_motion": "هذا الإجراء غير متاح أثناء تحرك السيارة"
+    "surveillance_all_classes_off": "سيؤدي هذا الحفظ إلى تعطيل جميع فئات الكائنات، إيقاف الكشف عن الذكاء الاصطناعي تماماً. تأكيد للمتابعة."
   },
   "notifications": {
     "charging_started": "بدأ الشحن",
@@ -1082,7 +1081,13 @@
     "mqtt_retain": "احتفظ",
     "mqtt_trigger": "رسالة MQTT",
     "mqtt_channel": "قناة",
-    "mqtt_value": "القيمة"
+    "mqtt_value": "القيمة",
+    "set_headlight_mode": "تعيين وضع المصابيح الأمامية",
+    "set_headlight_mode_description": "يضبط مُحدِّد الإضاءة الخارجية الأصلي. لا يُقبل الإيقاف إلا عند إيقاف السيارة بأمان. هذا تحكّم محلي في السيارة ولا يعمل عند إطفاء السيارة.",
+    "headlight_mode": "وضع المصابيح الأمامية",
+    "headlight_auto": "تلقائي",
+    "parking_lights": "أضواء الوقوف",
+    "headlight_on_low_beam": "تشغيل (الضوء المنخفض)"
   },
   "units": {
     "bar": "bar",
