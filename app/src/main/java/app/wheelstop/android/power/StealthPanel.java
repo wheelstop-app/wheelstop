@@ -1,4 +1,5 @@
 package app.wheelstop.android.power;
+import app.wheelstop.android.camera.dilink5.DiLink5QCarCamBackend;
 import app.wheelstop.android.monitor.AccMonitor;
 
 import android.content.Context;
@@ -101,6 +102,9 @@ public final class StealthPanel {
      */
     public static boolean isDilink4() {
         try {
+            if (DiLink5QCarCamBackend.isSupported()) {
+                return true;
+            }
             JSONObject c = UnifiedConfigManager.loadConfig().optJSONObject("camera");
             if (c == null) return false;
             return "dilink4".equalsIgnoreCase(c.optString("cameraMode", "default"));

@@ -2,6 +2,7 @@ package app.wheelstop.android.server;
 import app.wheelstop.android.abrp.SohEstimator;
 import app.wheelstop.android.monitor.SocHistoryDatabase;
 
+import app.wheelstop.android.battery.BatteryChemistryMetadata;
 import app.wheelstop.android.config.UnifiedConfigManager;
 import app.wheelstop.android.config.VehicleModelSelection;
 import app.wheelstop.android.daemon.CameraDaemon;
@@ -481,6 +482,28 @@ public class ModelsApiHandler {
      */
     public static double grossNameplateKwhForSelectedModel() {
         return nominalKwhForSelectedModel();
+    }
+
+    /**
+     * Manufacturer-sourced battery chemistry for the resolved physical vehicle
+     * model. A bare manifest label is insufficient: the resolver also verifies
+     * official-BYD provenance and the represented nominal-capacity scope. The
+     * renderer's cosmetic default is ignored by
+     * {@link UnifiedConfigManager#getSelectedVehicleModelId()}, so an unconfigured
+     * install returns {@code unknown} rather than assuming its battery is LFP.
+     */
+    public static String batteryChemistryForSelectedModel() {
+        try {
+            String modelId = UnifiedConfigManager.getSelectedVehicleModelId();
+            if (modelId == null || modelId.isEmpty()) return "unknown";
+            JSONObject manifest = readManifest();
+            if (manifest == null) return "unknown";
+            JSONObject model = findModel(manifest, modelId);
+            if (model == null) return "unknown";
+            return BatteryChemistryMetadata.resolve(manifest, model);
+        } catch (Throwable ignored) {
+            return "unknown";
+        }
     }
 
     private static void handleList(OutputStream out) throws Exception {

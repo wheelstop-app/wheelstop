@@ -649,6 +649,175 @@ BYD.units = {
     }
 };
 
+/**
+ * Screenshot privacy mode.
+ *
+ * The native Settings switch is persisted in unified config and echoed by
+ * /status. This shared client applies the same policy to every daemon-served
+ * page without copying masking rules into individual screens. The class is a
+ * visual-only aid: values remain untouched for controls, links, and APIs.
+ */
+BYD.screenshotPrivacy = (function () {
+    var MASK_CLASS = 'screenshot-privacy-mask';
+    var AUTO_ATTR = 'data-screenshot-privacy-auto';
+    var STYLE_ID = 'screenshotPrivacyStyle';
+    var enabled = false;
+    var observer = null;
+    var scanQueued = false;
+    var ipv4 = /(^|[^\d])(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?::\d{1,5})?(?!\d)/;
+    // Charging history renders stored coordinates to three decimal places,
+    // while other screens retain the full precision. Treat both as location
+    // data so a presentation-oriented rounding step cannot bypass the mask.
+    var coordinates = /(^|[^\d.])[+-]?(?:\d{1,2}|1[0-7]\d|180)\.\d{3,}\s*[,;\/]\s*[+-]?(?:\d{1,2}|1[0-7]\d|180)\.\d{3,}(?![\d.])/;
+    var labelledCoordinate = /\b(?:lat(?:itude)?|lon(?:gitude)?|lng)\s*[:=]\s*[+-]?\d{1,3}\.\d{3,}/i;
+    var url = /\b(?:https?|wss?):\/\/\S+/i;
+    var email = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i;
+    var identityTokens = [
+        'qrcode', 'deviceid', 'currenturl', 'tunnelurl', 'remoteurl',
+        'ipaddress', 'latitude', 'longitude', 'coordinates', 'location',
+        'address', 'mapcontainer', 'dashlocation', 'detailloc', 'locrow',
+        'placefilter', 'placesearch', 'thumbnail', 'videoplayer',
+        'camerapreview', 'cameraimage', 'snapshot', 'platenumber',
+        'licenseplate'
+    ];
+
+    function ensureStyle() {
+        if (document.getElementById(STYLE_ID)) return;
+        var style = document.createElement('style');
+        style.id = STYLE_ID;
+        style.textContent =
+            'html.screenshot-privacy-mode .' + MASK_CLASS + ' {' +
+            'filter: blur(14px) brightness(.42) contrast(.45) saturate(.25) !important;' +
+            '-webkit-filter: blur(14px) brightness(.42) contrast(.45) saturate(.25) !important;' +
+            'user-select: none !important;' +
+            '-webkit-user-select: none !important;' +
+            '}' +
+            'html.screenshot-privacy-mode img.' + MASK_CLASS + ',' +
+            'html.screenshot-privacy-mode video.' + MASK_CLASS + ',' +
+            'html.screenshot-privacy-mode canvas.' + MASK_CLASS + ',' +
+            'html.screenshot-privacy-mode .recording-thumbnail.' + MASK_CLASS + ',' +
+            'html.screenshot-privacy-mode .video-player.' + MASK_CLASS + ' {' +
+            'filter: blur(22px) brightness(.32) contrast(.35) saturate(.15) !important;' +
+            '-webkit-filter: blur(22px) brightness(.32) contrast(.35) saturate(.15) !important;' +
+            '}';
+        (document.head || document.documentElement).appendChild(style);
+    }
+
+    function normalize(value) {
+        return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    }
+
+    function hasSensitiveIdentity(el) {
+        if (!el || !el.getAttribute) return false;
+        if (el.hasAttribute('data-screenshot-private')) return true;
+        var identity = normalize(
+            (el.id || '') + ' ' +
+            (typeof el.className === 'string' ? el.className : '') + ' ' +
+            (el.getAttribute('name') || '') + ' ' +
+            (el.getAttribute('aria-label') || '') + ' ' +
+            (el.getAttribute('data-card-id') || '') + ' ' +
+            (el.getAttribute('data-filter-row') || '')
+        );
+        if (identity.indexOf('qr') >= 0) return true;
+        for (var i = 0; i < identityTokens.length; i++) {
+            if (identity.indexOf(identityTokens[i]) >= 0) return true;
+        }
+        return false;
+    }
+
+    function directText(el) {
+        if (!el) return '';
+        var tag = String(el.tagName || '').toLowerCase();
+        if (tag === 'input' || tag === 'textarea') return el.value || '';
+        var result = '';
+        for (var i = 0; i < el.childNodes.length; i++) {
+            var node = el.childNodes[i];
+            if (node.nodeType === 3) result += ' ' + node.nodeValue;
+        }
+        return result;
+    }
+
+    function hasSensitiveText(text) {
+        var value = String(text || '').trim();
+        return value && (ipv4.test(value) || coordinates.test(value) ||
+            labelledCoordinate.test(value) || url.test(value) || email.test(value));
+    }
+
+    function mark(el) {
+        if (!el || !el.classList || el === document.body || el === document.documentElement) return;
+        var ancestor = el.parentElement && el.parentElement.closest
+            ? el.parentElement.closest('.' + MASK_CLASS)
+            : null;
+        if (ancestor) return;
+        el.classList.add(MASK_CLASS);
+        el.setAttribute(AUTO_ATTR, 'true');
+    }
+
+    function scan(root) {
+        if (!enabled || !document.documentElement) return;
+        ensureStyle();
+        var scope = root && root.nodeType === 1 ? root : document;
+        var elements = [];
+        if (scope.nodeType === 1) elements.push(scope);
+        var descendants = scope.querySelectorAll ? scope.querySelectorAll('*') : [];
+        for (var i = 0; i < descendants.length; i++) elements.push(descendants[i]);
+
+        for (var j = 0; j < elements.length; j++) {
+            var el = elements[j];
+            var tag = String(el.tagName || '').toLowerCase();
+            if (tag === 'script' || tag === 'style' || tag === 'link' || tag === 'meta') continue;
+            if (hasSensitiveIdentity(el) || hasSensitiveText(directText(el))) mark(el);
+        }
+    }
+
+    function queueScan() {
+        if (scanQueued || !enabled) return;
+        scanQueued = true;
+        setTimeout(function () {
+            scanQueued = false;
+            scan(document);
+        }, 0);
+    }
+
+    function setEnabled(next) {
+        next = !!next;
+        if (enabled === next) {
+            if (enabled) queueScan();
+            return;
+        }
+        enabled = next;
+        if (!document.documentElement) return;
+        document.documentElement.classList.toggle('screenshot-privacy-mode', enabled);
+        if (enabled) {
+            ensureStyle();
+            scan(document);
+            if (!observer && typeof MutationObserver !== 'undefined') {
+                observer = new MutationObserver(queueScan);
+                observer.observe(document.documentElement, {
+                    childList: true,
+                    subtree: true,
+                    characterData: true
+                });
+            }
+        } else {
+            if (observer) observer.disconnect();
+            observer = null;
+            scanQueued = false;
+            var marked = document.querySelectorAll('[' + AUTO_ATTR + ']');
+            for (var i = 0; i < marked.length; i++) {
+                marked[i].classList.remove(MASK_CLASS);
+                marked[i].removeAttribute(AUTO_ATTR);
+            }
+        }
+    }
+
+    return {
+        setEnabled: setEnabled,
+        isEnabled: function () { return enabled; },
+        scan: scan
+    };
+})();
+
 BYD.core = {
     deviceId: null,
     pollInterval: null,
@@ -790,6 +959,13 @@ BYD.core = {
             // behaviour on cards downstream.
             const hadData = !!(status.soc || status.range || status.charging);
             if (hadData) this.hasEverHadVehicleData = true;
+
+            // One persisted developer switch controls native and web captures.
+            // Apply before updating fields so newly-written sensitive values
+            // are masked during the same render turn.
+            if (BYD.screenshotPrivacy) {
+                BYD.screenshotPrivacy.setEnabled(!!status.screenshotPrivacyMode);
+            }
 
             // Distance unit preference (from user setting / auto-detect).
             // Announce a real CHANGE: this poll runs at ~1 Hz and silently
@@ -1608,13 +1784,47 @@ BYD.utils._showModal = function (opts) {
         }
         if (opts.body) {
             var p = document.createElement('p');
-            p.style.margin = '0 0 4px 0';
+            p.style.margin = opts.prompt ? '0 0 12px 0' : '0 0 4px 0';
             p.style.fontSize = '14px';
             p.style.lineHeight = '1.5';
             p.style.color = 'var(--text-secondary, var(--text-primary))';
             p.style.whiteSpace = 'pre-wrap';
             p.textContent = opts.body;
             card.appendChild(p);
+        }
+
+        var input = null;
+        if (opts.prompt) {
+            input = document.createElement('input');
+            input.type = opts.inputType || 'text';
+            input.value = opts.promptValue || '';
+            input.placeholder = opts.promptPlaceholder || '';
+            input.setAttribute('aria-label',
+                opts.promptLabel || opts.title || opts.body || 'Input');
+            if (opts.inputMode) input.setAttribute('inputmode', opts.inputMode);
+            input.style.width = '100%';
+            input.style.boxSizing = 'border-box';
+            input.style.padding = '10px 12px';
+            input.style.marginBottom = '18px';
+            input.style.border = '1px solid var(--border-subtle, #ccc)';
+            input.style.borderRadius = 'var(--radius-md, 8px)';
+            input.style.background = 'var(--bg-surface, #fff)';
+            input.style.color = 'var(--text-primary, #000)';
+            input.style.fontSize = '15px';
+            input.style.outline = 'none';
+            input.addEventListener('focus', function () {
+                input.style.borderColor = 'var(--brand-primary, #007AFF)';
+            });
+            input.addEventListener('blur', function () {
+                input.style.borderColor = 'var(--border-subtle, #ccc)';
+            });
+            input.addEventListener('keydown', function (ev) {
+                if (ev.key === 'Enter') {
+                    ev.preventDefault();
+                    dismiss(true);
+                }
+            });
+            card.appendChild(input);
         }
 
         var actions = document.createElement('div');
@@ -1650,8 +1860,10 @@ BYD.utils._showModal = function (opts) {
         var prevFocus = document.activeElement;
         document.body.appendChild(backdrop);
 
-        // Focus the primary action so Enter confirms without an extra tap.
-        try { confirmBtn.focus(); } catch (e) {}
+        try {
+            if (input) input.focus();
+            else confirmBtn.focus();
+        } catch (e) {}
 
         var entry = { dismiss: dismiss };
         BYD.utils._modalStack.push(entry);
@@ -1665,7 +1877,7 @@ BYD.utils._showModal = function (opts) {
             // Pop from stack if still there (e.g. button click path).
             var idx = BYD.utils._modalStack.indexOf(entry);
             if (idx !== -1) BYD.utils._modalStack.splice(idx, 1);
-            resolve(result);
+            resolve(opts.prompt ? (result ? input.value : null) : result);
         }
     });
 };
@@ -1704,6 +1916,24 @@ BYD.utils.confirmDialog = function (opts) {
         confirmLabel: opts.confirmLabel || (t && t('common.ok')) || 'OK',
         cancelLabel: opts.cancelLabel || (t && t('common.cancel')) || 'Cancel',
         danger: opts.danger === true
+    });
+};
+
+/** Themed input prompt. Resolves to the entered string, or null when canceled. */
+BYD.utils.promptDialog = function (opts) {
+    opts = opts || {};
+    var t = BYD.i18n && BYD.i18n.t ? BYD.i18n.t.bind(BYD.i18n) : null;
+    return BYD.utils._showModal({
+        title: opts.title || (t && t('common.notice')) || 'Notice',
+        body: opts.body || '',
+        confirmLabel: opts.confirmLabel || (t && t('common.ok')) || 'OK',
+        cancelLabel: opts.cancelLabel || (t && t('common.cancel')) || 'Cancel',
+        prompt: true,
+        promptValue: opts.value || '',
+        promptPlaceholder: opts.placeholder || '',
+        promptLabel: opts.label || '',
+        inputType: opts.inputType || 'text',
+        inputMode: opts.inputMode || ''
     });
 };
 

@@ -2,6 +2,7 @@ package app.wheelstop.android.ui
 
 import app.wheelstop.android.auth.PinManager
 import app.wheelstop.android.auth.PinSession
+import app.wheelstop.android.byd.dilink5.Dilink5SdkInjector
 import app.wheelstop.android.camera.ConcurrentAvmProbe
 import app.wheelstop.android.config.UnifiedConfigManager
 import app.wheelstop.android.launcher.AdbShellExecutor
@@ -58,6 +59,7 @@ import app.wheelstop.android.ui.model.DaemonType
 import app.wheelstop.android.ui.model.NavigationRailSwipePolicy
 import app.wheelstop.android.ui.model.TunnelDisplayPolicy
 import app.wheelstop.android.ui.navigation.NavigationRailCatalog
+import app.wheelstop.android.ui.privacy.ScreenshotPrivacyController
 import app.wheelstop.android.ui.util.PreferencesManager
 import app.wheelstop.android.ui.widget.SwipeExpandableRailScrollView
 import app.wheelstop.android.ui.viewmodel.DaemonsViewModel
@@ -69,6 +71,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import app.wheelstop.android.R
 import app.wheelstop.android.util.BydDataCacheWhitelist
+import app.wheelstop.android.byd.TrafficMonitorPolicy
 
 /**
  * Main activity hosting the M3 navigation-rail shell.
@@ -79,7 +82,7 @@ import app.wheelstop.android.util.BydDataCacheWhitelist
  * `invoke*Action` thin wrappers that the new SettingsFragment / Diagnostics
  * fragment call.
  */
-class MainActivity : AppCompatActivity() {
+open class MainActivity : AppCompatActivity() {
 
     private lateinit var navController: NavController
     private lateinit var appBarConfiguration: AppBarConfiguration
@@ -123,6 +126,7 @@ class MainActivity : AppCompatActivity() {
     // explicitly setIntent — without this latch the stale boot intent
     // would permanently bypass the PIN gate after a launcher tap.
     private var headlessBootSilenceGate: Boolean = false
+    private var remoteDevSession: Boolean = false
 
     // UI elements
     private lateinit var toolbar: MaterialToolbar
@@ -143,9 +147,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statusIndicator: View
     private lateinit var urlStatusDot: View
     private lateinit var btnCopyUrl: ImageButton
+    private var screenshotPrivacyController: ScreenshotPrivacyController? = null
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        remoteDevSession = this is RemoteMainActivity &&
+            intent?.getBooleanExtra(EXTRA_REMOTE_DEV_SESSION, false) == true
 
         // The main app must run on the HEAD UNIT (display 0), never the driver
         // cluster. When the OEM cluster projection opens a secondary display, AMS
@@ -157,7 +165,7 @@ class MainActivity : AppCompatActivity() {
         // and bailing here this early means the startup work hasn't begun yet.)
         try {
             val did = display?.displayId ?: android.view.Display.DEFAULT_DISPLAY
-            if (did != android.view.Display.DEFAULT_DISPLAY) {
+            if (did != android.view.Display.DEFAULT_DISPLAY && !remoteDevSession) {
                 android.util.Log.w("MainActivity", "launched on display $did — relaunching on display 0")
                 val opts = android.app.ActivityOptions.makeBasic().apply {
                     launchDisplayId = android.view.Display.DEFAULT_DISPLAY
@@ -172,14 +180,32 @@ class MainActivity : AppCompatActivity() {
                 finish()
                 return
             }
-        } catch (_: Throwable) { /* best effort; fall through to a normal start */ }
+            if (did == android.view.Display.DEFAULT_DISPLAY && remoteDevSession) {
+                android.util.Log.w("MainActivity", "refusing RemoteMainActivity on display 0")
+                finish()
+                return
+            }
+        } catch (error: Throwable) {
+            if (remoteDevSession) {
+                android.util.Log.w(
+                    "MainActivity",
+                    "refusing RemoteMainActivity when display identity is unavailable",
+                    error,
+                )
+                finish()
+                return
+            }
+            // Physical MainActivity keeps the existing best-effort behavior.
+        }
+
+        Dilink5SdkInjector.ensure(this)
 
         setContentView(R.layout.activity_main_new)
 
         // Storage setup is posted off the onCreate critical path so a failure
         // (e.g. ROM lacking the All-Files-Access Settings activity on BYD SL7)
         // cannot abort activity launch. See setupStorageDirectories().
-        window.decorView.post {
+        if (!remoteDevSession) window.decorView.post {
             try {
                 setupStorageDirectories()
             } catch (e: Exception) {
@@ -188,24 +214,26 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Initialize DeviceIdGenerator with ADB executor for file sync
-        val adbExecutor = AdbShellExecutor(this)
-        DeviceIdGenerator.init(adbExecutor)
-        
-        // Generate device ID early - this syncs to file for daemon compatibility
-        // Must happen BEFORE any daemon starts
-        val deviceId = DeviceIdGenerator.generateDeviceId(this)
-        android.util.Log.i("MainActivity", "Device ID initialized: $deviceId")
-        
-        // Apply BYD whitelist (ACC + data cache) to prevent background killing
-        // CRITICAL: Run on background thread to avoid blocking UI on boot
-        // ActivityThread.systemMain() can block for 1+ minute waiting for system services
-        Thread {
-            try {
-                BydDataCacheWhitelist.applyAll(this)
-            } catch (e: Exception) {
-                android.util.Log.e("MainActivity", "BYD whitelist error: ${e.message}")
-            }
-        }.start()
+        if (!remoteDevSession) {
+            val adbExecutor = AdbShellExecutor(this)
+            DeviceIdGenerator.init(adbExecutor)
+
+            // Generate device ID early - this syncs to file for daemon compatibility
+            // Must happen BEFORE any daemon starts
+            val deviceId = DeviceIdGenerator.generateDeviceId(this)
+            android.util.Log.i("MainActivity", "Device ID initialized: $deviceId")
+
+            // Apply BYD whitelist (ACC + data cache) to prevent background killing
+            // CRITICAL: Run on background thread to avoid blocking UI on boot
+            // ActivityThread.systemMain() can block for 1+ minute waiting for system services
+            Thread {
+                try {
+                    BydDataCacheWhitelist.applyAll(this)
+                } catch (e: Exception) {
+                    android.util.Log.e("MainActivity", "BYD whitelist error: ${e.message}")
+                }
+            }.start()
+        }
         
         // Register the screen-off receiver that locks the PIN session as
         // soon as the panel sleeps. Idempotent — safe to call again on
@@ -235,10 +263,11 @@ class MainActivity : AppCompatActivity() {
         maybeShowPinLock()
 
         initViews()
+        screenshotPrivacyController = ScreenshotPrivacyController(this).also { it.start() }
         setupNavigation(savedInstanceState)
         handleNavigateExtra(intent)
         setupCopyButton()
-        setupLogListener()
+        if (!remoteDevSession) setupLogListener()
         observeViewModels()
         
         // Initialize daemon startup manager
@@ -246,14 +275,14 @@ class MainActivity : AppCompatActivity() {
         daemonsViewModel.setStartupManager(daemonStartupManager)
         
         // Setup ADB auth callback to re-initialize when auth is granted
-        setupAdbAuthCallback()
+        if (!remoteDevSession) setupAdbAuthCallback()
         
         // Log app start
         logsViewModel.info("App", "OverDrive started")
 
         // Seed out-of-process revival watchdog so the process gets resurrected
         // if it ever gets force-stopped or OOM-killed without an external event.
-        try {
+        if (!remoteDevSession) try {
             ProcessRevivalReceiver.schedule(applicationContext)
         } catch (e: Exception) {
             android.util.Log.w("MainActivity", "ProcessRevivalReceiver.schedule failed: ${e.message}")
@@ -267,23 +296,23 @@ class MainActivity : AppCompatActivity() {
         // The daemon will reload from file when getState() is called
         
         // Start Location Sidecar service (establishes ADB connection)
-        startLocationSidecarService()
+        if (!remoteDevSession) startLocationSidecarService()
         
         // Initialize daemons after a short delay to allow ADB connection.
         // If this is a post-update launch, run UpdateLifecycle.hardResetDaemons
         // FIRST so any zombie daemons / watchdogs from the previous install are
         // dead before the new daemon launcher starts. See UpdateLifecycle for
         // the sentinel handshake details.
-        runDaemonStartup(intent, fromOnCreate = true)
+        if (!remoteDevSession) runDaemonStartup(intent, fromOnCreate = true)
         
         // Handle Location start intent (from SentryDaemon restart)
-        handleLocationStartIntent(intent)
+        if (!remoteDevSession) handleLocationStartIntent(intent)
         
         // Check traffic monitor status early so drawer shows correct state
         checkTrafficMonitorStatus()
         
         // Check for app updates (delayed to not block startup)
-        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+        if (!remoteDevSession) android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
             // Clean up any leftover update APK from previous install. Use the
             // shared daemonStartupManager.adbLauncher — allocating a fresh
             // AdbDaemonLauncher here would leak its non-daemon executor + a
@@ -335,15 +364,15 @@ class MainActivity : AppCompatActivity() {
         }, 10000) // 10 seconds after launch
         
         // Schedule periodic update checks (every 6 hours)
-        schedulePeriodicUpdateCheck()
+        if (!remoteDevSession) schedulePeriodicUpdateCheck()
         
         // Status overlay: start immediately if permission granted, show guide if not
-        startStatusOverlay()
+        if (!remoteDevSession) startStatusOverlay()
         
         // If launched from boot receiver with minimize flag, move to back immediately.
         // This keeps the process alive (important for daemon stability) without
         // showing the app UI over the BYD home screen.
-        if (headlessBootSilenceGate) {
+        if (!remoteDevSession && headlessBootSilenceGate) {
             android.util.Log.i("MainActivity", "Boot launch — minimizing to background")
             moveTaskToBack(true)
             // NB: do NOT clear headlessBootSilenceGate here. This block runs
@@ -429,7 +458,7 @@ class MainActivity : AppCompatActivity() {
         // covered without relying on onResume firing first.
         maybeShowPinLock()
         intent?.let {
-            handleLocationStartIntent(it)
+            if (!remoteDevSession) handleLocationStartIntent(it)
             handleNavigateExtra(it)
             // Critical: when MainActivity is already running and the install
             // script's `am start --ez post_update true` re-delivers the
@@ -440,7 +469,7 @@ class MainActivity : AppCompatActivity() {
             // by daemonStartupRequested + by the sentinel/intent-extra
             // checks inside isPostUpdateLaunch — once the sentinels are
             // consumed, subsequent calls become no-ops).
-            runDaemonStartup(it, fromOnCreate = false)
+            if (!remoteDevSession) runDaemonStartup(it, fromOnCreate = false)
         }
     }
 
@@ -464,6 +493,7 @@ class MainActivity : AppCompatActivity() {
             "live" -> R.id.liveViewFragment
             "vehicle" -> R.id.vehicleControlFragment
             "dashboard" -> R.id.dashboardFragment
+            "assistant" -> R.id.genAiFragment
             else -> return
         }
         // navigateToRailDestination self-defers via pendingRailDestination when
@@ -701,12 +731,14 @@ class MainActivity : AppCompatActivity() {
         maybeShowPinLock()
 
         // Try to start overlay if permission was just granted (user returned from settings)
-        StatusOverlayService.startIfPermitted(this)
+        if (!remoteDevSession) {
+            StatusOverlayService.startIfPermitted(this)
+        }
 
         // Re-sync the RoadSense overlay on resume: the user may have just toggled
         // RoadSense on/off in the web UI and returned to the app, or granted the
         // overlay permission. Cheap — a no-op if the state already matches.
-        syncRoadSenseOverlay()
+        if (!remoteDevSession) syncRoadSenseOverlay()
 
         // Daemon-ready flush of any pending onboarding operating-mode choice. The
         // auth-granted callback fires BEFORE the user reaches the MODE step (and only
@@ -715,7 +747,10 @@ class MainActivity : AppCompatActivity() {
         // any non-first launch. Idempotent + no-op when nothing is pending, and it
         // reconciles against the live config so it never clobbers a later Settings
         // change (see flushPendingOperatingMode).
-        OnboardingHost.flushPendingOperatingMode(applicationContext)
+        if (!remoteDevSession) {
+            OnboardingHost
+                .flushPendingOperatingMode(applicationContext)
+        }
 
         // Re-drive a rail tap that was deferred because it raced Activity state saving. Now
         // resumed, FragmentManager can commit. navigateToRailDestination re-checks isStateSaved
@@ -770,7 +805,7 @@ class MainActivity : AppCompatActivity() {
             headlessBootSilenceGate = false
             android.util.Log.i("MainActivity", "Boot-silence latch consumed on first onPause")
         }
-        PinSession.notePaused()
+        if (!remoteDevSession) PinSession.notePaused()
     }
 
     /**
@@ -794,6 +829,10 @@ class MainActivity : AppCompatActivity() {
      * flash up on top of the BYD home screen at every boot.
      */
     private fun maybeShowPinLock() {
+        // Remote Dev View never launches the PIN Activity or mutates the
+        // process-wide PinSession. The bridge admits a remote session only
+        // while the physical UI is already unlocked.
+        if (remoteDevSession) return
         try {
             val pinEnabled = PinManager.isEnabled()
             // Apply / clear FLAG_SECURE based on current lock state, regardless
@@ -1400,6 +1439,11 @@ class MainActivity : AppCompatActivity() {
         // Brand version + device id used to live in the drawer header; in the
         // rail-based shell they're surfaced on the Dashboard card instead.
     }
+
+    /** Apply a persisted screenshot-privacy change without recreating the activity. */
+    fun applyScreenshotPrivacyMode(enabled: Boolean) {
+        screenshotPrivacyController?.setEnabled(enabled)
+    }
     
     private fun setupNavigation(savedInstanceState: Bundle?) {
         setSupportActionBar(toolbar)
@@ -1412,6 +1456,7 @@ class MainActivity : AppCompatActivity() {
         appBarConfiguration = AppBarConfiguration(
             setOf(
                 R.id.dashboardFragment,
+                R.id.genAiFragment,
                 R.id.liveViewFragment,
                 R.id.recordingsFragment,
                 R.id.vehicleControlFragment,
@@ -1449,6 +1494,8 @@ class MainActivity : AppCompatActivity() {
         val items = listOf(
             RailItem("dashboard", R.id.railDestDashboard, R.id.dashboardFragment,
                 R.drawable.ic_dashboard, R.string.rail_dashboard),
+            RailItem(NavigationRailCatalog.ASSISTANT, R.id.railDestAssistant,
+                R.id.genAiFragment, R.drawable.ic_smart_toy, R.string.rail_assistant),
             RailItem(NavigationRailCatalog.LIVE, R.id.railDestLive, R.id.liveViewFragment,
                 R.drawable.ic_live, R.string.rail_live),
             RailItem(NavigationRailCatalog.RECORDINGS, R.id.railDestRecordings,
@@ -1582,7 +1629,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         setNavigationRailExpanded(
-            savedInstanceState?.getBoolean(KEY_RAIL_EXPANDED, false) == true,
+            savedInstanceState?.getBoolean(KEY_RAIL_EXPANDED, true) ?: true,
             animate = false
         )
         refreshNavigationRailVisibility()
@@ -1669,9 +1716,9 @@ class MainActivity : AppCompatActivity() {
     )
 
     /**
-     * Compact is the default: icons keep their full 56dp touch targets while labels
-     * are removed from the narrow 80dp rail. A right swipe (or chevron button)
-     * expands to a comfortable horizontal icon+label layout; left reverses it.
+     * Expanded is the default so destinations are named without requiring a gesture.
+     * A left swipe (or chevron button) still collapses to the compact 80dp icon rail;
+     * right reverses it.
      *
      * Rows are switched to their expanded (horizontal) form up-front and stay
      * there for the whole slide. Both widths put the icon centre on the same
@@ -2118,6 +2165,9 @@ class MainActivity : AppCompatActivity() {
         // → 2x2 rearrangement. "dilink4" = oem SurfaceTexture passthrough.
         // Absent in older config → "default".
         val cameraMode: String,
+        // DiLink 4-only path that leaves APA output untouched and consumes
+        // preview port 0 exactly as supplied by the HAL.
+        val dilink4PassiveApaMode: Boolean,
         // GL fragment-shader red-pixel suppression for the HAL "calibration
         // failed" overlay. Cosmetic mitigation only.
         val dilink4RedMask: Boolean,
@@ -2266,6 +2316,8 @@ class MainActivity : AppCompatActivity() {
                 manualCameraId = manualCameraId,
                 isManualOverride = manualOverride,
                 cameraMode = cameraMode,
+                dilink4PassiveApaMode = config.optBoolean(
+                    "dilink4PassiveApaMode", false),
                 dilink4RedMask = config.optBoolean("dilink4RedMask", false),
                 panoCameraId = panoCameraId,
                 oemDashcamCameraId = oemDashcamCameraId,
@@ -2299,6 +2351,7 @@ class MainActivity : AppCompatActivity() {
         val currentCameraModeView = dialogView.findViewById<TextView>(R.id.tvCurrentCameraMode)
         val saveCameraModeButton = dialogView.findViewById<View>(R.id.btnSaveCameraMode)
         val saveDilink4TweaksButton = dialogView.findViewById<View>(R.id.btnSaveCameraDilink4Tweaks)
+        val dilink4PassiveApaSwitch = dialogView.findViewById<com.google.android.material.materialswitch.MaterialSwitch>(R.id.swCameraDilink4PassiveApaMode)
         val dilink4RedMaskSwitch = dialogView.findViewById<com.google.android.material.materialswitch.MaterialSwitch>(R.id.swCameraDilink4RedMask)
         val oemDashcamGroup = dialogView.findViewById<android.widget.RadioGroup>(R.id.rgOemDashcamId)
         val currentOemDashcamView = dialogView.findViewById<TextView>(R.id.tvCurrentOemDashcam)
@@ -2744,11 +2797,13 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // DiLink 4 quadrant tweaks. The 2x2 layout is hardcoded; only the
-        // red-overlay mitigation switches are user-controllable.
+        // DiLink 4 compatibility options. Both are ignored outside the
+        // DiLink 4 ingestion path.
+        dilink4PassiveApaSwitch.isChecked = state.dilink4PassiveApaMode
         dilink4RedMaskSwitch.isChecked = state.dilink4RedMask
         saveDilink4TweaksButton.setOnClickListener {
             val payload = org.json.JSONObject().apply {
+                put("dilink4PassiveApaMode", dilink4PassiveApaSwitch.isChecked)
                 put("dilink4RedMask", dilink4RedMaskSwitch.isChecked)
             }.toString()
             saveDilink4TweaksButton.isEnabled = false
@@ -3497,7 +3552,8 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * Shows a styled dialog with SOH status details and a reset button.
-     * Reads directly from the persisted properties file (no HTTP/auth needed).
+     * The headline value always comes from the daemon's canonical OEM-first resolver.
+     * The properties file contains only estimator internals and must not be displayed.
      */
     private fun showBatteryHealthDialog() {
         val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
@@ -3505,14 +3561,14 @@ class MainActivity : AppCompatActivity() {
         executor.execute {
             var sohPercent = "--"
             var source = "--"
-            var method = "live"
+            var method = "--"
             var nominalKwh = "--"
             var samples = "--"
             var lastUpdated = "--"
             var hasEstimate = false
 
-            // Vehicle section state. Populated from /api/performance/soh status JSON
-            // when available; falls back to legacy properties-file values otherwise.
+            // Vehicle section state. Populated from /api/performance/soh status JSON.
+            // Non-SOH estimator metadata can still fall back to the properties file.
             var modelId: String? = null
             var nominalKwhValue = 0.0
             var nominalSourceVal = "unset"
@@ -3531,12 +3587,6 @@ class MainActivity : AppCompatActivity() {
                     val props = java.util.Properties()
                     java.io.FileInputStream(sohFile).use { props.load(it) }
 
-                    val soh = props.getProperty("soh_percent")?.toDoubleOrNull()
-                    if (soh != null && soh > 0 && soh <= 110) {
-                        sohPercent = String.format("%.1f%%", soh)
-                        hasEstimate = true
-                    }
-
                     // Shape B: live formula + calibration anchor (separate, not blended).
                     val cal = props.getProperty("calibration_soh")?.toDoubleOrNull()
                     samples = if (cal != null && cal > 0) String.format("calib %.1f%%", cal) else "—"
@@ -3553,25 +3603,39 @@ class MainActivity : AppCompatActivity() {
                             .format(java.util.Date(ts))
                     }
 
-                    source = props.getProperty("nominal_source") ?: "unset"
-                    nominalSourceVal = source
+                    nominalSourceVal = props.getProperty("nominal_source") ?: "unset"
                 }
             } catch (e: Exception) {
                 android.util.Log.w("MainActivity", "SOH file read failed: ${e.message}")
             }
 
-            // Fetch full SOH status (modelId, calibration anchor, estimated capacity) —
-            // properties file alone doesn't carry modelId or live calibration shape.
+            // Fetch the canonical SOH plus model/capacity diagnostics. A daemon outage
+            // leaves the headline unavailable rather than exposing the moving raw estimate.
             try {
                 val conn = DaemonHttpClient.open(
                     "/api/performance/soh", "GET", 2000, 3000)
                 if (conn.responseCode == 200) {
                     val body = conn.inputStream.bufferedReader().use { it.readText() }
                     val json = org.json.JSONObject(body)
+                    val canonicalSoh = json.optDouble("displaySoh", -1.0)
+                    val canonicalSource = json.optString("displaySource", "unavailable")
+                    if (canonicalSoh > 0.0 && canonicalSoh <= 100.0 &&
+                        canonicalSource != "unavailable") {
+                        sohPercent = String.format("%.1f%%", canonicalSoh)
+                        hasEstimate = true
+                        source = canonicalSource
+                        method = if (canonicalSource == "oem") "vehicle-reported" else "estimated"
+                        lastUpdated = java.text.SimpleDateFormat(
+                            "yyyy-MM-dd HH:mm", java.util.Locale.getDefault()
+                        ).format(java.util.Date())
+                    }
                     if (!json.isNull("modelId")) {
                         modelId = json.optString("modelId", "").ifEmpty { null }
                     }
                     nominalKwhValue = json.optDouble("nominalCapacityKwh", nominalKwhValue)
+                    if (nominalKwhValue > 0.0) {
+                        nominalKwh = String.format("%.1f kWh", nominalKwhValue)
+                    }
                     nominalSourceVal = json.optString("nominalSource", nominalSourceVal)
                     val est = json.optDouble("estimatedCapacityKwh", -1.0)
                     if (est > 0) estimatedKwhValue = est
@@ -3589,7 +3653,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 conn.disconnect()
-            } catch (_: Throwable) { /* keep legacy file fallback values */ }
+            } catch (_: Throwable) { /* keep non-SOH metadata fallbacks only */ }
 
             val finalSoh = sohPercent
             val finalSource = source
@@ -4030,13 +4094,14 @@ class MainActivity : AppCompatActivity() {
         // Show loading state while we check
         updateTrafficMonitorMenuItemText(getString(R.string.traffic_monitor_loading))
         
-        // Reuse shared adbLauncher (avoids per-call leak).
-        // Use 'grep ... || echo NOT_DISABLED' to ensure exit code 0 regardless of grep result
+        // Reuse shared adbLauncher (avoids per-call leak). The pm verbs and the
+        // probe parsing live in TrafficMonitorPolicy so this UI read and the
+        // daemon's boot reconcile can never disagree about what "disabled" means.
         daemonStartupManager.adbLauncher.executeShellCommand(
-            "pm list packages -d 2>/dev/null | grep com.byd.trafficmonitor || echo NOT_DISABLED",
+            TrafficMonitorPolicy.stateProbeCommand(),
             object : AdbDaemonLauncher.LaunchCallback {
                 override fun onLog(message: String) {
-                    val isDisabled = message.contains("com.byd.trafficmonitor") && !message.contains("NOT_DISABLED")
+                    val isDisabled = TrafficMonitorPolicy.probeSaysDisabled(message)
                     runOnUiThread {
                         trafficMonitorEnabled = !isDisabled
                         updateTrafficMonitorMenuItem(!isDisabled)
@@ -4118,52 +4183,100 @@ class MainActivity : AppCompatActivity() {
     }
     
     /**
-     * Enable or disable the BYD Traffic Monitor package via ADB shell.
+     * Enable or disable the BYD Traffic Monitor package via ADB shell, then persist
+     * the choice so it survives a firmware OTA.
+     *
+     * The pm state alone is not durable: an OTA re-scans com.byd.trafficmonitor and
+     * resurrects it, which is why users had to re-disable it after every update.
+     * The persisted flag is what CameraDaemon re-applies on boot. It is written only
+     * after the shell payload's own probe confirms the transition actually landed —
+     * a marker for a state we never reached would make the daemon fight the user.
      */
     private fun setTrafficMonitorEnabled(enable: Boolean) {
 
         try {
-            packageManager.getPackageInfo("com.byd.trafficmonitor", 0)
+            packageManager.getPackageInfo(TrafficMonitorPolicy.PACKAGE, 0)
         } catch (e: PackageManager.NameNotFoundException) {
-            android.util.Log.w("TrafficMonitor", "Pacote com.byd.trafficmonitor não encontrado. Operação cancelada.")
+            android.util.Log.w("TrafficMonitor", "${TrafficMonitorPolicy.PACKAGE} not installed on this firmware — ignoring toggle.")
             return
         }
 
-        val cmd = if (enable) {
-            "pm enable com.byd.trafficmonitor 2>&1"
-        } else {
-            "pm disable-user --user 0 com.byd.trafficmonitor 2>&1"
-        }
-        
+        val wantDisabled = !enable
         val action = if (enable) "Enabling" else "Disabling"
         Toast.makeText(this, getString(R.string.toast_traffic_monitor_changing, action), Toast.LENGTH_SHORT).show()
-        
+
+        // Mutate + verify in one ADB roundtrip; the trailing probe is what we trust.
+        var shellOutput = ""
+
         // Reuse shared adbLauncher (avoids per-call leak).
-        daemonStartupManager.adbLauncher.executeShellCommand(cmd, object : AdbDaemonLauncher.LaunchCallback {
+        daemonStartupManager.adbLauncher.executeShellCommand(
+            TrafficMonitorPolicy.applyThenProbeCommand(wantDisabled),
+            object : AdbDaemonLauncher.LaunchCallback {
             override fun onLog(message: String) {
+                shellOutput = message
                 android.util.Log.i("TrafficMonitor", "$action result: $message")
             }
-            
+
             override fun onLaunched() {
-                runOnUiThread {
-                    trafficMonitorEnabled = enable
-                    updateTrafficMonitorMenuItem(enable)
-                    
-                    val state = if (enable) "enabled" else "disabled"
-                    logsViewModel.info("TrafficMonitor", "BYD Traffic Monitor $state")
-                    
-                    // Show reboot reminder
-                    com.google.android.material.dialog.MaterialAlertDialogBuilder(this@MainActivity, R.style.Theme_Overdrive_M3_Dialog)
-                        .setIcon(R.drawable.ic_check_circle)
-                        .setTitle(getString(R.string.dialog_traffic_status_title, state.replaceFirstChar { it.uppercase() }))
-                        .setMessage(getString(R.string.dialog_traffic_reboot_message))
-                        .setPositiveButton(getString(R.string.dialog_ok), null)
-                        .show()
+                val verified = TrafficMonitorPolicy.stateAfterApply(shellOutput)
+                val expected = if (wantDisabled) TrafficMonitorPolicy.STATE_DISABLED
+                               else TrafficMonitorPolicy.STATE_ENABLED
+                if (verified != expected) {
+                    // pm returned but the package did not move — report the real
+                    // state instead of a green checkmark over an unchanged system.
+                    runOnUiThread {
+                        if (isFinishing || isDestroyed) return@runOnUiThread
+                        // null == "unknown, tap to re-check" — don't render an
+                        // unparseable probe as a confident "disabled".
+                        trafficMonitorEnabled = when (verified) {
+                            TrafficMonitorPolicy.STATE_ENABLED -> true
+                            TrafficMonitorPolicy.STATE_DISABLED -> false
+                            else -> null
+                        }
+                        trafficMonitorEnabled?.let { updateTrafficMonitorMenuItem(it) }
+                        logsViewModel.error("TrafficMonitor",
+                            "pm reported no change (wanted $expected, probe says $verified)")
+                        Toast.makeText(this@MainActivity,
+                            getString(R.string.toast_failed_with_message_x, verified),
+                            Toast.LENGTH_LONG).show()
+                    }
+                    return
                 }
+
+                // Off the UI thread: the config write blocks on daemon IPC plus a
+                // full JSON rewrite.
+                Thread {
+                    val persisted = TrafficMonitorPolicy.setDisableRequested(wantDisabled)
+                    runOnUiThread {
+                        if (isFinishing || isDestroyed) return@runOnUiThread
+                        trafficMonitorEnabled = enable
+                        updateTrafficMonitorMenuItem(enable)
+
+                        val state = if (enable) "enabled" else "disabled"
+                        logsViewModel.info("TrafficMonitor", "BYD Traffic Monitor $state")
+                        if (!persisted) {
+                            // Live now, but nothing will re-apply it after an OTA.
+                            logsViewModel.warn("TrafficMonitor",
+                                "Could not persist the traffic-monitor preference — it will not survive a firmware update")
+                            Toast.makeText(this@MainActivity,
+                                getString(R.string.toast_traffic_monitor_persist_failed),
+                                Toast.LENGTH_LONG).show()
+                        }
+
+                        // Show reboot reminder
+                        com.google.android.material.dialog.MaterialAlertDialogBuilder(this@MainActivity, R.style.Theme_Overdrive_M3_Dialog)
+                            .setIcon(R.drawable.ic_check_circle)
+                            .setTitle(getString(R.string.dialog_traffic_status_title, state.replaceFirstChar { it.uppercase() }))
+                            .setMessage(getString(R.string.dialog_traffic_reboot_message))
+                            .setPositiveButton(getString(R.string.dialog_ok), null)
+                            .show()
+                    }
+                }.start()
             }
 
             override fun onError(error: String) {
                 runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
                     Toast.makeText(this@MainActivity, getString(R.string.toast_failed_with_message_x, error), Toast.LENGTH_LONG).show()
                     logsViewModel.error("TrafficMonitor", "Failed to ${if (enable) "enable" else "disable"}: $error")
                 }
@@ -4189,6 +4302,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        screenshotPrivacyController?.stop()
+        screenshotPrivacyController = null
         navigationRailAnimator?.cancel()
         navigationRailAnimator = null
         if (::navigationRailScroll.isInitialized) {
@@ -4198,7 +4313,7 @@ class MainActivity : AppCompatActivity() {
             cancelRailViewAnimations()
         }
         // Remove log listener
-        LogManager.setLogListener(null)
+        if (!remoteDevSession) LogManager.setLogListener(null)
         // Tear down the onboarding overlay + its ACC receiver (mirrors the auth-callback
         // teardown below — any guard cleared only in a callback needs a destroy path).
         onboardingHost?.dismiss()
@@ -4207,7 +4322,7 @@ class MainActivity : AppCompatActivity() {
         navPollRunnable?.let { mainHandler.removeCallbacks(it) }
         navPollRunnable = null
         // Remove ADB auth callback
-        AdbShellExecutor.setAuthCallback(null)
+        if (!remoteDevSession) AdbShellExecutor.setAuthCallback(null)
         // Cancel the periodic update check so the Runnable doesn't leak the
         // activity reference after recreate.
         updateCheckRunnable?.let { mainHandler.removeCallbacks(it) }
@@ -4263,9 +4378,9 @@ class MainActivity : AppCompatActivity() {
     fun invokeTrafficMonitorAction() {
         // Match drawer-open behavior: refresh status before showing dialog.
         try {
-            packageManager.getPackageInfo("com.byd.trafficmonitor", 0)
+            packageManager.getPackageInfo(TrafficMonitorPolicy.PACKAGE, 0)
         } catch (e: PackageManager.NameNotFoundException) {
-            android.util.Log.w("TrafficMonitor", "Pacote com.byd.trafficmonitor não encontrado. Operação cancelada.")
+            android.util.Log.w("TrafficMonitor", "${TrafficMonitorPolicy.PACKAGE} not installed on this firmware — ignoring toggle.")
             return
         }
         checkTrafficMonitorStatus()
@@ -4452,5 +4567,6 @@ class MainActivity : AppCompatActivity() {
     companion object {
         /** Deep-link extra consumed by [handleNavigateExtra] (launcher glance widgets). */
         const val EXTRA_NAVIGATE_TO = "navigate_to"
+        const val EXTRA_REMOTE_DEV_SESSION = "remote_dev_session"
     }
 }
