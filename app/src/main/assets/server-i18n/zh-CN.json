@@ -119,8 +119,7 @@
     "tyres_persist_failed": "保存轮胎限制失败",
     "recordings_index_unavailable": "录制索引不可用",
     "surveillance_all_classes_off": "此次保存会关闭所有对象类别，导致 AI 检测完全停用。请确认后继续。",
-    "tyres_invalid_unit": "pressureUnit 必须是 kpa、psi 或 bar",
-    "vehicle_blocked_in_motion": "車輛行駛中無法使用此操作"
+    "tyres_invalid_unit": "pressureUnit 必须是 kpa、psi 或 bar"
   },
   "notifications": {
     "charging_started": "开始充电",
@@ -1088,7 +1087,13 @@
     "ambient_zone_rear": "后部",
     "compute_variable": "计算变量",
     "compute_variable_description": "设定一个数字并将其存储在一个变量中。 支持+ - * / % , 括号, 以及最小、最大、夹、圆、地板、冰箱、沙桶和粉末等功能。 使用 ${signal:NAME} 获取实时车辆值，${var:NAME} 获取另一个变量-例如：$500 + (${signal:batteryLevel} - 20) * 3。 5. 如果值不能读取(尚未报告的信号)，变量保持不变。",
-    "variable_expression": "表达式"
+    "variable_expression": "表达式",
+    "set_headlight_mode": "设置大灯模式",
+    "set_headlight_mode_description": "设置原厂外部灯光选择开关。仅在车辆安全驻车时才接受关闭。这是车辆本地控制，车辆断电时无法使用。",
+    "headlight_mode": "大灯模式",
+    "headlight_auto": "自动",
+    "parking_lights": "示宽灯",
+    "headlight_on_low_beam": "开启（近光灯）"
   },
   "messages": {
     "logged_out": "登录出来",

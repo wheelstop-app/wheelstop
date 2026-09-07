@@ -119,8 +119,7 @@
     "tyres_persist_failed": "無法儲存胎壓門檻值",
     "recordings_index_unavailable": "錄影索引無法使用",
     "surveillance_all_classes_off": "此次儲存會停用所有物件類別，導致 AI 偵測完全關閉。請確認後繼續。",
-    "tyres_invalid_unit": "pressureUnit 必須是 kpa、psi 或 bar",
-    "vehicle_blocked_in_motion": "車輛行駛中無法使用此操作"
+    "tyres_invalid_unit": "pressureUnit 必須是 kpa、psi 或 bar"
   },
   "notifications": {
     "charging_started": "開始充電",
@@ -1088,7 +1087,13 @@
     "set_ambient_power": "氣氛燈開／關",
     "set_ambient_power_description": "為前座、後座或兩個區域開啟或關閉車內氣氛燈。「兩者」使用氣氛燈主開關；單一區域沒有專用開關，因此「關」會調暗該區域，「開」會恢復先前的亮度。車輛熄火時此功能無法運作。",
     "ambient_zone_front": "前座",
-    "ambient_zone_rear": "後座"
+    "ambient_zone_rear": "後座",
+    "set_headlight_mode": "設定大燈模式",
+    "set_headlight_mode_description": "設定原廠外部燈光選擇開關。僅在車輛安全停妥時才接受關閉。這是車輛本機控制，車輛斷電時無法使用。",
+    "headlight_mode": "大燈模式",
+    "headlight_auto": "自動",
+    "parking_lights": "示寬燈",
+    "headlight_on_low_beam": "開啟（近光燈）"
   },
   "messages": {
     "logged_out": "已登入",

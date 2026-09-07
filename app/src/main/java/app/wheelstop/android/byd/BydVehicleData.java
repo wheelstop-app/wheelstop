@@ -12,6 +12,18 @@ public class BydVehicleData {
     // Sentinel for unavailable numeric values
     public static final double NaN = Double.NaN;
     public static final int UNAVAILABLE = Integer.MIN_VALUE;
+    // Connected-unit BYDAutoTyreDevice contract.
+    public static final int TYRE_PRESSURE_STATE_NORMAL = 0;
+    public static final int TYRE_PRESSURE_STATE_OVERPRESSURE = 1;
+    public static final int TYRE_PRESSURE_STATE_UNDERPRESSURE = 2;
+
+    public static boolean isTyreOverpressureState(int state) {
+        return state == TYRE_PRESSURE_STATE_OVERPRESSURE;
+    }
+
+    public static boolean isTyreUnderpressureState(int state) {
+        return state == TYRE_PRESSURE_STATE_UNDERPRESSURE;
+    }
 
     // ==================== IDENTITY ====================
     public final String vin;
@@ -19,7 +31,7 @@ public class BydVehicleData {
     // ==================== BATTERY ====================
     public final double socPercent;       // 0-100
     public final double socHevPercent;    // HEV SOC
-    public final int socTargetPercent;    // configured SOC target, 15-100
+    public final int socTargetPercent;    // configured SOC target, 15-70
     public final double capacityAh;
     public final double remainKwh;        // remaining energy
     public final double voltage12v;       // 12V battery volts
@@ -109,6 +121,7 @@ public class BydVehicleData {
     public final int chargingGunState;
     public final int chargerWorkState;
     public final int chargingMode;        // SDK getChargingMode() raw (AC vs DC vs wireless — model-specific)
+    /** Dedicated charging-device property 740506, already normalized by the framework in kW. */
     public final double chargingPowerKw;
     /** Observation time carried with {@link #chargingPowerKw}; 0 means unavailable/unknown age. */
     public final long chargingPowerAtMs;
@@ -118,25 +131,23 @@ public class BydVehicleData {
     /** Observation time carried with {@link #externalChargingPowerKw}; 0 means unavailable/unknown age. */
     public final long externalChargingPowerAtMs;
     public final long externalChargingPowerChangedAtMs;
-    public final double chargePowerKw;    // DC charge power into pack (kW), InstrumentDevice.getChargePower()
+    /**
+     * Raw {@code InstrumentDevice.getChargePower()} value.
+     *
+     * <p>Firmware-dependent: it may already be kW or may require a session-proved divisor. Consumers
+     * must use {@code VehicleDataMonitor}'s resolved {@code ChargingStateData}, never this field
+     * directly as measured power.
+     */
+    public final double chargePowerKw;
     /** Observation time carried with {@link #chargePowerKw}; 0 means unavailable/unknown age. */
     public final long chargePowerAtMs;
     public final long chargePowerChangedAtMs;
-    /** Charge power as the INSTRUMENT CLUSTER reports it (kW), read from feature id
-     *  0x32300018 (Instrument.CHARGING_CHARGE_POWER_DD). This is the figure shown on the dash
-     *  and the only charging-power source that is trustworthy on PHEV, where the typed getters
-     *  report the EVSE's rated capacity instead of the actual draw. Kept separate from
-     *  {@link #chargePowerKw} / {@link #externalChargingPowerKw} so the consumer cascade can
-     *  prefer it explicitly without this read clobbering the values BEV logic uses.
-     *
-     *  <p><b>PHEV-only as a power source.</b> The raw feature value is hectowatts on some
-     *  firmware families and kW on others with no unit flag, so the collector infers the scale
-     *  from the magnitude and cannot resolve raw 22..500 (either a 22-500 kW DC charge or a
-     *  0.22-5 kW AC one). A PHEV onboard charger cannot reach that band, so the inference is
-     *  always right there; on a BEV a real DC fast charge sits inside it. Hence
-     *  {@code VehicleDataMonitor.getChargingState()} consumes this on PHEV only, and BEV keeps
-     *  using {@link #chargePowerKw}. It is still populated on every drivetrain — the JSON dump
-     *  below carries it so a device capture can settle which family a trim belongs to. */
+    /** Charge power as the instrument cluster reports it, read from feature id 0x32300018
+     *  (Instrument.CHARGING_CHARGE_POWER_DD). It is a guarded fallback behind the dedicated
+     *  charging-device kW signal because this field can retain an idle value and its scale varies
+     *  by firmware. Kept separate from {@link #chargePowerKw} and
+     *  {@link #externalChargingPowerKw} so runtime classification can evaluate each source
+     *  independently without one raw read clobbering another. */
     public final double clusterChargePowerKw;
     public final long clusterChargePowerChangedAtMs;
     final double chargingPowerLastObservedKw;
@@ -150,7 +161,7 @@ public class BydVehicleData {
 
     // ==================== TYRES ====================
     public final int[] tyrePressure;      // [FL, FR, RL, RR] in kPa (raw int from BYDAutoTyreDevice.getTyrePressureValue)
-    public final int[] tyrePressureState; // [FL, FR, RL, RR] — 0=NORMAL, 1=UNDERPRESSURE, 2=OVERPRESSURE
+    public final int[] tyrePressureState; // [FL, FR, RL, RR] — BYDAutoTyreDevice state constants above
     public final int[] tyreAirLeakState;  // [FL, FR, RL, RR] — 0=Normal, 1=Slow leak, 2=Fast leak
     public final int[] tyreSignalState;   // [FL, FR, RL, RR] — 0=Signal OK, 1=Signal Error
     public final int[] tyreTemperature;   // [FL, FR, RL, RR] in °C; UNAVAILABLE until TPMS fires
@@ -576,12 +587,9 @@ public class BydVehicleData {
             if (chargingGunState != UNAVAILABLE) chg.put("gunState", chargingGunState);
             if (chargerWorkState != UNAVAILABLE) chg.put("chargerState", chargerWorkState);
             if (chargingMode != UNAVAILABLE) chg.put("mode", chargingMode);
-            // RAW readings, and their UNIT IS NOT KNOWN HERE. The same accessors report an
-            // instantaneous kW on some firmware and a cumulative kWh counter on others; which one
-            // this vehicle does is decided at runtime (ChargeSourceClassifier) and converted
-            // downstream. Naming these "...Kw" asserted a unit this class cannot know, so anyone
-            // reading the diagnostic would take a counter for a rate. The resolved rate is published
-            // as ChargingStateData.chargingPowerKW — that is the field with a guaranteed unit.
+            // Keep the legacy diagnostic key for compatibility. This first value is the dedicated
+            // framework kW property; the external accessor below remains unit-ambiguous and is
+            // classified downstream before it can become a published rate.
             putIfValid(chg, "powerRaw", chargingPowerKw);
             putIfValid(chg, "externalPowerRaw", externalChargingPowerKw);
             // DC pack-side (getChargePower). Only emit an in-band value: the getter
@@ -591,11 +599,8 @@ public class BydVehicleData {
             if (!Double.isNaN(chargePowerKw) && chargePowerKw > 0.1 && chargePowerKw <= 300) {
                 putIfValid(chg, "chargePowerKw", chargePowerKw);
             }
-            // Emitted alongside its siblings and on the SAME band, because this is now the
-            // TOP-priority source in getChargingState()'s cascade — a diagnostic capture that
-            // omitted the winning candidate would be misleading about where a displayed rate
-            // came from.
-            // Also classifier-managed, so also unit-unknown here — named accordingly.
+            // Also classifier-managed and unit-unknown here, so name it as a raw diagnostic
+            // rather than implying it is the resolved power used by downstream consumers.
             if (!Double.isNaN(clusterChargePowerKw)
                     && clusterChargePowerKw > 0.1 && clusterChargePowerKw <= 300) {
                 putIfValid(chg, "clusterChargePowerRaw", clusterChargePowerKw);
@@ -810,6 +815,78 @@ public class BydVehicleData {
 
     private static void putIfValid(JSONObject j, String key, double val) throws org.json.JSONException {
         if (!Double.isNaN(val)) j.put(key, Math.round(val * 100) / 100.0);
+    }
+
+    public static BydVehicleData fromJson(JSONObject j) {
+        if (j == null) return null;
+        Builder b = new Builder();
+        try {
+            b.vin = j.optString("vin", null);
+            if (j.has("battery")) {
+                JSONObject batt = j.getJSONObject("battery");
+                b.socPercent = batt.optDouble("socPercent", NaN);
+                b.socHevPercent = batt.optDouble("socHevPercent", NaN);
+                b.socTargetPercent = batt.optInt("socTargetPercent", UNAVAILABLE);
+                b.capacityAh = batt.optDouble("capacityAh", NaN);
+                b.remainKwh = batt.optDouble("remainKwh", NaN);
+                b.voltage12v = batt.optDouble("voltage12v", NaN);
+                b.voltage12vAtMs = batt.optLong("voltage12vAtMs", 0L);
+                b.voltageLevelRaw = batt.optInt("voltageLevelRaw", UNAVAILABLE);
+            }
+            if (j.has("speed")) {
+                JSONObject spd = j.getJSONObject("speed");
+                b.speedKmh = spd.optDouble("kmh", NaN);
+                b.accelPercent = spd.optInt("accelPercent", UNAVAILABLE);
+                b.brakePercent = spd.optInt("brakePercent", UNAVAILABLE);
+            }
+            if (j.has("gearMode")) b.gearMode = j.optInt("gearMode", UNAVAILABLE);
+            if (j.has("tyrePressure")) {
+                JSONArray tp = j.getJSONArray("tyrePressure");
+                int[] p = new int[tp.length()];
+                for (int i = 0; i < tp.length(); i++) p[i] = tp.getInt(i);
+                b.tyrePressure = p;
+            }
+            if (j.has("tyrePressureState")) {
+                JSONArray a = j.getJSONArray("tyrePressureState");
+                int[] v = new int[a.length()];
+                for (int i = 0; i < a.length(); i++) v[i] = a.getInt(i);
+                b.tyrePressureState = v;
+            }
+            if (j.has("tyreTemperature")) {
+                JSONArray a = j.getJSONArray("tyreTemperature");
+                int[] v = new int[a.length()];
+                for (int i = 0; i < a.length(); i++) v[i] = a.isNull(i) ? UNAVAILABLE : a.getInt(i);
+                b.tyreTemperature = v;
+            }
+            if (j.has("tyreSystemState")) b.tyreSystemState = j.optInt("tyreSystemState", UNAVAILABLE);
+            if (j.has("tyreTemperatureState")) b.tyreTemperatureState = j.optInt("tyreTemperatureState", UNAVAILABLE);
+            if (j.has("doorLockStatus")) {
+                JSONArray dl = j.getJSONArray("doorLockStatus");
+                int[] s = new int[dl.length()];
+                for (int i = 0; i < dl.length(); i++) s[i] = dl.getInt(i);
+                b.doorLockStatus = s;
+            }
+            if (j.has("windowOpenPercent")) {
+                JSONArray wp = j.getJSONArray("windowOpenPercent");
+                int[] p = new int[wp.length()];
+                for (int i = 0; i < wp.length(); i++) p[i] = wp.getInt(i);
+                b.windowOpenPercent = p;
+            }
+            if (j.has("range")) {
+                JSONObject rng = j.getJSONObject("range");
+                b.elecRangeKm = rng.optInt("elecKm", UNAVAILABLE);
+                b.fuelRangeKm = rng.optInt("fuelKm", UNAVAILABLE);
+                b.bodyworkRangeKm = rng.optInt("bodyworkKm", UNAVAILABLE);
+                b.fuelPercent = rng.optDouble("fuelPercent", -1.0);
+            }
+            if (j.has("mileage")) {
+                JSONObject mil = j.getJSONObject("mileage");
+                b.totalMileageKm = mil.optInt("totalKm", UNAVAILABLE);
+                b.evMileageKm = mil.optInt("evKm", UNAVAILABLE);
+                b.hevMileageKm = mil.optInt("hevKm", UNAVAILABLE);
+            }
+        } catch (Exception ignored) {}
+        return b.build();
     }
 
     /** Create a new builder pre-filled with this snapshot's values */

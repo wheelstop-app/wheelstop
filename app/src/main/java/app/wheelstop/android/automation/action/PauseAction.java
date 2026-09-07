@@ -1,6 +1,7 @@
 package app.wheelstop.android.automation.action;
 
 import app.wheelstop.android.automation.AutomationAction;
+import app.wheelstop.android.automation.Automations;
 import app.wheelstop.android.automation.type.IntType;
 import app.wheelstop.android.automation.type.Type;
 import app.wheelstop.android.automation.value.Label;
@@ -63,6 +64,10 @@ public class PauseAction extends BaseAction {
         }
         ms = Math.max(0, Math.min(MAX_MS, ms));
         if (ms == 0) return;
+        if (Automations.deferQueuedAction(automationAction, ms, true)) {
+            logger.info("PauseAction: deferred " + ms + "ms");
+            return;
+        }
         try {
             Thread.sleep(ms);
             logger.info("PauseAction: waited " + ms + "ms");

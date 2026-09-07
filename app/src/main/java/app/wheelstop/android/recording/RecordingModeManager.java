@@ -272,6 +272,17 @@ public class RecordingModeManager {
                     + signalled + ")");
                 return;
             }
+
+            boolean isChargingNow = false;
+            try {
+                isChargingNow = app.wheelstop.android.monitor.ChargingDetector.getInstance().isCharging();
+            } catch (Throwable ignored) {}
+
+            if (isChargingNow && (targetMode == Mode.CONTINUOUS || targetMode == Mode.DRIVE_MODE)) {
+                logger.info("Boot auto-activate skipped — vehicle is CHARGING (signalled="
+                    + signalled + ")");
+                return;
+            }
             if (targetMode == Mode.CONTINUOUS) {
                 logger.info("Boot auto-activate: CONTINUOUS (signalled=" + signalled + ")");
                 activateModeWithWarmup(targetMode, "boot-auto-activate");
@@ -297,6 +308,29 @@ public class RecordingModeManager {
         // a few seconds after construction; idempotent if mode is already
         // active (modeActive guard in onAccStateChanged + onGearChanged).
         scheduleColdStartResync();
+
+        // Hardware interlock: listen for charging state to stop driving dashcam immediately
+        try {
+            app.wheelstop.android.monitor.ChargingDetector.getInstance().addFusedStateListener((isCharging, source) -> {
+                if (isCharging) {
+                    logger.info("Charging started (source=" + source + ") — forcing gear P and stopping driving recording");
+                    onGearChanged(app.wheelstop.android.monitor.GearMonitor.GEAR_P);
+                    synchronized (lifecycleSerializer) {
+                        Mode toStop = null;
+                        synchronized (RecordingModeManager.this) {
+                            if (modeActive && (currentMode == Mode.CONTINUOUS || currentMode == Mode.DRIVE_MODE)) {
+                                toStop = currentMode;
+                            }
+                        }
+                        if (toStop != null) {
+                            runDeactivateGuarded(toStop);
+                        }
+                    }
+                }
+            });
+        } catch (Throwable t) {
+            logger.warn("Could not register ChargingDetector listener: " + t.getMessage());
+        }
     }
 
     // Hard upper bound on the boot auto-activate wait. The latch is released
@@ -444,12 +478,9 @@ public class RecordingModeManager {
         int hwGear;
         boolean accChanged;
         boolean gearChanged;
+        boolean isCharging = false;
         boolean shouldRetryActivation;
         Mode retryMode = null;
-        // Wedge-driven retry: when true, the resync-retry call below must
-        // bypass activateModeWithWarmup's "already active" supplier guard
-        // so the embedded stopRecording+startRecording cycle that unwedges
-        // a stalled encoder / stuck pendingRecordingPrefix actually runs.
         boolean wedgeRetryDriven = false;
 
         // Try to (re)start GearMonitor before reading. If GearMonitor.start()
@@ -526,6 +557,24 @@ public class RecordingModeManager {
                 }
             } catch (Exception ignored) {
                 // GearMonitor unavailable — keep our current value
+            }
+
+            // Hardware interlock: check if vehicle is charging
+            isCharging = false;
+            try {
+                isCharging = app.wheelstop.android.monitor.ChargingDetector.getInstance().isCharging();
+            } catch (Throwable ignored) {}
+
+            if (isCharging) {
+                hwGear = app.wheelstop.android.monitor.GearMonitor.GEAR_P;
+            } else if (hwAcc && (hwGear == app.wheelstop.android.monitor.GearMonitor.GEAR_P || hwGear == app.wheelstop.android.monitor.GearMonitor.GEAR_N)) {
+                // Fallback: If ACC is ON and GPS speed >= 3 km/h or moving, promote gear to D
+                try {
+                    app.wheelstop.android.monitor.GpsMonitor gps = app.wheelstop.android.monitor.GpsMonitor.getInstance();
+                    if (gps != null && (gps.getSpeed() * 3.6f >= 3.0f || gps.isMoving())) {
+                        hwGear = app.wheelstop.android.monitor.GearMonitor.GEAR_D;
+                    }
+                } catch (Throwable ignored) {}
             }
 
             accChanged = hwAcc != accIsOn;
@@ -720,6 +769,7 @@ public class RecordingModeManager {
 
             shouldRetryActivation = !accChanged && !gearChanged && accIsOn
                     && (!modeActive || (wedgeDetected && wedgeRetryAllowed))
+                    && !isCharging
                     && (currentMode == Mode.CONTINUOUS
                         || (currentMode == Mode.DRIVE_MODE && isDrivingGear(currentGear))
                         // PROXIMITY_GUARD is ACC-gated in ALL gears (incl P) — retry
@@ -825,6 +875,20 @@ public class RecordingModeManager {
         // never suppress a genuine future edge.
         probeEdgeHandedOffToDaemon = null;
 
+        // If vehicle is charging, driving recordings must be deactivated
+        if (isCharging) {
+            Mode deactCharging = null;
+            synchronized (this) {
+                if (modeActive && (currentMode == Mode.CONTINUOUS || currentMode == Mode.DRIVE_MODE)) {
+                    logger.info("Re-sync (" + reason + "): vehicle is CHARGING — deactivating driving recording (" + currentMode + ")");
+                    deactCharging = currentMode;
+                }
+            }
+            if (deactCharging != null) {
+                runDeactivateGuarded(deactCharging);
+            }
+        }
+
         // ACC state unchanged but mode might have failed to start at construction.
         // Retry activation if conditions are met and modeActive is false. Use
         // the warmup path so a retried activation that follows a failed
@@ -909,6 +973,56 @@ public class RecordingModeManager {
                 + " — proceeding to warmup-activate anyway");
         }
         activateModeWithWarmup(mode, "force-warmup-" + reason, true);
+    }
+
+    /**
+     * Force an immediate re-activation of the current recording mode WITHOUT
+     * the full pipeline teardown of {@link #forceWarmupRestart} (the camera
+     * is healthy here) and WITHOUT {@link #resyncFromHardware}'s wedge
+     * gating.
+     *
+     * <p>Entry point for StorageManager's post-mount migration hook: after it
+     * has pushed the external output-dir override and called
+     * {@code pipeline.stopRecording()} to finalize an internal-fallback
+     * session, the restart must be driven HERE, not left to the resync
+     * ticker. The stop it just performed stamps the pipeline's 5s
+     * segment-rotation grace window, and the ticker's wedge detector
+     * deliberately refuses to fire inside that window
+     * ({@code inRotationGrace}) — so an ordinary {@code resyncFromHardware}
+     * kick would observe modeActive=true + not-recording + in-grace, do
+     * nothing, and leave the restart to a LATER 30s tick (which would then
+     * also burn a wedge-budget slot for what is an intentional stop, not a
+     * fault).
+     *
+     * <p>Routes through {@code activateModeWithWarmup(force=true)}: force
+     * bypasses only the "already active" supplier short-circuit;
+     * {@code activateMode}'s CONTINUOUS/DRIVE_MODE branches then see
+     * {@code !pipeline.isNormalRecordingMode()} (the caller just stopped it)
+     * and re-issue {@code pipeline.startRecording()}, which consumes the
+     * freshly-pushed output-dir override. Warmup itself is skipped while the
+     * pipeline is running, and the warmupInFlight CAS coalesces concurrent
+     * activations, so the healthy path restarts in well under a second.
+     * DRIVE_MODE's driving-gear gate still applies — if the car shifted out
+     * of a driving gear meanwhile, the activation correctly declines and the
+     * latched override is consumed at the next legitimate start instead.
+     *
+     * <p>No-op when ACC is off or no mode is configured (nothing to restart).
+     */
+    public void forceModeReactivation(String reason) {
+        final Mode mode;
+        final boolean acc;
+        synchronized (this) {
+            mode = currentMode;
+            acc = accIsOn;
+        }
+        if (!acc || mode == Mode.NONE) {
+            logger.info("forceModeReactivation(" + reason + ") — no-op (accIsOn=" + acc
+                + ", mode=" + mode + "); nothing to restart");
+            return;
+        }
+        logger.info("forceModeReactivation(" + reason + ") — re-activating " + mode
+            + " (force=true, no pipeline teardown)");
+        activateModeWithWarmup(mode, reason, true);
     }
 
     /**
@@ -1729,6 +1843,16 @@ public class RecordingModeManager {
             accIsOn = isOn;
 
             if (isOn) {
+                boolean isChargingNow = false;
+                try {
+                    isChargingNow = app.wheelstop.android.monitor.ChargingDetector.getInstance().isCharging();
+                } catch (Throwable ignored) {}
+
+                if (isChargingNow && (currentMode == Mode.CONTINUOUS || currentMode == Mode.DRIVE_MODE)) {
+                    logger.info("ACC ON edge but vehicle is CHARGING — suppressing driving recording (" + currentMode + ")");
+                    return;
+                }
+
                 if (wasOn && modeActive) {
                     logger.debug("ACC already ON and mode active, ignoring duplicate notification");
                     return;
@@ -1840,14 +1964,15 @@ public class RecordingModeManager {
             // Legacy mode (non-dilink4) keeps the original teardown
             // behaviour — the close+reopen race is dilink4-firmware-
             // specific.
-            boolean dilink4 = false;
+            boolean dilinkKeepAlive = false;
             try {
-                dilink4 = app.wheelstop.android.daemon.CameraDaemon.isDilink4ModeActiveStatic();
+                dilinkKeepAlive = app.wheelstop.android.daemon.CameraDaemon.isDilink4ModeActiveStatic()
+                        || app.wheelstop.android.camera.dilink5.DiLink5QCarCamBackend.isSupported();
             } catch (Throwable t) {
-                logger.warn("dilink4 mode probe failed: " + t.getMessage());
+                logger.warn("dilink mode probe failed: " + t.getMessage());
             }
 
-            if (dilink4) {
+            if (dilinkKeepAlive) {
                 if (pipeline.isRunning()) {
                     logger.info("ACC OFF (dilink4) — finalize recording, keep camera alive (oem-parity, unconditional)");
                     try {
@@ -3120,6 +3245,10 @@ public class RecordingModeManager {
      * reconnected device on the next tick automatically.
      */
     private boolean queryAccStateFromHardware() {
+        if (app.wheelstop.android.camera.dilink5.DiLink5QCarCamBackend.isSupported()) {
+            boolean isAccOff = app.wheelstop.android.monitor.AccMonitor.probeAccState(context);
+            return !isAccOff;
+        }
         resolveBodyworkReflection();
         if (bodyworkReflectionResolved) {
             try {
