@@ -83,6 +83,11 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content" />
                 <include
+                    android:id="@+id/railDestAssistant"
+                    layout="@layout/item_rail_destination"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+                <include
                     android:id="@+id/railDestLive"
                     layout="@layout/item_rail_destination"
                     android:layout_width="match_parent"
@@ -94,6 +99,11 @@
                     android:layout_height="wrap_content" />
                 <include
                     android:id="@+id/railDestVehicle"
+                    layout="@layout/item_rail_destination"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+                <include
+                    android:id="@+id/railDestSeatPositions"
                     layout="@layout/item_rail_destination"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content" />

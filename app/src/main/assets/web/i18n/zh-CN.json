@@ -2435,7 +2435,7 @@
     "outside_zone": "🔴 外面 ({meters}m至最近)",
     "no_zones_yet": "目前没有区域",
     "waiting_gps": "在等待GPS...",
-    "badge_on": "● 啟動",
+    "badge_on": "啟動",
     "badge_off": "○ 关闭",
     "you_are_here": "你在这里",
     "popup_radius": "半径:<b>{name}</b><br>{meters}m"

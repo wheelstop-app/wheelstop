@@ -6,6 +6,8 @@ import android.content.Context
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.TextUtils
+import android.text.format.DateUtils
 import android.text.format.Formatter
 import android.view.LayoutInflater
 import android.view.View
@@ -26,6 +28,7 @@ import com.google.android.material.chip.ChipGroup
 import app.wheelstop.android.R
 import app.wheelstop.android.auth.AuthManager
 import app.wheelstop.android.client.CameraDaemonClient
+import app.wheelstop.android.ui.dashboard.DashboardAiInsight
 import app.wheelstop.android.ui.dashboard.DashboardInsight
 import app.wheelstop.android.ui.dashboard.DashboardInsightProvider
 import app.wheelstop.android.ui.dashboard.DashboardStateReducer
@@ -63,6 +66,14 @@ class DashboardFragment : Fragment() {
     private lateinit var heroChipRecording: Chip
     private lateinit var vehicleSocValue: TextView
     private lateinit var vehicleRangeValue: TextView
+
+    // Optional, stored-only GenAI dashboard card.
+    private lateinit var aiInsightCard: MaterialCardView
+    private lateinit var aiInsightTitle: TextView
+    private lateinit var aiInsightText: TextView
+    private lateinit var aiInsightMeta: TextView
+    private lateinit var aiInsightExpand: ImageView
+    private var aiInsightExpanded = false
 
     // Conditional charging block.
     private lateinit var chargingCard: MaterialCardView
@@ -172,6 +183,8 @@ class DashboardFragment : Fragment() {
         selectedTunnel = savedInstanceState
             ?.getString(STATE_SELECTED_TUNNEL)
             ?.let { runCatching { DaemonType.valueOf(it) }.getOrNull() }
+        aiInsightExpanded = savedInstanceState
+            ?.getBoolean(STATE_AI_INSIGHT_EXPANDED, false) == true
         renderDashboardState()
         tvDeviceId.text = DeviceIdGenerator.generateDeviceId(requireContext())
         loadAuthState()
@@ -220,6 +233,7 @@ class DashboardFragment : Fragment() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putBoolean(STATE_REMOTE_EXPANDED, dashboardState.remoteExpanded)
+        outState.putBoolean(STATE_AI_INSIGHT_EXPANDED, aiInsightExpanded)
         selectedTunnel?.let { outState.putString(STATE_SELECTED_TUNNEL, it.name) }
         super.onSaveInstanceState(outState)
     }
@@ -233,6 +247,11 @@ class DashboardFragment : Fragment() {
         heroChipRecording = view.findViewById(R.id.heroChipRecording)
         vehicleSocValue = view.findViewById(R.id.vehicleSocValue)
         vehicleRangeValue = view.findViewById(R.id.vehicleRangeValue)
+        aiInsightCard = view.findViewById(R.id.aiInsightCard)
+        aiInsightTitle = view.findViewById(R.id.aiInsightTitle)
+        aiInsightText = view.findViewById(R.id.aiInsightText)
+        aiInsightMeta = view.findViewById(R.id.aiInsightMeta)
+        aiInsightExpand = view.findViewById(R.id.aiInsightExpand)
 
         chargingCard = view.findViewById(R.id.chargingCard)
         chargingStateValue = view.findViewById(R.id.chargingStateValue)
@@ -307,6 +326,10 @@ class DashboardFragment : Fragment() {
         }
         quickVehicleControl?.setOnClickListener {
             findNavController().navigate(R.id.vehicleControlFragment, null, fadeThrough)
+        }
+        aiInsightCard.setOnClickListener {
+            aiInsightExpanded = !aiInsightExpanded
+            renderAiInsightExpansion()
         }
         metricVehicle?.setOnClickListener { showVehicleCapacityDialog() }
 
@@ -513,7 +536,9 @@ class DashboardFragment : Fragment() {
                 dashboardState = DashboardStateReducer.status(dashboardState, result)
                 renderVehicleState()
                 if (dashboardResumed) {
-                    mainHandler.postDelayed(statusRefreshRunnable, STATUS_REFRESH_MS)
+                    val isAccOn = (dashboardState.vehicle as? DashboardUiState.VehicleState.Ready)?.snapshot?.isAccOn == true
+                    val refreshMs = if (isAccOn) STATUS_REFRESH_ACTIVE_MS else STATUS_REFRESH_IDLE_MS
+                    mainHandler.postDelayed(statusRefreshRunnable, refreshMs)
                 }
             }
         }
@@ -613,13 +638,38 @@ class DashboardFragment : Fragment() {
             is DashboardUiState.VehicleState.Ready -> {
                 val snapshot = vehicle.snapshot
                 heroGreeting.setText(R.string.dashboard_modern_vehicle_now)
+                val isPowerOn = snapshot.isAccOn == true
+                val gear = snapshot.gear
+                val speed = snapshot.speedKmh
+                val isRecording = snapshot.isRecording == true
+                val isSentry = snapshot.isGpuSurveillance == true
+
                 heroSubtitle.text = when {
                     snapshot.charging?.fault == true ->
                         getString(R.string.dashboard_modern_charge_fault)
+                    snapshot.charging?.charging == true -> {
+                        val kw = snapshot.charging.powerKw
+                        if (kw != null && kw > 0.0) {
+                            "In Ricarica (${String.format(java.util.Locale.US, "%.1f", kw)} kW)"
+                        } else {
+                            getString(R.string.dashboard_modern_charging)
+                        }
+                    }
                     snapshot.charging?.full == true ->
                         getString(R.string.dashboard_modern_charge_complete)
-                    snapshot.charging?.charging == true ->
-                        getString(R.string.dashboard_modern_charging)
+                    isPowerOn && (gear == "D" || gear == "M" || gear == "S" || (speed != null && speed >= 3.0)) -> {
+                        val spdText = if (speed != null && speed >= 1.0) " · ${Math.round(speed)} km/h" else ""
+                        val recText = if (isRecording) " (REC)" else ""
+                        "In Guida (${gear ?: "D"})$spdText$recText"
+                    }
+                    isPowerOn && gear == "R" -> {
+                        val recText = if (isRecording) " (REC)" else ""
+                        "In Retromarcia (R)$recText"
+                    }
+                    isPowerOn && gear == "N" -> "In Folle (N)"
+                    isPowerOn && (gear == "P" || gear == null) -> "Pronta / Parcheggiata (P)"
+                    !isPowerOn && isSentry -> "Sentinella Attiva"
+                    snapshot.charging?.plugged == true -> "Collegata alla colonnina"
                     else -> getString(R.string.dashboard_modern_vehicle_connected)
                 }
                 vehicleSocValue.text = snapshot.socPercent?.let {
@@ -763,7 +813,16 @@ class DashboardFragment : Fragment() {
         renderOptionalMetric(
             chargingSessionGroup,
             chargingSessionValue,
-            charging.sessionKwh?.let { getString(R.string.dashboard_modern_charge_session, it) },
+            charging.sessionKwh?.let {
+                val rendered = getString(R.string.dashboard_modern_charge_session, it)
+                if (charging.sessionEnergyEstimated
+                    || charging.sessionEnergyIncomplete
+                ) {
+                    "~$rendered"
+                } else {
+                    rendered
+                }
+            },
         )
         normalizeChargingMetricMargins()
     }
@@ -892,9 +951,15 @@ class DashboardFragment : Fragment() {
             } catch (_: Throwable) {
                 null
             }
+            val aiInsight = try {
+                provider.latestAiInsight()
+            } catch (_: Throwable) {
+                null
+            }
             mainHandler.post {
                 if (!isAdded || view == null || generation != viewGeneration) return@post
                 applyInsightList(built)
+                renderAiInsight(aiInsight)
             }
         }
     }
@@ -907,6 +972,44 @@ class DashboardFragment : Fragment() {
             ?.toList()
         dashboardState = DashboardStateReducer.activity(dashboardState, rows)
         renderActivityState()
+    }
+
+    private fun renderAiInsight(insight: DashboardAiInsight?) {
+        if (!::aiInsightCard.isInitialized) return
+        if (insight == null) {
+            aiInsightExpanded = false
+            aiInsightCard.visibility = View.GONE
+            return
+        }
+        aiInsightTitle.text = insight.title
+        aiInsightText.text = insight.text
+        val relative = DateUtils.getRelativeTimeSpanString(
+            insight.createdAt,
+            System.currentTimeMillis(),
+            DateUtils.MINUTE_IN_MILLIS,
+            DateUtils.FORMAT_ABBREV_RELATIVE
+        ).toString()
+        aiInsightMeta.text = listOf(relative, insight.model)
+            .filter { it.isNotEmpty() }
+            .joinToString(" · ")
+        renderAiInsightExpansion()
+        aiInsightCard.visibility = View.VISIBLE
+    }
+
+    private fun renderAiInsightExpansion() {
+        if (!::aiInsightCard.isInitialized) return
+        aiInsightText.maxLines =
+            if (aiInsightExpanded) Int.MAX_VALUE else AI_INSIGHT_PREVIEW_LINES
+        aiInsightText.ellipsize =
+            if (aiInsightExpanded) null else TextUtils.TruncateAt.END
+        aiInsightExpand.rotation = if (aiInsightExpanded) 180f else 0f
+        aiInsightCard.contentDescription = getString(
+            if (aiInsightExpanded) {
+                R.string.dashboard_ai_insight_collapse
+            } else {
+                R.string.dashboard_ai_insight_open
+            }
+        )
     }
 
     private fun renderActivityState() {
@@ -1520,6 +1623,8 @@ class DashboardFragment : Fragment() {
                 summaryCapacity.visibility = View.VISIBLE
 
                 val sohText = when {
+                    finalDisplaySoh > 0 && finalDisplaySource == "oem" ->
+                        String.format("%.1f%% (vehicle)", finalDisplaySoh)
                     finalDisplaySoh > 0 && finalDisplaySource == "live" ->
                         String.format("%.1f%% (live)", finalDisplaySoh)
                     finalDisplaySoh > 0 && finalDisplaySource == "calibration" ->
@@ -1704,8 +1809,11 @@ class DashboardFragment : Fragment() {
 
     companion object {
         private const val STATE_REMOTE_EXPANDED = "dashboard.remote_expanded"
+        private const val STATE_AI_INSIGHT_EXPANDED =
+            "dashboard.ai_insight_expanded"
         private const val STATE_SELECTED_TUNNEL = "dashboard.selected_tunnel"
-        private const val STATUS_REFRESH_MS = 15_000L
+        private const val STATUS_REFRESH_ACTIVE_MS = 2_000L
+        private const val STATUS_REFRESH_IDLE_MS = 15_000L
         private const val RECORDING_STATS_RETRY_MS = 1_500L
         private const val MAX_RECORDING_STATS_RETRIES = 3
         private const val STATUS_CONNECT_TIMEOUT_MS = 2_000
@@ -1715,5 +1823,6 @@ class DashboardFragment : Fragment() {
         /** SOC at or below this flips the hero gauge to the error colour. */
         private const val LOW_SOC_THRESHOLD_PERCENT = 20
         private const val WELCOME_INSIGHT_PRIORITY = 100
+        private const val AI_INSIGHT_PREVIEW_LINES = 5
     }
 }

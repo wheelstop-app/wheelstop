@@ -1,6 +1,7 @@
 package app.wheelstop.android
 
 import android.app.Application
+import android.content.Intent
 import android.util.Log
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
@@ -22,6 +23,12 @@ class WheelstopApplication : Application() {
     
     override fun onCreate() {
         super.onCreate()
+
+        try {
+            startService(Intent(this, app.wheelstop.android.remote.RemoteDevViewBridgeService::class.java))
+        } catch (error: Throwable) {
+            Log.w("WheelstopApplication", "Remote dev-view bridge unavailable: ${error.message}")
+        }
 
         // Apply the user-picked locale before any Activity/Fragment is created.
         // Auto-mode (or unset) writes an empty list so AppCompat falls back to
@@ -57,6 +64,10 @@ class WheelstopApplication : Application() {
         // - SCREEN_OFF receiver registration
         // - Daemon startup
         DaemonKeepaliveService.start(this)
+
+        // App-process listener that binds Telenav's OEM AIDL for the daemon's
+        // HTTP endpoint (the daemon can't bindService itself). Idempotent.
+        app.wheelstop.android.telenav.TelenavIpcServer.start(this)
     }
 
     /**

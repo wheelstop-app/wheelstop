@@ -119,8 +119,7 @@
     "tyres_persist_failed": "No se han podido guardar los límites de los neumáticos",
     "recordings_index_unavailable": "Índice de grabaciones no disponible",
     "surveillance_all_classes_off": "Este guardado desactivaría todas las clases de objetos, apagando por completo la detección por IA. Confirma para continuar.",
-    "tyres_invalid_unit": "pressureUnit debe ser kpa, psi o bar",
-    "vehicle_blocked_in_motion": "Esta acción no está disponible mientras el vehículo está en movimiento"
+    "tyres_invalid_unit": "pressureUnit debe ser kpa, psi o bar"
   },
   "notifications": {
     "charging_started": "Se ha iniciado la carga .",
@@ -1088,7 +1087,13 @@
     "set_front_defrost": "Desempañador delantero",
     "set_front_defrost_description": "Activa o desactiva el desempañador/desescarchador del parabrisas delantero. Este control no funciona mientras el vehículo está apagado.",
     "set_rear_defrost": "Desempañador trasero",
-    "set_rear_defrost_description": "Activa o desactiva el desempañador/desescarchador de la luneta trasera. Este control no funciona mientras el vehículo está apagado."
+    "set_rear_defrost_description": "Activa o desactiva el desempañador/desescarchador de la luneta trasera. Este control no funciona mientras el vehículo está apagado.",
+    "set_headlight_mode": "Establecer modo de luces",
+    "set_headlight_mode_description": "Ajusta el selector de luces exteriores de fábrica. Apagado solo se acepta si el vehículo está estacionado de forma segura. Es un control local del vehículo y no funciona con el vehículo apagado.",
+    "headlight_mode": "Modo de luces",
+    "headlight_auto": "Automático",
+    "parking_lights": "Luces de estacionamiento",
+    "headlight_on_low_beam": "Encendido (luz de cruce)"
   },
   "messages": {
     "logged_out": "Se logró .",

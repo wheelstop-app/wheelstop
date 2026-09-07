@@ -119,8 +119,7 @@
     "tyres_persist_failed": "Falha ao salvar os limites de pressão dos pneus",
     "recordings_index_unavailable": "Índice de gravações indisponível",
     "surveillance_all_classes_off": "Esta salvamento desativará todas as classes de objetos, desligando a detecção por IA por completo. Confirme para prosseguir.",
-    "tyres_invalid_unit": "pressureUnit deve ser kpa, psi ou bar",
-    "vehicle_blocked_in_motion": "Esta ação não está disponível enquanto o veículo está em movimento"
+    "tyres_invalid_unit": "pressureUnit deve ser kpa, psi ou bar"
   },
   "notifications": {
     "charging_started": "Carregamento iniciado",
@@ -1065,7 +1064,7 @@
     "compute_variable_description": "Calcula um número e o armazena em uma variável. Suporta + - * / % , parênteses e as funções min, max, clamp, round, floor, ceil, abs, sqrt e pow. Use ${signal:NAME} para um valor do veículo em tempo real e ${var:NAME} para outra variável — ex.: 500 + (${signal:batteryLevel} - 20) * 3.75. Se um valor não puder ser lido (um sinal que ainda não tenha sido informado), a variável permanece inalterada.",
     "variable_expression": "Expressão",
     "blind_spot": "Alerta de Ponto Cego",
-    "blind_spot_description": "Se o alerta de ponto cego por radar está ativo para um dos lados. Cobre alertas de ponto cego, mudança de faixa e tráfego cruzado. Como os alertas são breves, o sinal é mantido ativo por alguns segundos após o último aviso.",
+    "blind_spot_description": "Se o alerta de ponto cego ou mudança de faixa por radar está ativo para um dos lados. Tráfego cruzado traseiro e abertura de porta são sinais de automação separados. Como os alertas são breves, o sinal é mantido ativo por alguns segundos após o último aviso.",
     "side_left": "Esquerda",
     "side_right": "Direita",
     "ambient_state": "Luz Ambiente",
@@ -1088,7 +1087,17 @@
     "set_front_defrost": "Desembaçador Dianteiro",
     "set_front_defrost_description": "Liga ou desliga o desembaçador do parabrisa dianteiro. Este controle não funciona quando o veículo está desligado.",
     "set_rear_defrost": "Desembaçador Traseiro",
-    "set_rear_defrost_description": "Liga ou desliga o desembaçador do parabrisa traseiro. Este controle não funciona quando o veículo está desligado."
+    "set_rear_defrost_description": "Liga ou desliga o desembaçador do parabrisa traseiro. Este controle não funciona quando o veículo está desligado.",
+    "set_headlight_mode": "Definir modo dos faróis",
+    "set_headlight_mode_description": "Define o seletor de luzes externas de fábrica. Desligado só é aceito com o veículo estacionado com segurança. É um controle local do veículo e não funciona com o veículo desligado.",
+    "headlight_mode": "Modo dos faróis",
+    "headlight_auto": "Automático",
+    "parking_lights": "Luzes de posição",
+    "headlight_on_low_beam": "Ligado (luz baixa)",
+    "rear_cross_traffic": "Alerta de Tráfego Cruzado Traseiro",
+    "rear_cross_traffic_description": "Se o alerta de tráfego cruzado traseiro está ativo para um dos lados durante a marcha à ré. Como os alertas são breves, o sinal é mantido ativo por alguns segundos após o último aviso.",
+    "door_open_warning": "Alerta de Abertura de Porta",
+    "door_open_warning_description": "Se o alerta de abertura de porta está ativo para um dos lados porque há tráfego se aproximando. Como os alertas são breves, o sinal é mantido ativo por alguns segundos após o último aviso."
   },
   "messages": {
     "logged_out": "Sessão encerrada",

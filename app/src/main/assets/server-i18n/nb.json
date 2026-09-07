@@ -118,8 +118,7 @@
     "update_channel_write_failed": "Kunne ikke lagre oppdateringskanalen",
     "update_channel_tag_mismatch": "Denne versjonen er på en annen kanal. Bytt kanaler først.",
     "logs_upload_unavailable": "Loggopplasting er ikke tilgjengelig i denne versjonen",
-    "logs_unknown_daemon": "Ukjent demon. Try: {0}",
-    "vehicle_blocked_in_motion": "Denne handlingen er ikke tilgjengelig mens kjøretøyet er i bevegelse"
+    "logs_unknown_daemon": "Ukjent demon. Try: {0}"
   },
   "notifications": {
     "charging_started": "Lader startet",
@@ -1072,7 +1071,13 @@
     "thursday": "Torsdag",
     "friday": "Fredag",
     "saturday": "Lørdag",
-    "sunday": "Søndag"
+    "sunday": "Søndag",
+    "set_headlight_mode": "Angi frontlysmodus",
+    "set_headlight_mode_description": "Stiller inn fabrikkens utvendige lysvelger. Av godtas bare når kjøretøyet er trygt parkert. Dette er en lokal kjøretøykontroll og virker ikke mens kjøretøyet er avslått.",
+    "headlight_mode": "Frontlysmodus",
+    "headlight_auto": "Auto",
+    "parking_lights": "Parkeringslys",
+    "headlight_on_low_beam": "På (nærlys)"
   },
   "messages": {
     "logged_out": "Logget av",

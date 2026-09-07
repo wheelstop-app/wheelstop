@@ -1,6 +1,7 @@
 package app.wheelstop.android.automation.action;
 
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import app.wheelstop.android.automation.type.EnumType;
@@ -36,6 +37,22 @@ public class AutomationActionRouteContractTest {
             assertTrue(action.getLabel().getId() + " is outside the automation allowlist: " + path,
                     (Boolean) allowed.invoke(null, path));
         }
+    }
+
+    @Test
+    public void surveillanceAutomationCannotReachDeterrentAssetOrPreviewRoutes()
+            throws Exception {
+        Method allowed = HttpServer.class.getDeclaredMethod(
+                "isAutomationAllowed", String.class);
+        allowed.setAccessible(true);
+
+        assertTrue((Boolean) allowed.invoke(null, "/api/surveillance/enable"));
+        assertTrue((Boolean) allowed.invoke(null, "/api/surveillance/disable"));
+        assertTrue((Boolean) allowed.invoke(null, "/api/surveillance/config"));
+        assertFalse((Boolean) allowed.invoke(
+                null, "/api/surveillance/screen-deterrent/image"));
+        assertFalse((Boolean) allowed.invoke(
+                null, "/api/surveillance/screen-deterrent/test"));
     }
 
     @Test
