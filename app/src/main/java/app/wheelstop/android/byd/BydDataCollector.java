@@ -1912,15 +1912,50 @@ public class BydDataCollector {
     // call at a fast cadence. Each returns UNAVAILABLE on a miss so the caller skips the
     // publish rather than manufacturing a spurious edge.
 
+    private int readGearFromCarAdapter() {
+        try {
+            Class<?> camCls = Class.forName("com.ts.lib.caradapter.CarAdapterManager");
+            Method getInst = camCls.getMethod("getInstance", Context.class);
+            Object cam = getInst.invoke(null, context);
+            if (cam != null) {
+                Method getMgr = camCls.getMethod("getCarAdapterManager", String.class);
+                Object bodyMgr = getMgr.invoke(cam, "body");
+                if (bodyMgr != null) {
+                    Method m = bodyMgr.getClass().getMethod("getShiftMode");
+                    Object res = m.invoke(bodyMgr);
+                    if (res instanceof Number) {
+                        int shift = ((Number) res).intValue();
+                        switch (shift) {
+                            case 0:
+                            case 1: return 1; // GEAR_P
+                            case 2: return 2; // GEAR_R
+                            case 3: return 3; // GEAR_N
+                            case 4: return 4; // GEAR_D
+                        }
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+        return BydVehicleData.UNAVAILABLE;
+    }
+
     /** Live gearbox mode (raw SDK enum for {@link app.wheelstop.android.monitor.GearMonitor}),
      *  or UNAVAILABLE on a miss. Uses the same getter the 5s poll (collectGearbox) and the
      *  fast-dynamics poll already call — NOT the learningEPB() listener path. */
     public int readGearNow() {
-        if (gearboxDevice == null) return BydVehicleData.UNAVAILABLE;
-        try {
-            Object g = BydDeviceHelper.callGetter(gearboxDevice, "getGearboxAutoModeType");
-            if (g instanceof Number) return ((Number) g).intValue();
-        } catch (Throwable t) { logger.debug("readGearNow error: " + t.getMessage()); }
+        if (gearboxDevice != null) {
+            try {
+                Object g = BydDeviceHelper.callGetter(gearboxDevice, "getGearboxAutoModeType");
+                if (g instanceof Number) {
+                    int val = ((Number) g).intValue();
+                    if (val >= 1 && val <= 7) return val;
+                }
+            } catch (Throwable t) { logger.debug("readGearNow error: " + t.getMessage()); }
+        }
+        int carAdapterGear = readGearFromCarAdapter();
+        if (carAdapterGear != BydVehicleData.UNAVAILABLE) {
+            return carAdapterGear;
+        }
         return BydVehicleData.UNAVAILABLE;
     }
 
@@ -5417,14 +5452,21 @@ public class BydDataCollector {
             if (DiLink5QCarCamBackend.isSupported()) {
                 try {
                     String propDump = AccMonitor.execShell(
-                        "dumpsys car_service 2>/dev/null | grep -E '0x21403c00|0x2140461c' | grep 'lastEvent'");
+                        "dumpsys car_service 2>/dev/null | grep -E '0x21403407|0x2140461c' | grep 'lastEvent'");
                     if (!propDump.isEmpty()) {
                         long gunObs = chargingObservationOrder.begin();
-                        if (propDump.contains("Property:0x21403c00") && propDump.contains("int32Values: [1]")) {
-                            chargingObservationOrder.recordGunPoll(gunObs);
-                            b.chargingGunState(2); // Gun Connected
-                            evidence.connectionObserved = true;
-                            evidence.gunObservation = gunObs;
+                        if (propDump.contains("Property:0x21403407")) {
+                            if (propDump.contains("Property:0x21403407,status: 0") && (propDump.contains("int32Values: [1]") || propDump.contains("int32Values: [2]"))) {
+                                chargingObservationOrder.recordGunPoll(gunObs);
+                                b.chargingGunState(2); // Gun Connected
+                                evidence.connectionObserved = true;
+                                evidence.gunObservation = gunObs;
+                            } else if (propDump.contains("int32Values: [0]")) {
+                                chargingObservationOrder.recordGunPoll(gunObs);
+                                b.chargingGunState(1); // Gun Disconnected
+                                evidence.connectionObserved = true;
+                                evidence.gunObservation = gunObs;
+                            }
                         }
                         if (propDump.contains("Property:0x2140461c")) {
                             if (propDump.contains("int32Values: [4]")) {
@@ -5434,10 +5476,14 @@ public class BydDataCollector {
                                 evidence.powerIsCharging = Boolean.TRUE;
                             } else if (propDump.contains("int32Values: [2]")) {
                                 observedChargingState = ChargingStateData.CHARGING_BATTERY_STATE_CHARG_FINISH; // 2 = FINISHED
+                            } else if (propDump.contains("int32Values: [0]")) {
+                                observedChargingState = ChargingStateData.CHARGING_BATTERY_STATE_IDLE; // 15 = IDLE
                             }
                         }
                         if (observedChargingState != BydVehicleData.UNAVAILABLE) {
                             b.chargingState(observedChargingState);
+                        } else if (b.chargingGunState == 1) {
+                            b.chargingState(ChargingStateData.CHARGING_BATTERY_STATE_IDLE);
                         }
                         b.chargingType(1); // AC charging
                         b.vtolCharging(false);
@@ -6231,12 +6277,9 @@ public class BydDataCollector {
     }
 
     private void collectGearbox(BydVehicleData.Builder b) {
-        if (gearboxDevice == null) return;
-        try {
-            Object gear = BydDeviceHelper.callGetter(gearboxDevice, "getGearboxAutoModeType");
-            if (gear instanceof Number) b.gearMode(((Number) gear).intValue());
-        } catch (Exception e) {
-            logger.debug("collectGearbox error: " + e.getMessage());
+        int g = readGearNow();
+        if (g != BydVehicleData.UNAVAILABLE) {
+            b.gearMode(g);
         }
     }
 
