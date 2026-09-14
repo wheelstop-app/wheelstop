@@ -39,13 +39,24 @@ public final class DaemonLogConfig {
     // ==================== DAEMON PROCESSES ====================
     
     /** CameraDaemon - main camera pipeline, GPU init, surveillance orchestration */
-    public static final boolean CAMERA_DAEMON = false;
+    // The three core daemons are logged in shipping builds. They are the only
+    // processes that can be left running a deleted APK after an upgrade, and the
+    // detector that finds them kills and restarts them — a restart that
+    // interrupts surveillance and, before it was scoped, could drop the tunnels.
+    // Issue #20 was opened because that whole failure was silent; shipping the
+    // fix with its own logging stripped would reproduce exactly that.
+    //
+    // Enabling any flag here also stops R8 stripping every log call in the app,
+    // which is what keeps StaleDaemonDetector and DaemonStartupManager readable
+    // in logcat. isFileLoggingEnabled is selective, so only these three write to
+    // disk; the GL and telemetry tags stay off.
+    public static final boolean CAMERA_DAEMON = true;
     
     /** AccSentryDaemon - ACC state detection, sentry mode transitions */
-    public static final boolean ACC_SENTRY_DAEMON = false;
+    public static final boolean ACC_SENTRY_DAEMON = true;
     
     /** SentryDaemon - legacy sentry process */
-    public static final boolean SENTRY_DAEMON = false;
+    public static final boolean SENTRY_DAEMON = true;
     
     /** TelegramBotDaemon - Telegram notification service */
     public static final boolean TELEGRAM_BOT_DAEMON = false;
@@ -350,8 +361,22 @@ public final class DaemonLogConfig {
         // logging on for EVERY daemon tag so customers can send per-daemon
         // logs. The DaemonLogger log calls survive R8 in that variant because
         // its buildType omits proguard-rules-strip-logs.pro.
-        if (BuildConfig.LOG_CAPTURE) return true;
         if (ENABLE_ALL) return true;
-        return ENABLED_TAGS.contains(tag);
+        // Selective mode. Once any per-tag flag is set, ONLY those tags write to
+        // disk.
+        //
+        // This ordering matters because the two switches are coupled. R8 strips
+        // every log call unless at least one flag here is true (build.gradle.kts
+        // greps this file to decide whether to apply proguard-rules-strip-logs).
+        // So turning on ONE tag purely to keep the daemon-lifecycle logs through
+        // R8 used to also turn on file logging for every other tag, because
+        // LOG_CAPTURE is true in both build types — the GL, telemetry and
+        // data-collector tags together produced megabytes per hour on the car.
+        // Selecting tags now means selecting tags, not "keep the calls AND write
+        // everything".
+        if (!ENABLED_TAGS.isEmpty()) return ENABLED_TAGS.contains(tag);
+        // No per-tag selection: LOG_CAPTURE decides. This is the customer-log
+        // build, where the point is to capture everything.
+        return BuildConfig.LOG_CAPTURE;
     }
 }

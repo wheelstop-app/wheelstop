@@ -9053,10 +9053,17 @@ public class CameraDaemon {
 
     private static void initFileLogging() {
         // Configure DaemonLogger for daemon context (enable stdout for app_process)
+        // Bounded on purpose. The defaults (10MB x 3 rotations) were fine when a
+        // shipping build wrote nothing, but the three core daemon tags are on in
+        // release now, and 3 tags x 10MB x 4 files is 120MB of head-unit storage
+        // for logs nobody reads until something breaks. 4MB x 2 keeps a bad night
+        // under 36MB total while still holding hours of INFO-level lifecycle.
         DaemonLogger.Config cfg = DaemonLogger.Config.defaults()
             .withStdoutLog(true)  // Enable stdout for daemon processes
             .withFileLog(true)
-            .withConsoleLog(true);
+            .withConsoleLog(true)
+            .withMaxFileSizeMB(4)
+            .withRotationCount(2);
         // The default minLevel is INFO and withMinLevel() was never called anywhere, so every
         // logger.debug(...) in the whole daemon was discarded at runtime. That silently gutted the
         // BYD_TELEMETRY capture: the lines explaining WHY a HAL read failed (accessor-width misses,
